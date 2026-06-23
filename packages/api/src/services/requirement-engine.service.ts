@@ -222,6 +222,10 @@ function mapQuestionPriority(priority: "must_answer" | "nice_to_have") {
   return priority === "must_answer" ? ("high" as const) : ("medium" as const);
 }
 
+function isRequiredClarification(priority: string) {
+  return priority === "high" || priority === "urgent";
+}
+
 function mapTaskType(type: EngineeringTasksOutput["tasks"][number]["type"]) {
   return type === "infra" ? ("infrastructure" as const) : type;
 }
@@ -424,6 +428,17 @@ export async function generatePrdForFeatureRequest(
     .from(clarificationQuestions)
     .where(eq(clarificationQuestions.featureRequestId, featureRequest.id))
     .orderBy(clarificationQuestions.createdAt);
+
+  const unansweredRequiredClarifications = clarifications.filter(
+    (question) => isRequiredClarification(question.priority) && !question.answer
+  );
+
+  if (unansweredRequiredClarifications.length > 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Answer required clarification questions before generating the PRD."
+    });
+  }
 
   const payload = {
     feature: {
@@ -676,8 +691,36 @@ export async function getFeatureWorkflow(
           .orderBy(engineeringTasks.createdAt)
       : [];
 
+  const latestAiRuns = await db
+    .select({
+      id: aiRuns.id,
+      agentType: aiRuns.agentType,
+      model: aiRuns.model,
+      status: aiRuns.status,
+      tokenUsage: aiRuns.tokenUsage,
+      error: aiRuns.error,
+      createdAt: aiRuns.createdAt
+    })
+    .from(aiRuns)
+    .where(
+      and(
+        eq(aiRuns.organizationId, workspace.activeOrganization.id),
+        eq(aiRuns.featureRequestId, featureRequest.id)
+      )
+    )
+    .orderBy(desc(aiRuns.createdAt))
+    .limit(5);
+
   return {
     featureRequest,
+    clarificationQuestions: questions,
+    unansweredRequiredClarificationQuestions: questions.filter(
+      (question) => isRequiredClarification(question.priority) && !question.answer
+    ),
+    prd: prdRows[0] ?? null,
+    prdRequirements: requirements,
+    engineeringTasks: tasks,
+    latestAiRuns,
     questions,
     prds: prdRows,
     requirements,

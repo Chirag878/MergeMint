@@ -149,7 +149,7 @@ function mockResult<T extends z.ZodTypeAny>(
 ): AIResult<z.infer<T>> {
   return {
     data: schema.parse(value),
-    model: getAIConfig().OPENAI_MODEL ?? "gpt-4.1-mini",
+    model: "mock",
     mock: true
   };
 }
@@ -185,22 +185,17 @@ function mockClarifications(
 
 function mockPRD(input: PRDInput): PRDOutput {
   const feature = input.feature;
-  const criteria = feature.acceptanceCriteria?.length
-    ? feature.acceptanceCriteria
-    : [
-        "Authorized users can complete the primary workflow.",
-        "Invalid or incomplete input produces a clear validation error.",
-        "The workflow can be verified with automated tests."
-      ];
+  const title = feature.title;
 
   return {
-    title: feature.title,
+    title,
     problem:
       feature.businessGoal ??
-      `The product needs a reliable implementation plan for ${feature.title}.`,
+      `The product needs a reliable implementation plan for ${title}.`,
     goals: [
       feature.expectedBehavior ??
-        `Deliver ${feature.title} with clear behavior and release criteria.`
+        `Deliver ${title} with clear behavior and release criteria.`,
+      "Make authorization, state handling, and validation behavior explicit."
     ],
     nonGoals: ["Do not include unrelated product areas in this workflow."],
     userStories: [
@@ -212,18 +207,52 @@ function mockPRD(input: PRDInput): PRDOutput {
           "the workflow can be completed predictably in production"
       }
     ],
-    requirements: criteria.map((criterion, index) => ({
-      requirementKey: `REQ-${String(index + 1).padStart(3, "0")}`,
-      requirement: criterion,
-      priority: index === 0 ? "P0" : "P1",
-      acceptanceCriteria: [criterion]
-    })),
+    requirements: [
+      {
+        requirementKey: "REQ-001",
+        requirement: `The system must allow authorized users to complete the ${title} workflow from a valid feature state.`,
+        priority: "P0",
+        acceptanceCriteria: [
+          "Given an authorized user and valid input, the workflow completes and persists the expected state.",
+          "Given a user without permission, the workflow is rejected before any state is changed."
+        ]
+      },
+      {
+        requirementKey: "REQ-002",
+        requirement: `The system must validate all required ${title} inputs before generating downstream release artifacts.`,
+        priority: "P0",
+        acceptanceCriteria: [
+          "Missing required fields return field-level validation errors.",
+          "Invalid state transitions are blocked and produce a clear error message."
+        ]
+      },
+      {
+        requirementKey: "REQ-003",
+        requirement: `The system must expose auditable status changes for the ${title} workflow.`,
+        priority: "P1",
+        acceptanceCriteria: [
+          "Successful workflow actions record who performed the action and when it happened.",
+          "Failed workflow actions do not create partial release artifacts."
+        ]
+      },
+      {
+        requirementKey: "REQ-004",
+        requirement: `The system must provide release readiness feedback for ${title} before users rely on the output.`,
+        priority: "P1",
+        acceptanceCriteria: [
+          "Generated output includes clear acceptance checks that can be verified manually or automatically.",
+          "Users can identify incomplete or missing release criteria before approval."
+        ]
+      }
+    ],
     edgeCases: [
       "User lacks permission for the workflow.",
-      "Required data is missing or stale."
+      "Required data is missing or stale.",
+      "The feature request is already in a generated state."
     ],
     risks: [
-      "Ambiguous release criteria could cause incomplete implementation."
+      "Ambiguous release criteria could cause incomplete implementation.",
+      "Weak validation could create release artifacts that cannot be tested."
     ]
   };
 }
@@ -231,14 +260,65 @@ function mockPRD(input: PRDInput): PRDOutput {
 function mockEngineeringTasks(
   input: EngineeringTasksInput
 ): EngineeringTasksOutput {
+  const firstRequirement = input.requirements[0];
+  const secondRequirement = input.requirements[1] ?? firstRequirement;
+
+  if (!firstRequirement) {
+    throw new Error("At least one requirement is required to generate tasks.");
+  }
+
   return {
-    tasks: input.requirements.map((requirement, index) => ({
-      title: `Implement ${requirement.requirementKey}`,
-      description: requirement.requirement,
-      type: index % 3 === 0 ? "backend" : index % 3 === 1 ? "frontend" : "test",
-      relatedRequirementKeys: [requirement.requirementKey],
-      acceptanceChecklist: requirement.acceptanceCriteria,
-      complexity: requirement.priority === "P0" ? "medium" : "small"
-    }))
+    tasks: [
+      {
+        title: "Build validated workflow API",
+        description:
+          "Implement the protected backend mutation, validation paths, and state updates required by the core workflow.",
+        type: "backend",
+        relatedRequirementKeys: [firstRequirement.requirementKey],
+        acceptanceChecklist: [
+          "Authorized requests complete the workflow and persist expected state.",
+          "Unauthorized or invalid requests fail without partial writes."
+        ],
+        complexity: "medium"
+      },
+      {
+        title: "Render workflow readiness UI",
+        description:
+          "Create the frontend states that show workflow inputs, generated readiness output, and blocking validation errors.",
+        type: "frontend",
+        relatedRequirementKeys: [firstRequirement.requirementKey],
+        acceptanceChecklist: [
+          "Users can see the current workflow status and next action.",
+          "Validation and permission errors are visible without a page reload."
+        ],
+        complexity: "medium"
+      },
+      {
+        title: "Persist audit and reporting metadata",
+        description:
+          "Store the audit metadata needed to trace generated artifacts, status changes, and release readiness decisions.",
+        type: "database",
+        relatedRequirementKeys: [secondRequirement.requirementKey],
+        acceptanceChecklist: [
+          "Successful actions include actor and timestamp metadata.",
+          "Failed actions do not create misleading audit or report records."
+        ],
+        complexity: "small"
+      },
+      {
+        title: "Add workflow authorization tests",
+        description:
+          "Cover authorized, unauthorized, invalid-state, and validation-failure cases for the generated workflow.",
+        type: "test",
+        relatedRequirementKeys: input.requirements.map(
+          (requirement) => requirement.requirementKey
+        ),
+        acceptanceChecklist: [
+          "Tests prove unauthorized users cannot perform protected actions.",
+          "Tests prove invalid inputs and invalid states do not create artifacts."
+        ],
+        complexity: "medium"
+      }
+    ]
   };
 }

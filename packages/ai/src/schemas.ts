@@ -12,9 +12,15 @@ export const ClarificationQuestionsOutputSchema = z.object({
 
 export const PRDRequirementSchema = z.object({
   requirementKey: z.string().regex(/^REQ-\d{3}$/),
-  requirement: z.string().min(1),
+  requirement: z
+    .string()
+    .min(24)
+    .refine(
+      (value) => value.startsWith("The system must"),
+      "Requirement must start with 'The system must'."
+    ),
   priority: z.enum(["P0", "P1", "P2"]),
-  acceptanceCriteria: z.array(z.string().min(1)).min(1)
+  acceptanceCriteria: z.array(z.string().min(8)).min(2)
 });
 
 export const PRDOutputSchema = z.object({
@@ -37,8 +43,8 @@ export const PRDOutputSchema = z.object({
 });
 
 export const EngineeringTaskSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().min(1),
+  title: z.string().min(8),
+  description: z.string().min(24),
   type: z.enum([
     "frontend",
     "backend",
@@ -49,13 +55,19 @@ export const EngineeringTaskSchema = z.object({
     "other"
   ]),
   relatedRequirementKeys: z.array(z.string().regex(/^REQ-\d{3}$/)).min(1),
-  acceptanceChecklist: z.array(z.string().min(1)).min(1),
+  acceptanceChecklist: z.array(z.string().min(8)).min(2),
   complexity: z.enum(["small", "medium", "large"])
 });
 
 export const EngineeringTasksOutputSchema = z.object({
   tasks: z.array(EngineeringTaskSchema).min(1)
-});
+}).refine(
+  (output) => output.tasks.some((task) => task.type === "test"),
+  "At least one engineering task must be a test task."
+).refine((output) => {
+  const titles = output.tasks.map((task) => task.title.toLowerCase().trim());
+  return new Set(titles).size === titles.length;
+}, "Engineering task titles must be unique.");
 
 export type ClarificationQuestionsOutput = z.infer<
   typeof ClarificationQuestionsOutputSchema
