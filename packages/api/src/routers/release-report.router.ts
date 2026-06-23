@@ -1,0 +1,44 @@
+import { z } from "zod";
+import {
+  generateReleaseReport,
+  getLatestReleaseReportForFeature,
+  getReleaseReportById,
+  getReleaseReportByShareToken
+} from "../services/release-report.service";
+import { protectedProcedure, publicProcedure, router } from "../trpc";
+
+export const releaseReportRouter = router({
+  generate: protectedProcedure
+    .input(
+      z.object({
+        featureRequestId: z.string().uuid()
+      })
+    )
+    .mutation(({ ctx, input }) => generateReleaseReport(ctx, input)),
+
+  getLatestForFeature: protectedProcedure
+    .input(
+      z.object({
+        featureRequestId: z.string().uuid()
+      })
+    )
+    .query(({ ctx, input }) =>
+      getLatestReleaseReportForFeature(ctx, input.featureRequestId)
+    ),
+
+  getById: protectedProcedure
+    .input(
+      z.object({
+        releaseReportId: z.string().uuid()
+      })
+    )
+    .query(({ ctx, input }) => getReleaseReportById(ctx, input.releaseReportId)),
+
+  getByShareToken: publicProcedure
+    .input(
+      z.object({
+        shareToken: z.string().min(16).max(200)
+      })
+    )
+    .query(({ input }) => getReleaseReportByShareToken(input.shareToken))
+});

@@ -81,6 +81,9 @@ export function FeatureDetailClient({
   const latestApproval = trpc.approval.getLatest.useQuery({
     featureRequestId
   });
+  const latestReleaseReport = trpc.releaseReport.getLatestForFeature.useQuery({
+    featureRequestId
+  });
   const generateClarifications =
     trpc.requirementEngine.generateClarifications.useMutation({
       onSuccess: () =>
@@ -132,6 +135,13 @@ export function FeatureDetailClient({
       setShowApprovalConfirmation(false);
       await utils.approval.getLatest.invalidate({ featureRequestId });
       await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
+    }
+  });
+  const generateReleaseReport = trpc.releaseReport.generate.useMutation({
+    onSuccess: async () => {
+      await utils.releaseReport.getLatestForFeature.invalidate({
+        featureRequestId
+      });
     }
   });
 
@@ -580,6 +590,17 @@ export function FeatureDetailClient({
         confirmationVisible={showApprovalConfirmation}
         onCancelConfirmation={() => setShowApprovalConfirmation(false)}
       />
+
+      <ReleaseReportSection
+        latestQaReview={latestQaReview.data}
+        latestApproval={latestApproval.data}
+        latestReport={latestReleaseReport.data}
+        isLoadingReport={latestReleaseReport.isLoading}
+        reportError={latestReleaseReport.error?.message}
+        onGenerate={() => generateReleaseReport.mutate({ featureRequestId })}
+        isGenerating={generateReleaseReport.isPending}
+        generateError={generateReleaseReport.error?.message}
+      />
     </>
   );
 }
@@ -937,6 +958,22 @@ type ApprovalView = {
   note: string | null;
   remainingRisks: string[];
   createdAt: Date | string;
+};
+
+type ReleaseReportView = {
+  id: string;
+  title: string;
+  status: string;
+  shareToken: string;
+  readinessScore: number | null;
+  generatedAt: Date | string | null;
+  createdAt: Date | string;
+  reportData: {
+    reportStatus?: string;
+    approval?: {
+      decision?: string;
+    };
+  };
 };
 
 type ApprovalRiskSummary = {
@@ -1395,6 +1432,132 @@ function HumanApprovalGateSection({
   );
 }
 
+function ReleaseReportSection({
+  latestQaReview,
+  latestApproval,
+  latestReport,
+  isLoadingReport,
+  reportError,
+  onGenerate,
+  isGenerating,
+  generateError
+}: {
+  latestQaReview: QAReviewBundle | null | undefined;
+  latestApproval: ApprovalView | null | undefined;
+  latestReport: ReleaseReportView | null | undefined;
+  isLoadingReport: boolean;
+  reportError?: string;
+  onGenerate: () => void;
+  isGenerating: boolean;
+  generateError?: string;
+}) {
+  const canGenerate = Boolean(latestQaReview && latestApproval) && !isGenerating;
+  const sharePath = latestReport
+    ? `/reports/${latestReport.shareToken}`
+    : undefined;
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-medium">Release Report</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Generate the client-ready verification artifact from stored PRD, PR,
+            QA, and approval data.
+          </p>
+        </div>
+        {latestReport ? (
+          <StatusBadge status={latestReport.reportData.reportStatus ?? latestReport.status} />
+        ) : null}
+      </div>
+
+      {!latestQaReview ? (
+        <EmptyText>Run AI QA Review before generating release report.</EmptyText>
+      ) : !latestApproval ? (
+        <EmptyText>Submit an approval decision before generating release report.</EmptyText>
+      ) : null}
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        {latestQaReview && latestApproval ? (
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={!canGenerate}
+            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isGenerating
+              ? "Generating..."
+              : latestReport
+                ? "Generate new report"
+                : "Generate Release Report"}
+          </button>
+        ) : null}
+      </div>
+
+      {isLoadingReport ? <EmptyText>Loading latest release report...</EmptyText> : null}
+      {reportError ? <p className="mt-3 text-sm text-red-300">{reportError}</p> : null}
+      {generateError ? (
+        <p className="mt-3 text-sm text-red-300">{generateError}</p>
+      ) : null}
+
+      {latestReport ? (
+        <div className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm text-neutral-500">Latest report</p>
+              <h3 className="mt-1 font-medium text-neutral-100">
+                {latestReport.title}
+              </h3>
+            </div>
+            <p className="text-xs text-neutral-500">
+              {formatDate(latestReport.generatedAt ?? latestReport.createdAt)}
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+              <p className="text-xs text-neutral-500">Status</p>
+              <p className="mt-1 text-sm text-neutral-100">
+                {latestReport.reportData.reportStatus ?? latestReport.status}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+              <p className="text-xs text-neutral-500">Readiness score</p>
+              <p className="mt-1 text-sm text-neutral-100">
+                {latestReport.readinessScore ?? 0}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+              <p className="text-xs text-neutral-500">Approval decision</p>
+              <p className="mt-1 text-sm text-neutral-100">
+                {formatApprovalDecision(
+                  latestReport.reportData.approval?.decision ?? "approved"
+                )}
+              </p>
+            </div>
+          </div>
+
+          {sharePath ? (
+            <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-900 p-3">
+              <p className="text-xs text-neutral-500">Share URL</p>
+              <p className="mt-2 break-all font-mono text-sm text-blue-200">
+                {sharePath}
+              </p>
+              <Link
+                href={sharePath}
+                target="_blank"
+                className="mt-3 inline-flex rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
+              >
+                Open public report
+              </Link>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function Score({ label, value }: { label: string; value: number | null }) {
   return (
     <div className="rounded-md border border-neutral-800 bg-neutral-900 p-4">
@@ -1483,7 +1646,7 @@ function formatQuestionPriority(priority: string) {
   return isRequiredQuestionPriority(priority) ? "must_answer" : "nice_to_have";
 }
 
-function formatApprovalDecision(decision: ApprovalDecision) {
+function formatApprovalDecision(decision: string) {
   if (decision === "approved") {
     return "Approved";
   }
