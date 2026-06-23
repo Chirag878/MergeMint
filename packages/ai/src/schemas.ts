@@ -69,6 +69,42 @@ export const EngineeringTasksOutputSchema = z.object({
   return new Set(titles).size === titles.length;
 }, "Engineering task titles must be unique.");
 
+export const RequirementCoverageOutputSchema = z.object({
+  requirementKey: z.string().regex(/^REQ-\d{3}$/),
+  status: z.enum(["covered", "partially_covered", "missing", "risky"]),
+  evidence: z.array(z.string().min(1)).default([]),
+  concern: z.string().min(1).optional()
+});
+
+export const QAFindingOutputSchema = z.object({
+  requirementKey: z.string().regex(/^REQ-\d{3}$/).optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  category: z.enum([
+    "missing_requirement",
+    "partial_implementation",
+    "bug_risk",
+    "security_risk",
+    "test_gap",
+    "edge_case_gap",
+    "documentation_gap",
+    "other"
+  ]),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  file: z.string().min(1).optional(),
+  line: z.number().int().positive().optional(),
+  suggestedFix: z.string().min(1).optional()
+});
+
+export const QAReviewOutputSchema = z.object({
+  overallStatus: z.enum(["approved", "changes_requested", "risky", "blocked"]),
+  readinessScore: z.number().int().min(0).max(100),
+  confidenceScore: z.number().int().min(0).max(100),
+  summary: z.string().min(1),
+  coverage: z.array(RequirementCoverageOutputSchema).min(1),
+  findings: z.array(QAFindingOutputSchema).default([])
+});
+
 export type ClarificationQuestionsOutput = z.infer<
   typeof ClarificationQuestionsOutputSchema
 >;
@@ -76,3 +112,8 @@ export type PRDOutput = z.infer<typeof PRDOutputSchema>;
 export type EngineeringTasksOutput = z.infer<
   typeof EngineeringTasksOutputSchema
 >;
+export type RequirementCoverageOutput = z.infer<
+  typeof RequirementCoverageOutputSchema
+>;
+export type QAFindingOutput = z.infer<typeof QAFindingOutputSchema>;
+export type QAReviewOutput = z.infer<typeof QAReviewOutputSchema>;

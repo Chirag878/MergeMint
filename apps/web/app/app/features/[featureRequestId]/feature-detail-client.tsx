@@ -36,6 +36,22 @@ type AiRunView = {
   createdAt: Date | string;
 };
 
+type ApprovalDecision =
+  | "approved"
+  | "approved_with_risk"
+  | "changes_requested"
+  | "rejected";
+
+const approvalOptions: Array<{
+  value: ApprovalDecision;
+  label: string;
+}> = [
+  { value: "approved", label: "Approve" },
+  { value: "approved_with_risk", label: "Approve with risk" },
+  { value: "changes_requested", label: "Request changes" },
+  { value: "rejected", label: "Reject" }
+];
+
 export function FeatureDetailClient({
   featureRequestId
 }: {
@@ -43,11 +59,26 @@ export function FeatureDetailClient({
 }) {
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [prUrl, setPrUrl] = useState("");
+  const [approvalDecision, setApprovalDecision] =
+    useState<ApprovalDecision>("approved");
+  const [approvalNote, setApprovalNote] = useState("");
+  const [remainingRisks, setRemainingRisks] = useState("");
+  const [approvalValidationError, setApprovalValidationError] = useState<
+    string | null
+  >(null);
+  const [showApprovalConfirmation, setShowApprovalConfirmation] =
+    useState(false);
   const utils = trpc.useUtils();
   const workflow = trpc.requirementEngine.getWorkflow.useQuery({
     featureRequestId
   });
   const linkedPullRequest = trpc.github.getFeaturePullRequest.useQuery({
+    featureRequestId
+  });
+  const latestQaReview = trpc.qaReview.getLatest.useQuery({
+    featureRequestId
+  });
+  const latestApproval = trpc.approval.getLatest.useQuery({
     featureRequestId
   });
   const generateClarifications =
@@ -85,6 +116,22 @@ export function FeatureDetailClient({
   const refreshSnapshot = trpc.github.refreshSnapshot.useMutation({
     onSuccess: async () => {
       await utils.github.getFeaturePullRequest.invalidate({ featureRequestId });
+    }
+  });
+  const runQaReview = trpc.qaReview.run.useMutation({
+    onSuccess: async () => {
+      await utils.qaReview.getLatest.invalidate({ featureRequestId });
+      await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
+    }
+  });
+  const createApproval = trpc.approval.createDecision.useMutation({
+    onSuccess: async () => {
+      setApprovalNote("");
+      setRemainingRisks("");
+      setApprovalValidationError(null);
+      setShowApprovalConfirmation(false);
+      await utils.approval.getLatest.invalidate({ featureRequestId });
+      await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
     }
   });
 
@@ -126,6 +173,43 @@ export function FeatureDetailClient({
     answerClarification.mutate({
       questionId,
       answer
+    });
+  }
+
+  function submitApprovalDecision() {
+    const note = approvalNote.trim();
+    const parsedRemainingRisks = parseRemainingRisks(remainingRisks);
+    const riskSummary = getApprovalRiskSummary(latestQaReview.data);
+    const validationError = validateApprovalDecision({
+      decision: approvalDecision,
+      note,
+      remainingRisks: parsedRemainingRisks,
+      riskSummary
+    });
+
+    if (validationError) {
+      setApprovalValidationError(validationError);
+      setShowApprovalConfirmation(false);
+      return;
+    }
+
+    if (
+      approvalDecision === "approved" &&
+      riskSummary.hasUnresolvedRisk &&
+      !showApprovalConfirmation
+    ) {
+      setApprovalValidationError(null);
+      setShowApprovalConfirmation(true);
+      return;
+    }
+
+    setApprovalValidationError(null);
+    setShowApprovalConfirmation(false);
+    createApproval.mutate({
+      featureRequestId,
+      decision: approvalDecision,
+      note: note || undefined,
+      remainingRisks: parsedRemainingRisks
     });
   }
 
@@ -455,6 +539,47 @@ export function FeatureDetailClient({
         isRefreshing={refreshSnapshot.isPending}
         refreshError={refreshSnapshot.error?.message}
       />
+
+      <AIQAReviewSection
+        hasPrd={Boolean(prd)}
+        requirementsCount={prdRequirements.length}
+        hasPullRequestSnapshot={Boolean(linkedPullRequest.data?.latestSnapshot)}
+        reviewBundle={latestQaReview.data}
+        isLoading={latestQaReview.isLoading}
+        error={latestQaReview.error?.message}
+        onRun={() => runQaReview.mutate({ featureRequestId })}
+        isRunning={runQaReview.isPending}
+        runError={runQaReview.error?.message}
+      />
+
+      <HumanApprovalGateSection
+        latestQaReview={latestQaReview.data}
+        latestApproval={latestApproval.data}
+        isLoadingApproval={latestApproval.isLoading}
+        approvalError={latestApproval.error?.message}
+        decision={approvalDecision}
+        setDecision={(decision) => {
+          setApprovalDecision(decision);
+          setApprovalValidationError(null);
+          setShowApprovalConfirmation(false);
+        }}
+        note={approvalNote}
+        setNote={(note) => {
+          setApprovalNote(note);
+          setApprovalValidationError(null);
+        }}
+        remainingRisks={remainingRisks}
+        setRemainingRisks={(risks) => {
+          setRemainingRisks(risks);
+          setApprovalValidationError(null);
+        }}
+        onSubmit={submitApprovalDecision}
+        isSubmitting={createApproval.isPending}
+        submitError={createApproval.error?.message}
+        validationError={approvalValidationError}
+        confirmationVisible={showApprovalConfirmation}
+        onCancelConfirmation={() => setShowApprovalConfirmation(false)}
+      />
     </>
   );
 }
@@ -770,6 +895,549 @@ function GitHubPullRequestSection({
   );
 }
 
+type QAReviewBundle = {
+  review: {
+    id: string;
+    reviewVersion: number;
+    overallStatus: string;
+    readinessScore: number | null;
+    confidenceScore: number | null;
+    summary: string | null;
+    createdAt: Date | string;
+  };
+  coverage: Array<{
+    id: string;
+    requirementKey: string;
+    status: string;
+    evidence: {
+      summary?: string;
+      files?: string[];
+      checks?: string[];
+      notes?: string[];
+    };
+    concern: string | null;
+  }>;
+  findings: Array<{
+    id: string;
+    requirementKey: string | null;
+    severity: string;
+    category: string;
+    title: string;
+    description: string;
+    file: string | null;
+    line: number | null;
+    suggestedFix: string | null;
+    status: string;
+  }>;
+};
+
+type ApprovalView = {
+  id: string;
+  decision: ApprovalDecision;
+  note: string | null;
+  remainingRisks: string[];
+  createdAt: Date | string;
+};
+
+type ApprovalRiskSummary = {
+  readinessScore: number | null;
+  highCriticalFindings: number;
+  missingRequirements: number;
+  partialRequirements: number;
+  riskyRequirements: number;
+  hasUnresolvedRisk: boolean;
+};
+
+function parseRemainingRisks(value: string) {
+  return value
+    .split("\n")
+    .map((risk) => risk.trim())
+    .filter(Boolean);
+}
+
+function getApprovalRiskSummary(
+  latestQaReview: QAReviewBundle | null | undefined
+): ApprovalRiskSummary {
+  const readinessScore = latestQaReview?.review.readinessScore ?? null;
+  const highCriticalFindings =
+    latestQaReview?.findings.filter(
+      (finding) =>
+        finding.status === "open" &&
+        (finding.severity === "high" || finding.severity === "critical")
+    ).length ?? 0;
+  const missingRequirements =
+    latestQaReview?.coverage.filter((coverage) => coverage.status === "missing")
+      .length ?? 0;
+  const partialRequirements =
+    latestQaReview?.coverage.filter((coverage) => coverage.status === "partial")
+      .length ?? 0;
+  const riskyRequirements =
+    latestQaReview?.coverage.filter((coverage) => coverage.status === "risky")
+      .length ?? 0;
+  const hasUnresolvedRisk =
+    (readinessScore ?? 0) < 80 ||
+    highCriticalFindings > 0 ||
+    missingRequirements > 0 ||
+    partialRequirements > 0 ||
+    riskyRequirements > 0;
+
+  return {
+    readinessScore,
+    highCriticalFindings,
+    missingRequirements,
+    partialRequirements,
+    riskyRequirements,
+    hasUnresolvedRisk
+  };
+}
+
+function validateApprovalDecision(input: {
+  decision: ApprovalDecision;
+  note: string;
+  remainingRisks: string[];
+  riskSummary: ApprovalRiskSummary;
+}) {
+  const hasNote = input.note.length > 0;
+  const hasRemainingRisks = input.remainingRisks.length > 0;
+
+  if (
+    input.decision === "approved" &&
+    input.riskSummary.hasUnresolvedRisk &&
+    !hasNote
+  ) {
+    return "This review has unresolved risks. Add an approval note before approving.";
+  }
+
+  if (
+    input.decision === "approved_with_risk" &&
+    !hasNote &&
+    !hasRemainingRisks
+  ) {
+    return "Add an approval note or list remaining risks before approving with risk.";
+  }
+
+  if (input.decision === "changes_requested" && !hasNote) {
+    return "Add a note explaining what changes are required.";
+  }
+
+  if (input.decision === "rejected" && !hasNote) {
+    return "Add a note explaining why this release is rejected.";
+  }
+
+  return null;
+}
+
+function AIQAReviewSection({
+  hasPrd,
+  requirementsCount,
+  hasPullRequestSnapshot,
+  reviewBundle,
+  isLoading,
+  error,
+  onRun,
+  isRunning,
+  runError
+}: {
+  hasPrd: boolean;
+  requirementsCount: number;
+  hasPullRequestSnapshot: boolean;
+  reviewBundle: QAReviewBundle | null | undefined;
+  isLoading: boolean;
+  error?: string;
+  onRun: () => void;
+  isRunning: boolean;
+  runError?: string;
+}) {
+  const ready = hasPrd && requirementsCount > 0 && hasPullRequestSnapshot;
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-medium">AI QA Review</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Compare the latest PR snapshot against the PRD requirement set.
+          </p>
+        </div>
+        {ready ? (
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={isRunning}
+            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isRunning
+              ? "Running..."
+              : reviewBundle
+                ? "Run re-review"
+                : "Run AI QA Review"}
+          </button>
+        ) : null}
+      </div>
+
+      {!hasPrd || requirementsCount === 0 ? (
+        <EmptyText>Generate PRD and requirements before running QA review.</EmptyText>
+      ) : !hasPullRequestSnapshot ? (
+        <EmptyText>Link a GitHub pull request before running QA review.</EmptyText>
+      ) : null}
+
+      {isLoading ? <EmptyText>Loading latest QA review...</EmptyText> : null}
+      {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+      {runError ? <p className="mt-3 text-sm text-red-300">{runError}</p> : null}
+
+      {reviewBundle ? (
+        <div className="mt-5 space-y-5">
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge status={reviewBundle.review.overallStatus} />
+                  <Badge>v{reviewBundle.review.reviewVersion}</Badge>
+                </div>
+                <p className="mt-3 text-sm text-neutral-400">
+                  {reviewBundle.review.summary ?? "No summary recorded."}
+                </p>
+              </div>
+              <p className="text-xs text-neutral-500">
+                {formatDate(reviewBundle.review.createdAt)}
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <Score label="Readiness" value={reviewBundle.review.readinessScore} />
+              <Score
+                label="Confidence"
+                value={reviewBundle.review.confidenceScore}
+              />
+            </div>
+          </div>
+
+          <section>
+            <h3 className="text-base font-medium text-neutral-100">
+              Requirement Coverage Matrix
+            </h3>
+            <div className="mt-3 space-y-3">
+              {reviewBundle.coverage.map((coverage) => (
+                <article
+                  key={coverage.id}
+                  className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <p className="font-medium text-blue-300">
+                      {coverage.requirementKey}
+                    </p>
+                    <StatusBadge status={coverage.status} />
+                  </div>
+                  <StringList
+                    title="Evidence"
+                    items={coverage.evidence.notes ?? []}
+                    emptyText="No evidence recorded."
+                  />
+                  {coverage.concern ? (
+                    <p className="mt-3 text-sm text-amber-300">
+                      Concern: {coverage.concern}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-base font-medium text-neutral-100">Findings</h3>
+            {reviewBundle.findings.length > 0 ? (
+              <div className="mt-3 space-y-3">
+                {reviewBundle.findings.map((finding) => (
+                  <article
+                    key={finding.id}
+                    className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-medium text-neutral-100">
+                          {finding.title}
+                        </h4>
+                        <p className="mt-1 text-sm text-neutral-500">
+                          {finding.requirementKey ?? "No requirement"} -{" "}
+                          {finding.category}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <SeverityBadge severity={finding.severity} />
+                        <Badge>{finding.status}</Badge>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm text-neutral-400">
+                      {finding.description}
+                    </p>
+                    {finding.file ? (
+                      <p className="mt-3 text-sm text-neutral-500">
+                        {finding.file}
+                        {finding.line ? `:${finding.line}` : ""}
+                      </p>
+                    ) : null}
+                    {finding.suggestedFix ? (
+                      <p className="mt-3 text-sm text-blue-200">
+                        Suggested fix: {finding.suggestedFix}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyText>No findings recorded.</EmptyText>
+            )}
+          </section>
+        </div>
+      ) : ready && !isLoading ? (
+        <EmptyText>No QA review has been run yet.</EmptyText>
+      ) : null}
+    </section>
+  );
+}
+
+function HumanApprovalGateSection({
+  latestQaReview,
+  latestApproval,
+  isLoadingApproval,
+  approvalError,
+  decision,
+  setDecision,
+  note,
+  setNote,
+  remainingRisks,
+  setRemainingRisks,
+  onSubmit,
+  isSubmitting,
+  submitError,
+  validationError,
+  confirmationVisible,
+  onCancelConfirmation
+}: {
+  latestQaReview: QAReviewBundle | null | undefined;
+  latestApproval: ApprovalView | null | undefined;
+  isLoadingApproval: boolean;
+  approvalError?: string;
+  decision: ApprovalDecision;
+  setDecision: (decision: ApprovalDecision) => void;
+  note: string;
+  setNote: (note: string) => void;
+  remainingRisks: string;
+  setRemainingRisks: (risks: string) => void;
+  onSubmit: () => void;
+  isSubmitting: boolean;
+  submitError?: string;
+  validationError?: string | null;
+  confirmationVisible: boolean;
+  onCancelConfirmation: () => void;
+}) {
+  const riskSummary = getApprovalRiskSummary(latestQaReview);
+  const canSubmit = Boolean(latestQaReview) && !isSubmitting;
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-medium">Human Approval Gate</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Record the human release decision after reviewing AI QA evidence.
+          </p>
+        </div>
+        {latestApproval ? <StatusBadge status={latestApproval.decision} /> : null}
+      </div>
+
+      {!latestQaReview ? (
+        <EmptyText>Run AI QA review before submitting an approval decision.</EmptyText>
+      ) : null}
+
+      {riskSummary.readinessScore !== null && riskSummary.readinessScore < 80 ? (
+        <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+          Warning: readiness score is below 80. You can still submit a human
+          override.
+        </p>
+      ) : null}
+
+      {riskSummary.highCriticalFindings > 0 ? (
+        <p className="mt-3 rounded-md border border-red-800 bg-red-950/30 p-3 text-sm text-red-200">
+          Warning: {riskSummary.highCriticalFindings} open high or critical
+          finding{riskSummary.highCriticalFindings === 1 ? "" : "s"} exist.
+          Approval is not blocked.
+        </p>
+      ) : null}
+
+      {riskSummary.missingRequirements > 0 ||
+      riskSummary.partialRequirements > 0 ||
+      riskSummary.riskyRequirements > 0 ? (
+        <p className="mt-3 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+          Warning: coverage has {riskSummary.missingRequirements} missing,{" "}
+          {riskSummary.partialRequirements} partial, and{" "}
+          {riskSummary.riskyRequirements} risky requirement
+          {riskSummary.missingRequirements +
+            riskSummary.partialRequirements +
+            riskSummary.riskyRequirements ===
+          1
+            ? ""
+            : "s"}
+          .
+        </p>
+      ) : null}
+
+      <div className="mt-5 space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {approvalOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setDecision(option.value)}
+              className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
+                decision === option.value
+                  ? "border-blue-500 bg-blue-950/40 text-blue-100"
+                  : "border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <label className="block text-sm">
+          <span className="text-neutral-300">Note</span>
+          <textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            className="mt-2 min-h-24 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+            placeholder="Decision context, rationale, or release condition..."
+          />
+        </label>
+
+        <label className="block text-sm">
+          <span className="text-neutral-300">Remaining risks</span>
+          <textarea
+            value={remainingRisks}
+            onChange={(event) => setRemainingRisks(event.target.value)}
+            className="mt-2 min-h-24 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+            placeholder="One risk per line"
+          />
+        </label>
+
+        {validationError ? (
+          <p className="rounded-md border border-red-800 bg-red-950/30 p-3 text-sm text-red-200">
+            {validationError}
+          </p>
+        ) : null}
+
+        {confirmationVisible ? (
+          <div className="rounded-md border border-amber-800 bg-amber-950/30 p-4">
+            <p className="text-sm font-medium text-amber-100">
+              This review has unresolved risks. Are you sure you want to approve?
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onSubmit}
+                disabled={!canSubmit}
+                className="rounded-md bg-amber-200 px-4 py-2 text-sm font-medium text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSubmitting ? "Submitting..." : "Approve anyway"}
+              </button>
+              <button
+                type="button"
+                onClick={onCancelConfirmation}
+                disabled={isSubmitting}
+                className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-200 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={!canSubmit || confirmationVisible}
+          className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSubmitting ? "Submitting..." : "Submit decision"}
+        </button>
+
+        {submitError ? <p className="text-sm text-red-300">{submitError}</p> : null}
+        {approvalError ? (
+          <p className="text-sm text-red-300">{approvalError}</p>
+        ) : null}
+      </div>
+
+      {isLoadingApproval ? <EmptyText>Loading latest approval...</EmptyText> : null}
+
+      {latestApproval ? (
+        <div className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm text-neutral-500">Latest decision</p>
+              <h3 className="mt-1 font-medium text-neutral-100">
+                {formatApprovalDecision(latestApproval.decision)}
+              </h3>
+            </div>
+            <p className="text-xs text-neutral-500">
+              {formatDate(latestApproval.createdAt)}
+            </p>
+          </div>
+          {latestApproval.note ? (
+            <p className="mt-3 text-sm text-neutral-400">{latestApproval.note}</p>
+          ) : null}
+          <StringList
+            title="Remaining risks"
+            items={latestApproval.remainingRisks}
+            emptyText="No remaining risks recorded."
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function Score({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-900 p-4">
+      <p className="text-sm text-neutral-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-neutral-100">
+        {value ?? 0}
+      </p>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const classes =
+    status === "covered" || status === "passed"
+      ? "border-emerald-800 bg-emerald-950/30 text-emerald-200"
+      : status === "partial" || status === "needs_changes"
+        ? "border-amber-800 bg-amber-950/30 text-amber-200"
+        : status === "missing" || status === "failed"
+          ? "border-red-800 bg-red-950/30 text-red-200"
+          : "border-violet-800 bg-violet-950/30 text-violet-200";
+
+  return (
+    <span className={`rounded-full border px-2.5 py-1 text-xs ${classes}`}>
+      {status}
+    </span>
+  );
+}
+
+function SeverityBadge({ severity }: { severity: string }) {
+  const classes =
+    severity === "critical" || severity === "high"
+      ? "border-red-800 bg-red-950/30 text-red-200"
+      : severity === "medium"
+        ? "border-amber-800 bg-amber-950/30 text-amber-200"
+        : "border-neutral-700 text-neutral-300";
+
+  return (
+    <span className={`rounded-full border px-2.5 py-1 text-xs ${classes}`}>
+      {severity}
+    </span>
+  );
+}
+
 function Badge({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300">
@@ -813,6 +1481,22 @@ function isRequiredQuestionPriority(priority: string) {
 
 function formatQuestionPriority(priority: string) {
   return isRequiredQuestionPriority(priority) ? "must_answer" : "nice_to_have";
+}
+
+function formatApprovalDecision(decision: ApprovalDecision) {
+  if (decision === "approved") {
+    return "Approved";
+  }
+
+  if (decision === "approved_with_risk") {
+    return "Approved with risk";
+  }
+
+  if (decision === "changes_requested") {
+    return "Changes requested";
+  }
+
+  return "Rejected";
 }
 
 function shortSha(sha?: string | null) {

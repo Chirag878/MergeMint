@@ -4,6 +4,8 @@ export {
   generateEngineeringTasks,
   generatePRD
 } from "./requirement-agent";
+export { generateQAReview } from "./qa-review-agent";
+export type { QAReviewInput } from "./qa-review-agent";
 export type {
   AIResult,
   AITokenUsage,
@@ -14,10 +16,14 @@ export type {
 export {
   ClarificationQuestionsOutputSchema,
   EngineeringTasksOutputSchema,
+  QAReviewOutputSchema,
   PRDOutputSchema
 } from "./schemas";
 export type {
   ClarificationQuestionsOutput,
   EngineeringTasksOutput,
+  QAFindingOutput,
+  QAReviewOutput,
+  RequirementCoverageOutput,
   PRDOutput
 } from "./schemas";

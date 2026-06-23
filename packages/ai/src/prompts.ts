@@ -1,4 +1,5 @@
 import type { EngineeringTasksInput, PRDInput, RequirementAgentInput } from "./requirement-agent";
+import type { QAReviewInput } from "./qa-review-agent";
 
 export const REQUIREMENT_AGENT_SYSTEM_PROMPT = [
   "You are Veriflow's requirements agent for production SaaS engineering teams.",
@@ -56,4 +57,31 @@ export function buildEngineeringTasksPrompt(input: EngineeringTasksInput) {
 
 function formatFeatureInput(input: RequirementAgentInput) {
   return `Feature request: ${JSON.stringify(input)}`;
+}
+
+export function buildQAReviewPrompt(input: QAReviewInput) {
+  return [
+    "Review this GitHub pull request snapshot against the PRD requirements.",
+    "Focus only on requirement satisfaction, release risk, security/access-control gaps, edge cases, and test evidence.",
+    "Do not evaluate generic code style unless it creates requirement or release risk.",
+    "For every requirement key provided, produce exactly one coverage item.",
+    "Coverage status must be covered, partially_covered, missing, or risky.",
+    "If the diff does not prove coverage, mark partially_covered, missing, or risky and explain why.",
+    "Create findings for missing, risky, or partially covered requirements.",
+    "Findings should reference requirementKey when possible.",
+    "Do not invent files or line numbers unless visible in changed files or diff evidence.",
+    "Treat missing tests as test_gap when the requirement needs verification.",
+    "Treat missing access-control/security behavior as security_risk when relevant.",
+    "Treat missing edge-case handling as edge_case_gap when relevant.",
+    "Be strict. Do not approve just because a PR exists.",
+    "",
+    `Feature request: ${JSON.stringify(input.featureRequest)}`,
+    `PRD: ${JSON.stringify(input.prd)}`,
+    `Requirements: ${JSON.stringify(input.requirements)}`,
+    `Engineering tasks: ${JSON.stringify(input.engineeringTasks)}`,
+    `Pull request: ${JSON.stringify(input.pullRequest)}`,
+    `Changed files: ${JSON.stringify(input.changedFiles)}`,
+    `Diff truncated: ${input.diffTruncated ? "yes" : "no"}`,
+    `Diff text:\n${input.diffText}`
+  ].join("\n");
 }
