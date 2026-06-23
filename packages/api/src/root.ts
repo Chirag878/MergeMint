@@ -1,5 +1,6 @@
 import { router } from "./trpc";
 import { featureRequestsRouter } from "./routers/feature-requests.router";
+import { githubRouter } from "./routers/github.router";
 import { healthRouter } from "./routers/health.router";
 import { projectsRouter } from "./routers/projects.router";
 import { requirementEngineRouter } from "./routers/requirement-engine.router";
@@ -10,6 +11,7 @@ export const appRouter = router({
   workspace: workspaceRouter,
   projects: projectsRouter,
   featureRequests: featureRequestsRouter,
+  github: githubRouter,
   requirementEngine: requirementEngineRouter
 });
 

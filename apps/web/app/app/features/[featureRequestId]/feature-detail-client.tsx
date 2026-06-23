@@ -42,8 +42,12 @@ export function FeatureDetailClient({
   featureRequestId: string;
 }) {
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [prUrl, setPrUrl] = useState("");
   const utils = trpc.useUtils();
   const workflow = trpc.requirementEngine.getWorkflow.useQuery({
+    featureRequestId
+  });
+  const linkedPullRequest = trpc.github.getFeaturePullRequest.useQuery({
     featureRequestId
   });
   const generateClarifications =
@@ -71,6 +75,18 @@ export function FeatureDetailClient({
         await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
       }
     });
+  const linkPullRequest = trpc.github.linkPullRequest.useMutation({
+    onSuccess: async () => {
+      setPrUrl("");
+      await utils.github.getFeaturePullRequest.invalidate({ featureRequestId });
+      await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
+    }
+  });
+  const refreshSnapshot = trpc.github.refreshSnapshot.useMutation({
+    onSuccess: async () => {
+      await utils.github.getFeaturePullRequest.invalidate({ featureRequestId });
+    }
+  });
 
   const feature = workflow.data?.featureRequest;
   const clarificationQuestions =
@@ -416,6 +432,29 @@ export function FeatureDetailClient({
           <EmptyText>No engineering tasks generated yet.</EmptyText>
         )}
       </section>
+
+      <GitHubPullRequestSection
+        data={linkedPullRequest.data}
+        isLoading={linkedPullRequest.isLoading}
+        error={linkedPullRequest.error?.message}
+        prUrl={prUrl}
+        setPrUrl={setPrUrl}
+        onLink={() =>
+          linkPullRequest.mutate({
+            featureRequestId,
+            prUrl
+          })
+        }
+        isLinking={linkPullRequest.isPending}
+        linkError={linkPullRequest.error?.message}
+        onRefresh={(pullRequestId) =>
+          refreshSnapshot.mutate({
+            pullRequestId
+          })
+        }
+        isRefreshing={refreshSnapshot.isPending}
+        refreshError={refreshSnapshot.error?.message}
+      />
     </>
   );
 }
@@ -560,6 +599,177 @@ function AiRunDebug({ runs }: { runs: AiRunView[] }) {
   );
 }
 
+function GitHubPullRequestSection({
+  data,
+  isLoading,
+  error,
+  prUrl,
+  setPrUrl,
+  onLink,
+  isLinking,
+  linkError,
+  onRefresh,
+  isRefreshing,
+  refreshError
+}: {
+  data:
+    | {
+        pullRequest: {
+          id: string;
+          githubPrNumber: number;
+          title: string;
+          author: string | null;
+          branch: string;
+          baseBranch: string;
+          state: string;
+          latestCommitSha: string | null;
+          htmlUrl: string;
+        };
+        repository: {
+          fullName: string;
+        } | null;
+        latestSnapshot: {
+          commitSha: string;
+          diffText: string | null;
+          changedFiles: unknown[];
+          ciStatus: string;
+          createdAt: Date | string;
+        } | null;
+        changedFilesCount: number;
+        diffTextLength: number;
+      }
+    | null
+    | undefined;
+  isLoading: boolean;
+  error?: string;
+  prUrl: string;
+  setPrUrl: (value: string) => void;
+  onLink: () => void;
+  isLinking: boolean;
+  linkError?: string;
+  onRefresh: (pullRequestId: string) => void;
+  isRefreshing: boolean;
+  refreshError?: string;
+}) {
+  const canLink = prUrl.trim().length > 0 && !isLinking;
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <h2 className="text-lg font-medium">GitHub Pull Request</h2>
+
+      {isLoading ? <EmptyText>Loading linked pull request...</EmptyText> : null}
+      {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+
+      {!isLoading && !data ? (
+        <div className="mt-4 space-y-4">
+          <p className="text-sm text-neutral-500">
+            Paste a GitHub PR URL to capture the code snapshot for verification.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              value={prUrl}
+              onChange={(event) => setPrUrl(event.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
+              placeholder="https://github.com/owner/repo/pull/123"
+              type="url"
+            />
+            <button
+              type="button"
+              disabled={!canLink}
+              onClick={onLink}
+              className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isLinking ? "Linking..." : "Link Pull Request"}
+            </button>
+          </div>
+          {linkError ? <p className="text-sm text-red-300">{linkError}</p> : null}
+        </div>
+      ) : null}
+
+      {data ? (
+        <div className="mt-4 space-y-4">
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="font-medium text-neutral-100">
+                  {data.pullRequest.title}
+                </h3>
+                <p className="mt-1 text-sm text-neutral-500">
+                  {data.repository?.fullName ?? "Repository"} #
+                  {data.pullRequest.githubPrNumber}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge>{data.pullRequest.state}</Badge>
+                <Badge>{data.latestSnapshot?.ciStatus ?? "unknown"}</Badge>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 text-sm text-neutral-400 md:grid-cols-2">
+              <p>
+                <span className="text-neutral-500">Author:</span>{" "}
+                {data.pullRequest.author ?? "Unknown"}
+              </p>
+              <p>
+                <span className="text-neutral-500">Branch:</span>{" "}
+                {data.pullRequest.branch} {"->"} {data.pullRequest.baseBranch}
+              </p>
+              <p>
+                <span className="text-neutral-500">Commit:</span>{" "}
+                {shortSha(data.pullRequest.latestCommitSha)}
+              </p>
+              <p>
+                <span className="text-neutral-500">Changed files:</span>{" "}
+                {data.changedFilesCount}
+              </p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a
+                href={data.pullRequest.htmlUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+              >
+                Open on GitHub
+              </a>
+              <button
+                type="button"
+                onClick={() => onRefresh(data.pullRequest.id)}
+                disabled={isRefreshing}
+                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isRefreshing ? "Refreshing..." : "Refresh snapshot"}
+              </button>
+            </div>
+
+            {refreshError ? (
+              <p className="mt-3 text-sm text-red-300">{refreshError}</p>
+            ) : null}
+          </div>
+
+          <details className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-neutral-300">
+              Snapshot debug
+            </summary>
+            <div className="mt-3 grid gap-2 text-sm text-neutral-500 md:grid-cols-2">
+              <p>Diff length: {data.diffTextLength}</p>
+              <p>
+                Snapshot created:{" "}
+                {data.latestSnapshot
+                  ? formatDate(data.latestSnapshot.createdAt)
+                  : "None"}
+              </p>
+              <p>Snapshot commit: {shortSha(data.latestSnapshot?.commitSha)}</p>
+              <p>Changed files: {data.latestSnapshot?.changedFiles.length ?? 0}</p>
+            </div>
+          </details>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function Badge({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300">
@@ -603,4 +813,8 @@ function isRequiredQuestionPriority(priority: string) {
 
 function formatQuestionPriority(priority: string) {
   return isRequiredQuestionPriority(priority) ? "must_answer" : "nice_to_have";
+}
+
+function shortSha(sha?: string | null) {
+  return sha ? sha.slice(0, 7) : "unknown";
 }

@@ -20,6 +20,7 @@
       "@veriflow/db": ["packages/db/src/index.ts"],
       "@veriflow/env": ["packages/env/src/index.ts"],
       "@veriflow/ai": ["packages/ai/src/index.ts"],
+      "@veriflow/github": ["packages/github/src/index.ts"],
       "@veriflow/auth": ["packages/auth/src/index.ts"],
       "@veriflow/auth/client": ["packages/auth/src/client.ts"],
       "@veriflow/auth/server": ["packages/auth/src/server.ts"]

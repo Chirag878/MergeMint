@@ -34,6 +34,7 @@ export const env = createEnv({
     GITHUB_APP_ID: z.string().optional(),
     GITHUB_APP_PRIVATE_KEY: z.string().optional(),
     GITHUB_WEBHOOK_SECRET: z.string().optional(),
+    GITHUB_TOKEN: z.string().optional(),
 
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_MODEL: z.string().min(1).default("gpt-4.1-mini"),
