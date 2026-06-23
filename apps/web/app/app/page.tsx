@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ensureUserWorkspace } from "@veriflow/api";
+import { AppHomeProjectState } from "./project-state";
 import { requireWebSession } from "../server-auth";
 
 export default async function AppPage() {
@@ -44,15 +45,29 @@ export default async function AppPage() {
             href="/app/projects"
             className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
           >
-            Create first project
+            Create Project
+          </Link>
+          <Link
+            href="/app/projects"
+            className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
+          >
+            View Projects
           </Link>
           <Link
             href="/app/features"
             className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
           >
-            Draft feature request
+            Create Feature Request
+          </Link>
+          <Link
+            href="/app/features"
+            className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
+          >
+            View Features
           </Link>
         </div>
+
+        <AppHomeProjectState />
       </section>
     </main>
   );

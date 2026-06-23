@@ -126,6 +126,18 @@ export const featureRequestsRouter = router({
         .orderBy(desc(featureRequests.createdAt));
     }),
 
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+
+    assertRoleCan(workspace.membership.role, "project:read");
+
+    return db
+      .select()
+      .from(featureRequests)
+      .where(eq(featureRequests.organizationId, workspace.activeOrganization.id))
+      .orderBy(desc(featureRequests.createdAt));
+  }),
+
   getById: protectedProcedure
     .input(
       z.object({
