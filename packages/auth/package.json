@@ -1,0 +1,23 @@
+{
+  "name": "@veriflow/auth",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@veriflow/db": "workspace:*",
+    "@veriflow/env": "workspace:*",
+    "better-auth": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

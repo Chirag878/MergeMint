@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@veriflow/api": ["packages/api/src/index.ts"],
+      "@veriflow/shared": ["packages/shared/src/index.ts"],
+      "@veriflow/db": ["packages/db/src/index.ts"],
+      "@veriflow/env": ["packages/env/src/index.ts"],
+      "@veriflow/ai": ["packages/ai/src/index.ts"],
+      "@veriflow/auth": ["packages/auth/src/index.ts"],
+      "@veriflow/auth/client": ["packages/auth/src/client.ts"],
+      "@veriflow/auth/server": ["packages/auth/src/server.ts"]
+    }
+  }
+}

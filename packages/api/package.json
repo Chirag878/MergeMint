@@ -1,0 +1,25 @@
+{
+  "name": "@veriflow/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trpc/server": "latest",
+    "@veriflow/ai": "workspace:*",
+    "@veriflow/auth": "workspace:*",
+    "@veriflow/db": "workspace:*",
+    "drizzle-orm": "latest",
+    "superjson": "latest",
+    "zod": "latest",
+    "@veriflow/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
