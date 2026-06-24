@@ -6,3 +6,5 @@ node_modules
 .vercel
 dist
 DEPLOYMENT_DEMO_CHECKLIST
+*.tsbuildinfo
+**/*.tsbuildinfo
