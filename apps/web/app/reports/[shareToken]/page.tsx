@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getReleaseReportByShareToken } from "@veriflow/api";
+import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,19 @@ export default async function PublicReleaseReportPage({
   }
 
   const data = report.reportData;
+  const coverageSummary = getCoverageSummary(data.coverage, data.findings);
+  const decisionBanner = getDecisionBanner(
+    data.approval.decision,
+    data.qaReview.overallStatus
+  );
+  const openFindings = data.findings.filter(
+    (finding) => finding.status === "open"
+  );
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 md:px-8">
+    <main className="min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
       <article className="mx-auto max-w-6xl space-y-6">
-        <header className="rounded-lg border border-neutral-800 bg-neutral-900 p-6 shadow-2xl shadow-black/20 md:p-8">
+        <header className="rounded-lg border border-neutral-800 bg-neutral-900 p-6 shadow-2xl shadow-black/20 print:border-neutral-300 print:bg-white print:shadow-none md:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div>
               <div className="flex items-center gap-3">
@@ -35,10 +44,12 @@ export default async function PublicReleaseReportPage({
                 Release Verification Report
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-400 md:text-base">
-                {report.title}
+                A client-ready verification report showing requirement coverage,
+                PR evidence, QA risks, and final approval decision.
               </p>
             </div>
             <div className="space-y-3 text-right">
+              <PrintButton />
               <StatusPill status={data.reportStatus} />
               <p className="text-xs text-neutral-500">
                 Generated {formatDate(data.generatedAt)}
@@ -51,11 +62,16 @@ export default async function PublicReleaseReportPage({
           <Metric label="Readiness" value={`${data.qaReview.readinessScore ?? 0}`} />
           <Metric label="Confidence" value={`${data.qaReview.confidenceScore ?? 0}`} />
           <Metric
-            label="Approval"
+            label="Final Decision"
             value={formatDecision(data.approval.decision)}
           />
-          <Metric label="QA status" value={formatLabel(data.qaReview.overallStatus)} />
+          <Metric
+            label="AI Verdict"
+            value={formatLabel(data.qaReview.overallStatus)}
+          />
         </section>
+
+        <DecisionBanner banner={decisionBanner} />
 
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading eyebrow="Executive summary" title={data.feature.title} />
@@ -69,6 +85,17 @@ export default async function PublicReleaseReportPage({
                   {data.qaReview.summary}
                 </p>
               ) : null}
+              <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                  Coverage Summary
+                </p>
+                <p className="mt-2 text-sm text-neutral-200">
+                  {coverageSummary.covered} covered | {coverageSummary.partial}{" "}
+                  partial | {coverageSummary.missing} missing |{" "}
+                  {coverageSummary.risky} risky | {coverageSummary.openFindings}{" "}
+                  open finding{coverageSummary.openFindings === 1 ? "" : "s"}
+                </p>
+              </div>
             </div>
             <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
               <KeyValue label="Project" value={data.project.name} />
@@ -112,7 +139,7 @@ export default async function PublicReleaseReportPage({
 
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
-            eyebrow="Requirement coverage"
+            eyebrow="Requirement Coverage Evidence"
             title={`${data.coverage.length} requirements reviewed`}
           />
           <div className="mt-5 space-y-3">
@@ -155,16 +182,16 @@ export default async function PublicReleaseReportPage({
 
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
-            eyebrow="Findings and risks"
+            eyebrow="Open Findings and Release Risks"
             title={
-              data.findings.length > 0
-                ? `${data.findings.length} finding${data.findings.length === 1 ? "" : "s"}`
-                : "No findings recorded"
+              openFindings.length > 0
+                ? `${openFindings.length} open finding${openFindings.length === 1 ? "" : "s"}`
+                : "No open findings recorded"
             }
           />
-          {data.findings.length > 0 ? (
+          {openFindings.length > 0 ? (
             <div className="mt-5 space-y-3">
-              {data.findings.map((finding, index) => (
+              {openFindings.map((finding, index) => (
                 <article
                   key={`${finding.title}-${index}`}
                   className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
@@ -203,7 +230,7 @@ export default async function PublicReleaseReportPage({
             </div>
           ) : (
             <p className="mt-4 text-sm text-neutral-500">
-              The linked QA review did not record findings for this report.
+              No open findings were recorded for this review.
             </p>
           )}
         </section>
@@ -226,10 +253,16 @@ export default async function PublicReleaseReportPage({
               <p className="mt-2 text-sm leading-6 text-neutral-300">
                 {data.approval.note ?? "No note recorded."}
               </p>
-              <StringList
-                title="Remaining risks"
-                items={data.approval.remainingRisks}
-              />
+              {data.approval.remainingRisks.length > 0 ? (
+                <StringList
+                  title="Remaining risks"
+                  items={data.approval.remainingRisks}
+                />
+              ) : (
+                <p className="mt-4 text-sm text-neutral-500">
+                  No remaining risks were documented by the reviewer.
+                </p>
+              )}
             </div>
           </div>
         </section>
@@ -259,6 +292,26 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
         {title}
       </h2>
     </div>
+  );
+}
+
+type DecisionBannerView = {
+  message: string;
+  tone: "green" | "amber" | "red";
+};
+
+function DecisionBanner({ banner }: { banner: DecisionBannerView }) {
+  const classes =
+    banner.tone === "green"
+      ? "border-emerald-800 bg-emerald-950/30 text-emerald-100"
+      : banner.tone === "red"
+        ? "border-red-800 bg-red-950/30 text-red-100"
+        : "border-amber-800 bg-amber-950/30 text-amber-100";
+
+  return (
+    <section className={`rounded-lg border p-4 text-sm leading-6 ${classes}`}>
+      {banner.message}
+    </section>
   );
 }
 
@@ -413,4 +466,60 @@ function toStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+function getCoverageSummary(
+  coverage: Array<{ status: string }>,
+  findings: Array<{ status: string }>
+) {
+  return {
+    covered: coverage.filter((item) => item.status === "covered").length,
+    partial: coverage.filter((item) => item.status === "partial").length,
+    missing: coverage.filter((item) => item.status === "missing").length,
+    risky: coverage.filter((item) => item.status === "risky").length,
+    openFindings: findings.filter((finding) => finding.status === "open").length
+  };
+}
+
+function getDecisionBanner(
+  finalDecision: string,
+  aiVerdict: string
+): DecisionBannerView {
+  if (finalDecision === "approved_with_risk") {
+    return {
+      tone: "amber",
+      message: "This release was approved with documented risks."
+    };
+  }
+
+  if (finalDecision === "changes_requested") {
+    return {
+      tone: "amber",
+      message: "Changes were requested before this release should proceed."
+    };
+  }
+
+  if (finalDecision === "rejected") {
+    return {
+      tone: "red",
+      message: "This release was rejected by the human reviewer."
+    };
+  }
+
+  if (finalDecision === "approved" && !isApprovedAiVerdict(aiVerdict)) {
+    return {
+      tone: "green",
+      message:
+        "Human reviewer approved this release despite unresolved AI review concerns. See coverage and risks below."
+    };
+  }
+
+  return {
+    tone: "green",
+    message: "This release was approved by the human reviewer."
+  };
+}
+
+function isApprovedAiVerdict(value: string) {
+  return value === "approved" || value === "passed";
 }
