@@ -1,7 +1,14 @@
 import { TRPCError } from "@trpc/server";
 import type { TRPCContext } from "./context";
 
-export type MemberRole = "owner" | "admin" | "member" | "viewer";
+export type MemberRole =
+  | "owner"
+  | "admin"
+  | "member"
+  | "reviewer"
+  | "developer"
+  | "viewer"
+  | "client_viewer";
 
 export type Permission =
   | "create_project"
@@ -28,7 +35,10 @@ export const ROLE_PERMISSIONS: Record<MemberRole, Permission[]> = {
     "project:read"
   ],
   member: ["create_feature_request", "project:write", "project:read"],
-  viewer: ["project:read"]
+  reviewer: ["project:write", "project:read"],
+  developer: ["create_feature_request", "project:write", "project:read"],
+  viewer: ["project:read"],
+  client_viewer: ["project:read"]
 };
 
 export function assertAuthenticated(ctx: Pick<TRPCContext, "session" | "user">) {

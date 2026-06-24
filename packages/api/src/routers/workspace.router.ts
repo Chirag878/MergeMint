@@ -1,6 +1,16 @@
 import { protectedProcedure, router } from "../trpc";
 import { getPlanEntitlements } from "../services/plan-entitlements.service";
 import { ensureUserWorkspace } from "../services/workspace-bootstrap.service";
+import { assertRoleCan } from "../authz";
+import { db, organizations } from "@veriflow/db";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+
+const workspaceUseCaseSchema = z.enum([
+  "agency",
+  "product_team",
+  "solo_builder"
+]);
 
 function toBootstrapInput(ctx: {
   user: {
@@ -49,6 +59,62 @@ export const workspaceRouter = router({
       activeOrganization: workspace.activeOrganization,
       role: workspace.membership.role,
       plan: workspace.subscription.plan
+    };
+  }),
+
+  setUseCase: protectedProcedure
+    .input(
+      z.object({
+        useCase: workspaceUseCaseSchema
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+
+      assertRoleCan(workspace.membership.role, "organization:manage");
+
+      const [organization] = await db
+        .update(organizations)
+        .set({
+          workspaceUseCase: input.useCase,
+          updatedAt: new Date()
+        })
+        .where(eq(organizations.id, workspace.activeOrganization.id))
+        .returning();
+
+      if (!organization) {
+        throw new Error("Unable to update workspace use case.");
+      }
+
+      return {
+        activeOrganization: organization,
+        role: workspace.membership.role,
+        useCase: organization.workspaceUseCase
+      };
+    }),
+
+  clearUseCase: protectedProcedure.mutation(async ({ ctx }) => {
+    const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+
+    assertRoleCan(workspace.membership.role, "organization:manage");
+
+    const [organization] = await db
+      .update(organizations)
+      .set({
+        workspaceUseCase: null,
+        updatedAt: new Date()
+      })
+      .where(eq(organizations.id, workspace.activeOrganization.id))
+      .returning();
+
+    if (!organization) {
+      throw new Error("Unable to clear workspace use case.");
+    }
+
+    return {
+      activeOrganization: organization,
+      role: workspace.membership.role,
+      useCase: organization.workspaceUseCase
     };
   })
 });

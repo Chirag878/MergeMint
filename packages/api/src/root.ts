@@ -1,6 +1,7 @@
 import { router } from "./trpc";
 import { approvalRouter } from "./routers/approval.router";
 import { clientRouter } from "./routers/client.router";
+import { dashboardRouter } from "./routers/dashboard.router";
 import { featureRequestsRouter } from "./routers/feature-requests.router";
 import { githubRouter } from "./routers/github.router";
 import { healthRouter } from "./routers/health.router";
@@ -14,6 +15,7 @@ export const appRouter = router({
   health: healthRouter,
   approval: approvalRouter,
   clients: clientRouter,
+  dashboard: dashboardRouter,
   workspace: workspaceRouter,
   projects: projectsRouter,
   featureRequests: featureRequestsRouter,

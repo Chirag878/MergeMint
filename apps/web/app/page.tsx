@@ -67,6 +67,19 @@ const reportPoints = [
   "Print or save as PDF"
 ];
 
+const personaCards = [
+  {
+    title: "For agencies",
+    label: "Client delivery ledger",
+    copy: "Track each client request through project work, PR evidence, approval history, risk notes, and release reports."
+  },
+  {
+    title: "For product teams",
+    label: "Release confidence layer",
+    copy: "Verify internal feature PRs against original requirements before founders, CTOs, and PMs approve release."
+  }
+];
+
 const faqs = [
   {
     question: "Is this a GitHub App?",
@@ -169,9 +182,9 @@ export default function HomePage() {
             Verify every PR before release.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-neutral-300">
-            Veriflow gives agencies a client delivery ledger for every feature:
-            requirements, GitHub PR evidence, AI QA review, human approval, and
-            shareable release reports.
+            Veriflow helps agencies and product teams prove whether a GitHub PR
+            satisfies the original requirements, with PR evidence, AI QA review,
+            approval history, and shareable release reports.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -190,8 +203,8 @@ export default function HomePage() {
             </a>
           </div>
           <p className="mt-6 max-w-xl text-sm leading-6 text-neutral-500">
-            Built for agencies, freelancers, AI studios, and founders working
-            with outsourced developers.
+            Built for agencies, freelancers, AI studios, founders, CTOs, PMs,
+            and teams working with outsourced or internal developers.
           </p>
         </div>
 
@@ -205,9 +218,27 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl">
           <SectionHeader
             eyebrow="Product preview"
-            title="A proof system your client can understand."
+            title="A proof system stakeholders can understand."
             copy="Veriflow turns the messy middle of delivery into a clean, inspectable trail from request to release."
           />
+          <div className="mt-10 grid gap-4 lg:grid-cols-2">
+            {personaCards.map((card) => (
+              <article
+                key={card.title}
+                className="vf-fade-up rounded-lg border border-white/10 bg-white/[0.035] p-6 transition hover:-translate-y-1 hover:border-emerald-300/30 hover:bg-white/[0.055]"
+              >
+                <p className="text-sm font-semibold text-emerald-200">
+                  {card.title}
+                </p>
+                <h3 className="mt-3 text-xl font-semibold text-white">
+                  {card.label}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-neutral-400">
+                  {card.copy}
+                </p>
+              </article>
+            ))}
+          </div>
           <div className="mt-10 grid gap-5 lg:grid-cols-3">
             <LedgerPreview />
             <ControlRoomPreview />
@@ -272,7 +303,7 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl">
           <SectionHeader
             eyebrow="Built for client-facing teams"
-            title="Everything agencies need to show their work."
+            title="Everything delivery teams need to show their work."
             copy="A shared ledger for teams that need delivery confidence without adding another heavyweight project management system."
           />
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -337,8 +368,8 @@ export default function HomePage() {
                 Founding Pilot ₹2,999
               </h2>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-neutral-300">
-                A guided way to prove Veriflow on a real client delivery before
-                rolling it across the team.
+                A guided way to prove Veriflow on a real client or product
+                delivery before rolling it across the team.
               </p>
             </div>
             <div className="rounded-md border border-white/10 bg-black/25 p-5">

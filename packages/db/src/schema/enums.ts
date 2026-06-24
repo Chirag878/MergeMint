@@ -4,7 +4,10 @@ export const memberRoleEnum = pgEnum("member_role", [
   "owner",
   "admin",
   "member",
-  "viewer"
+  "reviewer",
+  "developer",
+  "viewer",
+  "client_viewer"
 ]);
 
 export const planEnum = pgEnum("plan", [

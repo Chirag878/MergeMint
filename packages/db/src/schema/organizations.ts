@@ -17,6 +17,7 @@ export const organizations = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     logoUrl: text("logo_url"),
+    workspaceUseCase: text("workspace_use_case"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
