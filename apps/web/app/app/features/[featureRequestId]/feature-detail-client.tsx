@@ -797,10 +797,7 @@ function DetailBlock({
   value?: string | null;
 }) {
   return (
-    <section
-      id="github-pr"
-      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
-    >
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <h2 className="text-lg font-medium">{title}</h2>
       <p className="mt-3 text-sm text-neutral-400">
         {value || "Not specified."}
@@ -840,6 +837,14 @@ function ReleaseControlRoom({
     ? `/reports/${data.releaseReport.shareToken}`
     : undefined;
   const prdStep = data.progress.find((step) => step.id === "prd");
+  const qaStep = data.progress.find((step) => step.id === "qa");
+  const canRunQa =
+    Boolean(data.prEvidence?.lastSnapshotAt) &&
+    (qaStep?.status === "current" || Boolean(data.qaReview));
+  const canSubmitApproval = Boolean(data.qaReview);
+  const canGenerateReport = Boolean(
+    data.qaReview && data.humanApproval.decision
+  );
 
   return (
     <section className="space-y-5 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
@@ -952,6 +957,7 @@ function ReleaseControlRoom({
         <RiskSummaryPanel riskSummary={data.riskSummary} />
         <ReleaseReportPanel
           report={data.releaseReport}
+          canGenerateReport={canGenerateReport}
           onGenerateReport={onGenerateReport}
           isGeneratingReport={isGeneratingReport}
         />
@@ -968,11 +974,13 @@ function ReleaseControlRoom({
           />
           <AIQAReviewPanel
             review={data.qaReview}
+            canRunQa={canRunQa}
             onRunQa={onRunQa}
             isRunningQa={isRunningQa}
           />
           <HumanApprovalPanel
             approval={data.humanApproval}
+            canSubmitApproval={canSubmitApproval}
             onSubmitApproval={onSubmitApproval}
           />
         </div>
@@ -1342,10 +1350,12 @@ function PREvidencePanel({
 
 function AIQAReviewPanel({
   review,
+  canRunQa,
   onRunQa,
   isRunningQa
 }: {
   review: ReleaseControlRoomView["qaReview"];
+  canRunQa: boolean;
   onRunQa: () => void;
   isRunningQa: boolean;
 }) {
@@ -1356,7 +1366,7 @@ function AIQAReviewPanel({
         <button
           type="button"
           onClick={onRunQa}
-          disabled={isRunningQa}
+          disabled={!canRunQa || isRunningQa}
           className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isRunningQa ? "Running..." : review ? "Re-run review" : "Run review"}
@@ -1403,7 +1413,11 @@ function AIQAReviewPanel({
           ) : null}
         </div>
       ) : (
-        <EmptyText>No AI QA review has been generated.</EmptyText>
+        <EmptyText>
+          {canRunQa
+            ? "No AI QA review has been generated."
+            : "Generate a PRD, link a GitHub PR, and refresh a PR snapshot before running QA."}
+        </EmptyText>
       )}
     </section>
   );
@@ -1411,9 +1425,11 @@ function AIQAReviewPanel({
 
 function HumanApprovalPanel({
   approval,
+  canSubmitApproval,
   onSubmitApproval
 }: {
   approval: ReleaseControlRoomView["humanApproval"];
+  canSubmitApproval: boolean;
   onSubmitApproval: () => void;
 }) {
   return (
@@ -1425,7 +1441,8 @@ function HumanApprovalPanel({
         <button
           type="button"
           onClick={onSubmitApproval}
-          className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+          disabled={!canSubmitApproval}
+          className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Submit decision
         </button>
@@ -1451,7 +1468,11 @@ function HumanApprovalPanel({
           />
         </div>
       ) : (
-        <EmptyText>No approval decision has been recorded.</EmptyText>
+        <EmptyText>
+          {canSubmitApproval
+            ? "No approval decision has been recorded."
+            : "Run AI QA review before submitting an approval decision."}
+        </EmptyText>
       )}
     </section>
   );
@@ -1459,10 +1480,12 @@ function HumanApprovalPanel({
 
 function ReleaseReportPanel({
   report,
+  canGenerateReport,
   onGenerateReport,
   isGeneratingReport
 }: {
   report: ReleaseControlRoomView["releaseReport"];
+  canGenerateReport: boolean;
   onGenerateReport: () => void;
   isGeneratingReport: boolean;
 }) {
@@ -1498,12 +1521,14 @@ function ReleaseReportPanel({
       ) : (
         <div className="mt-4">
           <p className="text-sm text-neutral-500">
-            No release report has been generated.
+            {canGenerateReport
+              ? "No release report has been generated."
+              : "Run QA and submit approval before generating a release report."}
           </p>
           <button
             type="button"
             onClick={onGenerateReport}
-            disabled={isGeneratingReport}
+            disabled={!canGenerateReport || isGeneratingReport}
             className="mt-3 rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isGeneratingReport ? "Generating..." : "Generate report"}
@@ -1636,7 +1661,7 @@ function StringList({
 function AiRunDebug({ runs }: { runs: AiRunView[] }) {
   return (
     <section
-      id="ai-qa-review"
+      id="ai-run-debug"
       className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <h2 className="text-lg font-medium">AI run debug</h2>
@@ -2026,7 +2051,7 @@ function AIQAReviewSection({
 
   return (
     <section
-      id="release-report"
+      id="ai-qa-review"
       className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -2211,7 +2236,10 @@ function HumanApprovalGateSection({
   const canSubmit = Boolean(latestQaReview) && !isSubmitting;
 
   return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+    <section
+      id="human-approval"
+      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-medium">Human Approval Gate</h2>
@@ -2397,7 +2425,10 @@ function ReleaseReportSection({
     : undefined;
 
   return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+    <section
+      id="release-report"
+      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-medium">Release Report</h2>
