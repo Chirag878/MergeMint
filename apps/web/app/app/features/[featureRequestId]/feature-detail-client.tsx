@@ -424,7 +424,7 @@ export function FeatureDetailClient({
           }
           isGeneratingPrd={generatePrd.isPending}
           onLinkPr={() =>
-            document.getElementById("github-pr")?.scrollIntoView({
+            document.getElementById("github-pr-section")?.scrollIntoView({
               behavior: "smooth",
               block: "start"
             })
@@ -1735,7 +1735,7 @@ function GitHubPullRequestSection({
 
   return (
     <section
-      id="human-approval"
+      id="github-pr-section"   
       className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <h2 className="text-lg font-medium">GitHub Pull Request</h2>
