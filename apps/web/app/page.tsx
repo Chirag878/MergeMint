@@ -51,6 +51,32 @@ export default function HomePage() {
           </p>
         </div>
 
+        <section className="mt-8 border-t border-neutral-800 pt-8">
+          <p className="text-sm font-medium uppercase tracking-[0.24em] text-blue-400">
+            Built for client-facing teams
+          </p>
+          <p className="mt-3 text-sm leading-6 text-neutral-300">
+            Veriflow gives agencies a delivery ledger for every client:
+            requirements, PR evidence, approvals, risks, and release reports in
+            one place.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {[
+              "Client Requirement Vault",
+              "PR Verification Evidence",
+              "Approval History",
+              "Report Archive"
+            ].map((item) => (
+              <div
+                key={item}
+                className="rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-sm font-medium text-neutral-200"
+              >
+                {item}
+              </div>
+            ))}
+          </div>
+        </section>
+
         <div
           id="contact"
           className="mt-8 rounded-xl border border-neutral-800 bg-neutral-950 p-5"

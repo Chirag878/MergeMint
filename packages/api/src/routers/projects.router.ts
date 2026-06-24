@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db, projects } from "@veriflow/db";
+import { clients, db, projects } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import { ensureUserWorkspace } from "../services/workspace-bootstrap.service";
 import { protectedProcedure, router } from "../trpc";
@@ -29,7 +29,8 @@ export const projectsRouter = router({
       z.object({
         name: z.string().min(2).max(100),
         description: z.string().max(2_000).optional(),
-        clientName: z.string().max(120).optional()
+        clientName: z.string().max(120).optional(),
+        clientId: z.string().uuid().optional()
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -37,13 +38,35 @@ export const projectsRouter = router({
 
       assertRoleCan(workspace.membership.role, "create_project");
 
+      const [client] = input.clientId
+        ? await db
+            .select()
+            .from(clients)
+            .where(
+              and(
+                eq(clients.id, input.clientId),
+                eq(clients.organizationId, workspace.activeOrganization.id)
+              )
+            )
+            .limit(1)
+        : [];
+
+      if (input.clientId && !client) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Client not found."
+        });
+      }
+
       const [project] = await db
         .insert(projects)
         .values({
           organizationId: workspace.activeOrganization.id,
           name: input.name,
           description: input.description,
-          clientName: input.clientName
+          clientName:
+            input.clientName ?? client?.companyName ?? client?.name ?? undefined,
+          clientId: client?.id
         })
         .returning();
 

@@ -503,7 +503,7 @@ export async function generateReleaseReport(
       featureRequestId: featureRequest.id,
       pullRequestId: pullRequest.id,
       approvalId: approval.id,
-      title: `${featureRequest.title} release verification report`,
+      title: featureRequest.title,
       status: "generated",
       shareToken: createShareToken(),
       reportData: toJsonObject(reportData),

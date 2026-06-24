@@ -15,6 +15,13 @@
       "when": 1782200368917,
       "tag": "0001_ancient_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782279923471,
+      "tag": "0002_free_reptil",
+      "breakpoints": true
     }
   ]
 }

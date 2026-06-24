@@ -7,19 +7,25 @@ import { trpc } from "@/trpc/react";
 export function ProjectsClient() {
   const utils = trpc.useUtils();
   const projects = trpc.projects.list.useQuery();
+  const clients = trpc.clients.list.useQuery();
   const createProject = trpc.projects.create.useMutation({
     onSuccess: async () => {
       setName("");
       setDescription("");
       setClientName("");
+      setClientId("");
       setSuccess("Project created.");
-      await utils.projects.list.invalidate();
+      await Promise.all([
+        utils.projects.list.invalidate(),
+        utils.clients.list.invalidate()
+      ]);
     }
   });
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [clientName, setClientName] = useState("");
+  const [clientId, setClientId] = useState("");
   const [success, setSuccess] = useState<string | null>(null);
 
   const canSubmit = name.trim().length >= 2 && !createProject.isPending;
@@ -34,7 +40,8 @@ export function ProjectsClient() {
     createProject.mutate({
       name: name.trim(),
       description: description.trim() || undefined,
-      clientName: clientName.trim() || undefined
+      clientName: clientName.trim() || undefined,
+      clientId: clientId || undefined
     });
   }
 
@@ -64,14 +71,34 @@ export function ProjectsClient() {
         </label>
 
         <label className="block text-sm">
-          <span className="text-neutral-300">Client name</span>
+          <span className="text-neutral-300">Client ledger</span>
+          <select
+            value={clientId}
+            onChange={(event) => setClientId(event.target.value)}
+            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+          >
+            <option value="">No client ledger</option>
+            {clients.data?.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block text-sm">
+          <span className="text-neutral-300">Legacy client label</span>
           <input
             value={clientName}
             onChange={(event) => setClientName(event.target.value)}
             className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
-            placeholder="Acme"
+            placeholder="Optional display label"
           />
         </label>
+
+        {clients.error ? (
+          <p className="text-sm text-red-300">{clients.error.message}</p>
+        ) : null}
 
         <label className="block text-sm">
           <span className="text-neutral-300">Description</span>

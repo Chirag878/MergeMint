@@ -2,6 +2,7 @@ export * from "./enums";
 export * from "./types";
 export * from "./auth";
 export * from "./organizations";
+export * from "./clients";
 export * from "./projects";
 export * from "./feature-requests";
 export * from "./prds";

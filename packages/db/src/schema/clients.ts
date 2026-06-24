@@ -6,24 +6,25 @@ import {
   uuid
 } from "drizzle-orm/pg-core";
 
-import { projectStatusEnum } from "./enums";
-import { clients } from "./clients";
+import { appUsers } from "./auth";
 import { organizations } from "./organizations";
 
-export const projects = pgTable(
-  "projects",
+export const clients = pgTable(
+  "clients",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    description: text("description"),
-    clientName: text("client_name"),
-    clientId: uuid("client_id").references(() => clients.id, {
+    companyName: text("company_name"),
+    contactName: text("contact_name"),
+    contactEmail: text("contact_email"),
+    notes: text("notes"),
+    status: text("status").notNull().default("active"),
+    createdBy: uuid("created_by").references(() => appUsers.id, {
       onDelete: "set null"
     }),
-    status: projectStatusEnum("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -32,9 +33,9 @@ export const projects = pgTable(
       .notNull()
   },
   (table) => [
-    index("projects_organization_id_idx").on(table.organizationId),
-    index("projects_client_id_idx").on(table.clientId),
-    index("projects_status_idx").on(table.status),
-    index("projects_created_at_idx").on(table.createdAt)
+    index("clients_organization_id_idx").on(table.organizationId),
+    index("clients_created_by_idx").on(table.createdBy),
+    index("clients_status_idx").on(table.status),
+    index("clients_created_at_idx").on(table.createdAt)
   ]
 );
