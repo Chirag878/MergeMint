@@ -12,6 +12,7 @@ const featurePrioritySchema = z
 
 const createFeatureRequestInput = z.object({
   projectId: z.string().uuid(),
+  clientId: z.string().uuid().optional(),
   title: z.string().min(2).max(160),
   description: z.string().min(1).max(5_000),
   businessGoal: z.string().max(2_000).optional(),
@@ -67,10 +68,17 @@ export const featureRequestsRouter = router({
 
       assertRoleCan(workspace.membership.role, "create_feature_request");
 
-      await getScopedProjectOrThrow(
+      const project = await getScopedProjectOrThrow(
         input.projectId,
         workspace.activeOrganization.id
       );
+
+      if (input.clientId && project.clientId !== input.clientId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Project is not linked to this client."
+        });
+      }
 
       const [featureRequest] = await db
         .insert(featureRequests)

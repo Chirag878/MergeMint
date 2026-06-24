@@ -22,6 +22,8 @@ const riskLabels = {
   pending_approval: "Pending approval"
 } as const;
 
+const featurePriorities = ["low", "medium", "high", "urgent"] as const;
+
 function formatDate(value?: Date | string | null) {
   if (!value) {
     return "Not recorded";
@@ -155,6 +157,12 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   const [editContactEmail, setEditContactEmail] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editStatus, setEditStatus] = useState<"active" | "archived">("active");
+  const [showFeatureForm, setShowFeatureForm] = useState(false);
+  const [featureProjectId, setFeatureProjectId] = useState("");
+  const [featureTitle, setFeatureTitle] = useState("");
+  const [featureDescription, setFeatureDescription] = useState("");
+  const [featurePriority, setFeaturePriority] =
+    useState<(typeof featurePriorities)[number]>("medium");
 
   const invalidateLedger = async () => {
     await Promise.all([
@@ -192,6 +200,22 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     }
   });
 
+  const createFeatureRequest = trpc.featureRequests.create.useMutation({
+    onSuccess: async () => {
+      setShowFeatureForm(false);
+      setFeatureProjectId("");
+      setFeatureTitle("");
+      setFeatureDescription("");
+      setFeaturePriority("medium");
+      setSuccess("Feature request created.");
+      await Promise.all([
+        utils.clients.getDeliveryLedger.invalidate({ clientId }),
+        utils.clients.list.invalidate(),
+        utils.featureRequests.list.invalidate()
+      ]);
+    }
+  });
+
   const attachProject = trpc.clients.attachProject.useMutation({
     onSuccess: async () => {
       setProjectId("");
@@ -223,6 +247,30 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   const healthLabel = ledger.data
     ? getHealthLabel(ledger.data.summary)
     : "Loading";
+
+  function getClientProjectIds() {
+    return new Set(ledger.data?.projects.map((project) => project.id) ?? []);
+  }
+
+  function openFeatureForm(projectIdForFeature?: string) {
+    const clientProjects = ledger.data?.projects ?? [];
+
+    if (clientProjects.length === 0) {
+      setFeatureProjectId("");
+      setShowFeatureForm(true);
+      setSuccess(null);
+      return;
+    }
+
+    setFeatureProjectId(
+      projectIdForFeature ?? (clientProjects.length === 1 ? clientProjects[0].id : "")
+    );
+    setFeatureTitle("");
+    setFeatureDescription("");
+    setFeaturePriority("medium");
+    setShowFeatureForm(true);
+    setSuccess(null);
+  }
 
   function openEditForm() {
     if (!ledger.data) {
@@ -271,6 +319,30 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       name: newProjectName.trim(),
       description: newProjectDescription.trim() || undefined,
       clientId
+    });
+  }
+
+  function onCreateFeatureRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const clientProjectIds = getClientProjectIds();
+
+    if (
+      !clientProjectIds.has(featureProjectId) ||
+      featureTitle.trim().length < 2 ||
+      featureDescription.trim().length === 0 ||
+      createFeatureRequest.isPending
+    ) {
+      return;
+    }
+
+    setSuccess(null);
+    createFeatureRequest.mutate({
+      projectId: featureProjectId,
+      clientId,
+      title: featureTitle.trim(),
+      description: featureDescription.trim(),
+      priority: featurePriority
     });
   }
 
@@ -467,6 +539,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           archiveClient.error ||
           attachProject.error ||
           createProject.error ||
+          createFeatureRequest.error ||
           detachProject.error) ? (
           <div className="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm">
             {success ? <span className="text-emerald-300">{success}</span> : null}
@@ -478,6 +551,11 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
             ) : null}
             {createProject.error ? (
               <span className="text-red-300">{createProject.error.message}</span>
+            ) : null}
+            {createFeatureRequest.error ? (
+              <span className="text-red-300">
+                {createFeatureRequest.error.message}
+              </span>
             ) : null}
             {detachProject.error ? (
               <span className="text-red-300">{detachProject.error.message}</span>
@@ -658,6 +736,13 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
                     </Link>
                     <button
                       type="button"
+                      onClick={() => openFeatureForm(project.id)}
+                      className="rounded-md border border-neutral-700 px-3 py-2 text-xs text-neutral-100 transition hover:border-neutral-500"
+                    >
+                      Add feature
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onDetach(project.id)}
                       disabled={detachProject.isPending}
                       className="rounded-md border border-neutral-700 px-3 py-2 text-xs text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
@@ -723,7 +808,133 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       </section>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 className="text-lg font-medium">Delivery Ledger</h2>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-medium">Delivery Ledger</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Feature requests grouped through this client's linked projects.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openFeatureForm()}
+            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+          >
+            Add Feature Request
+          </button>
+        </div>
+
+        {showFeatureForm ? (
+          <form
+            onSubmit={onCreateFeatureRequest}
+            className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-medium text-neutral-100">
+                  Add Feature Request
+                </h3>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Create the client request under one of this client's projects.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFeatureForm(false)}
+                className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {ledger.data.projects.length === 0 ? (
+              <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-400">
+                Create a project for this client before adding feature requests.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="block text-sm">
+                  <span className="text-neutral-300">Project</span>
+                  <select
+                    value={featureProjectId}
+                    onChange={(event) => setFeatureProjectId(event.target.value)}
+                    className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select a project</option>
+                    {ledger.data.projects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm">
+                  <span className="text-neutral-300">Priority</span>
+                  <select
+                    value={featurePriority}
+                    onChange={(event) =>
+                      setFeaturePriority(
+                        event.target.value as (typeof featurePriorities)[number]
+                      )
+                    }
+                    className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                  >
+                    {featurePriorities.map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm md:col-span-2">
+                  <span className="text-neutral-300">Feature title</span>
+                  <input
+                    value={featureTitle}
+                    onChange={(event) => setFeatureTitle(event.target.value)}
+                    className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    minLength={2}
+                    required
+                  />
+                </label>
+
+                <label className="block text-sm md:col-span-2">
+                  <span className="text-neutral-300">
+                    Description / client request
+                  </span>
+                  <textarea
+                    value={featureDescription}
+                    onChange={(event) =>
+                      setFeatureDescription(event.target.value)
+                    }
+                    className="mt-2 min-h-28 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    required
+                  />
+                </label>
+              </div>
+            )}
+
+            {ledger.data.projects.length > 0 ? (
+              <button
+                type="submit"
+                disabled={
+                  !featureProjectId ||
+                  featureTitle.trim().length < 2 ||
+                  featureDescription.trim().length === 0 ||
+                  createFeatureRequest.isPending
+                }
+                className="mt-5 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {createFeatureRequest.isPending
+                  ? "Creating..."
+                  : "Create Feature Request"}
+              </button>
+            ) : null}
+          </form>
+        ) : null}
+
         {ledger.data.deliveryItems.length === 0 ? (
           <p className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-5 text-sm text-neutral-400">
             No feature requests are attached to this client yet.
