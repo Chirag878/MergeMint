@@ -589,6 +589,7 @@ export async function detachProjectFromClient(
       .update(projects)
       .set({
         clientId: null,
+        clientName: null,
         updatedAt: new Date()
       })
       .where(

@@ -161,8 +161,14 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   const [featureProjectId, setFeatureProjectId] = useState("");
   const [featureTitle, setFeatureTitle] = useState("");
   const [featureDescription, setFeatureDescription] = useState("");
+  const [featureBusinessGoal, setFeatureBusinessGoal] = useState("");
+  const [featureExpectedBehavior, setFeatureExpectedBehavior] = useState("");
+  const [featureAcceptanceCriteria, setFeatureAcceptanceCriteria] = useState("");
   const [featurePriority, setFeaturePriority] =
     useState<(typeof featurePriorities)[number]>("medium");
+  const [createdFeatureRequestId, setCreatedFeatureRequestId] = useState<
+    string | null
+  >(null);
 
   const invalidateLedger = async () => {
     await Promise.all([
@@ -173,6 +179,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
 
   const archiveClient = trpc.clients.archive.useMutation({
     onSuccess: async () => {
+      setCreatedFeatureRequestId(null);
       setSuccess("Client archived.");
       await invalidateLedger();
     }
@@ -181,6 +188,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   const updateClient = trpc.clients.update.useMutation({
     onSuccess: async () => {
       setShowEditForm(false);
+      setCreatedFeatureRequestId(null);
       setSuccess("Client updated.");
       await invalidateLedger();
     }
@@ -191,6 +199,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       setShowNewProjectForm(false);
       setNewProjectName("");
       setNewProjectDescription("");
+      setCreatedFeatureRequestId(null);
       setSuccess("Project created for this client.");
       await Promise.all([
         utils.clients.getDeliveryLedger.invalidate({ clientId }),
@@ -201,12 +210,16 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   });
 
   const createFeatureRequest = trpc.featureRequests.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (featureRequest) => {
       setShowFeatureForm(false);
       setFeatureProjectId("");
       setFeatureTitle("");
       setFeatureDescription("");
+      setFeatureBusinessGoal("");
+      setFeatureExpectedBehavior("");
+      setFeatureAcceptanceCriteria("");
       setFeaturePriority("medium");
+      setCreatedFeatureRequestId(featureRequest.id);
       setSuccess("Feature request created.");
       await Promise.all([
         utils.clients.getDeliveryLedger.invalidate({ clientId }),
@@ -219,6 +232,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   const attachProject = trpc.clients.attachProject.useMutation({
     onSuccess: async () => {
       setProjectId("");
+      setCreatedFeatureRequestId(null);
       setSuccess("Project linked.");
       await Promise.all([
         utils.clients.getDeliveryLedger.invalidate({ clientId }),
@@ -230,6 +244,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
 
   const detachProject = trpc.clients.detachProject.useMutation({
     onSuccess: async () => {
+      setCreatedFeatureRequestId(null);
       setSuccess("Project detached.");
       await Promise.all([
         utils.clients.getDeliveryLedger.invalidate({ clientId }),
@@ -253,6 +268,10 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   }
 
   function openFeatureForm(projectIdForFeature?: string) {
+    if (ledger.data?.client.status === "archived") {
+      return;
+    }
+
     const clientProjects = ledger.data?.projects ?? [];
 
     if (clientProjects.length === 0) {
@@ -267,9 +286,13 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     );
     setFeatureTitle("");
     setFeatureDescription("");
+    setFeatureBusinessGoal("");
+    setFeatureExpectedBehavior("");
+    setFeatureAcceptanceCriteria("");
     setFeaturePriority("medium");
     setShowFeatureForm(true);
     setSuccess(null);
+    setCreatedFeatureRequestId(null);
   }
 
   function openEditForm() {
@@ -310,11 +333,16 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   function onCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (newProjectName.trim().length < 2 || createProject.isPending) {
+    if (
+      ledger.data?.client.status === "archived" ||
+      newProjectName.trim().length < 2 ||
+      createProject.isPending
+    ) {
       return;
     }
 
     setSuccess(null);
+    setCreatedFeatureRequestId(null);
     createProject.mutate({
       name: newProjectName.trim(),
       description: newProjectDescription.trim() || undefined,
@@ -326,8 +354,13 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     event.preventDefault();
 
     const clientProjectIds = getClientProjectIds();
+    const parsedAcceptanceCriteria = featureAcceptanceCriteria
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
 
     if (
+      ledger.data?.client.status === "archived" ||
       !clientProjectIds.has(featureProjectId) ||
       featureTitle.trim().length < 2 ||
       featureDescription.trim().length === 0 ||
@@ -337,11 +370,15 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     }
 
     setSuccess(null);
+    setCreatedFeatureRequestId(null);
     createFeatureRequest.mutate({
       projectId: featureProjectId,
       clientId,
       title: featureTitle.trim(),
       description: featureDescription.trim(),
+      businessGoal: featureBusinessGoal.trim() || undefined,
+      expectedBehavior: featureExpectedBehavior.trim() || undefined,
+      acceptanceCriteria: parsedAcceptanceCriteria,
       priority: featurePriority
     });
   }
@@ -354,6 +391,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     }
 
     setSuccess(null);
+    setCreatedFeatureRequestId(null);
     attachProject.mutate({ clientId, projectId });
   }
 
@@ -367,6 +405,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     }
 
     setSuccess(null);
+    setCreatedFeatureRequestId(null);
     detachProject.mutate({ projectId: projectIdToDetach });
   }
 
@@ -391,6 +430,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   }
 
   const { client, summary } = ledger.data;
+  const isArchived = client.status === "archived";
 
   return (
     <div className="space-y-8">
@@ -543,6 +583,14 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           detachProject.error) ? (
           <div className="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3 text-sm">
             {success ? <span className="text-emerald-300">{success}</span> : null}
+            {createdFeatureRequestId ? (
+              <Link
+                href={`/app/features/${createdFeatureRequestId}`}
+                className="ml-3 font-medium text-blue-300 underline-offset-4 hover:underline"
+              >
+                Open feature
+              </Link>
+            ) : null}
             {archiveClient.error ? (
               <span className="text-red-300">{archiveClient.error.message}</span>
             ) : null}
@@ -563,6 +611,13 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           </div>
         ) : null}
       </header>
+
+      {isArchived ? (
+        <div className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-4 text-sm text-amber-100">
+          This client is archived. New project and feature request creation are
+          disabled to avoid accidental new work under an archived account.
+        </div>
+      ) : null}
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
         <h2 className="text-lg font-medium">Client Notes</h2>
@@ -646,10 +701,15 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
             <button
               type="button"
               onClick={() => {
+                if (isArchived) {
+                  return;
+                }
+
                 setShowNewProjectForm((value) => !value);
                 setSuccess(null);
               }}
-              className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+              disabled={isArchived}
+              className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               New Project for this Client
             </button>
@@ -689,7 +749,9 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
                 <button
                   type="submit"
                   disabled={
-                    newProjectName.trim().length < 2 || createProject.isPending
+                    isArchived ||
+                    newProjectName.trim().length < 2 ||
+                    createProject.isPending
                   }
                   className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -737,7 +799,8 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
                     <button
                       type="button"
                       onClick={() => openFeatureForm(project.id)}
-                      className="rounded-md border border-neutral-700 px-3 py-2 text-xs text-neutral-100 transition hover:border-neutral-500"
+                      disabled={isArchived}
+                      className="rounded-md border border-neutral-700 px-3 py-2 text-xs text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Add feature
                     </button>
@@ -818,7 +881,8 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           <button
             type="button"
             onClick={() => openFeatureForm()}
-            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+            disabled={isArchived}
+            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Add Feature Request
           </button>
@@ -895,6 +959,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
                     value={featureTitle}
                     onChange={(event) => setFeatureTitle(event.target.value)}
                     className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    placeholder="Add role-based approval gates"
                     minLength={2}
                     required
                   />
@@ -910,7 +975,44 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
                       setFeatureDescription(event.target.value)
                     }
                     className="mt-2 min-h-28 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    placeholder="What should be built and who needs it?"
                     required
+                  />
+                </label>
+
+                <label className="block text-sm md:col-span-2">
+                  <span className="text-neutral-300">Business goal</span>
+                  <textarea
+                    value={featureBusinessGoal}
+                    onChange={(event) =>
+                      setFeatureBusinessGoal(event.target.value)
+                    }
+                    className="mt-2 min-h-20 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    placeholder="Why does this matter?"
+                  />
+                </label>
+
+                <label className="block text-sm md:col-span-2">
+                  <span className="text-neutral-300">Expected behavior</span>
+                  <textarea
+                    value={featureExpectedBehavior}
+                    onChange={(event) =>
+                      setFeatureExpectedBehavior(event.target.value)
+                    }
+                    className="mt-2 min-h-20 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    placeholder="What should happen when it works?"
+                  />
+                </label>
+
+                <label className="block text-sm md:col-span-2">
+                  <span className="text-neutral-300">Acceptance criteria</span>
+                  <textarea
+                    value={featureAcceptanceCriteria}
+                    onChange={(event) =>
+                      setFeatureAcceptanceCriteria(event.target.value)
+                    }
+                    className="mt-2 min-h-24 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+                    placeholder="One criterion per line"
                   />
                 </label>
               </div>
@@ -920,6 +1022,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
               <button
                 type="submit"
                 disabled={
+                  isArchived ||
                   !featureProjectId ||
                   featureTitle.trim().length < 2 ||
                   featureDescription.trim().length === 0 ||
