@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, featureRequests, projects } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
+import { getReleaseControlRoom } from "../services/release-control-room.service";
 import { ensureUserWorkspace } from "../services/workspace-bootstrap.service";
 import { protectedProcedure, router } from "../trpc";
 
@@ -177,6 +178,16 @@ export const featureRequestsRouter = router({
 
       return featureRequest;
     }),
+
+  getReleaseControlRoom: protectedProcedure
+    .input(
+      z.object({
+        featureRequestId: z.string().uuid()
+      })
+    )
+    .query(({ ctx, input }) =>
+      getReleaseControlRoom(ctx, input.featureRequestId)
+    ),
 
   updateDraft: protectedProcedure
     .input(
