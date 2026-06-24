@@ -3,17 +3,26 @@ import type { QAReviewInput } from "./qa-review-agent";
 
 export const REQUIREMENT_AGENT_SYSTEM_PROMPT = [
   "You are Veriflow's requirements agent for production SaaS engineering teams.",
+  "Your job is to turn client feature requests into release-verifiable delivery artifacts for agencies, freelancers, AI automation studios, and founders working with outsourced developers.",
   "Return only data that satisfies the requested schema.",
   "Be specific, testable, implementation-aware, and production-minded.",
-  "Do not invent integrations, permissions, or states that are not implied by the input."
+  "Optimize every artifact for later verification against a GitHub pull request diff.",
+  "Do not invent unrelated integrations, permissions, personas, data objects, or states that are not implied by the input.",
+  "Do not use vague wording such as seamless, robust, intuitive, user-friendly, or scalable unless paired with observable behavior.",
+  "Avoid duplicate requirements, overlapping REQ IDs, and acceptance criteria that cannot be tested."
 ].join(" ");
 
 export function buildClarificationPrompt(input: RequirementAgentInput) {
   return [
-    "Generate at most 5 clarification questions.",
-    "Ask only questions required to remove ambiguity before writing a PRD.",
-    "Use priority must_answer for blockers and nice_to_have for helpful but non-blocking details.",
-    "Focus on missing scope, edge cases, permissions, data states, acceptance criteria, UX expectations, and release readiness.",
+    "Generate 3 to 6 clarification questions for this exact feature request.",
+    "Questions must be specific to the feature, answerable by a client/product owner, and useful for writing REQ IDs and acceptance criteria.",
+    "Every question must help later PR verification against a GitHub diff.",
+    "Use priority must_answer only when the PRD would be materially unsafe or ambiguous without the answer.",
+    "Use priority nice_to_have for useful context that should not block PRD generation.",
+    "Every question must include a clear reason that names the ambiguity it removes.",
+    "Prefer these categories when relevant: scope boundaries, user roles and permissions, required workflow, expected behavior, edge cases, validation rules, data states, integrations or dependencies, release-blocking conditions, and client approval expectations.",
+    "Do not ask generic checklist questions, do not ask about unrelated UI details, and do not repeat information already present in the request.",
+    "Do not mention border radius, roles, integrations, billing, notifications, or approvals unless the feature request implies them.",
     "",
     formatFeatureInput(input)
   ].join("\n");
@@ -22,14 +31,20 @@ export function buildClarificationPrompt(input: RequirementAgentInput) {
 export function buildPRDPrompt(input: PRDInput) {
   return [
     "Generate an implementation-ready PRD for the feature request.",
+    "The PRD must feel useful to a real agency/client delivery team and clear enough for an outsourced developer to implement.",
+    "Include a concrete problem statement, business goal, target users through userStories, in-scope behavior, out-of-scope behavior, user workflow, functional requirements, non-functional requirements when relevant, edge cases, release readiness criteria, assumptions, dependencies, and risks.",
+    "Use existing schema fields to represent this content: goals for business goals and in-scope behavior; nonGoals for out-of-scope behavior, assumptions, and dependencies; userStories for target users and workflow; requirements for functional/non-functional/release-readiness requirements; edgeCases for edge cases; risks for delivery/release risks.",
     "Expand the raw request into concrete product behavior; do not simply copy the acceptance criteria.",
     "Use explicit requirement IDs starting at REQ-001 and increment sequentially.",
     "Each requirement must be a full sentence starting with exactly: The system must",
-    "Each requirement must be concrete, testable, and include at least 2 acceptance criteria.",
+    "Each requirement must be atomic, concrete, testable, and include at least 2 acceptance criteria.",
+    "Acceptance criteria must be observable from UI behavior, API behavior, persisted data, validation errors, authorization checks, or generated artifacts.",
     "Include permissions/security requirements when relevant.",
     "Include edge cases, failure states, data/state requirements, release readiness, sharing/access control, audit, and reporting requirements when relevant.",
     "Avoid vague requirements such as useful, seamless, robust, intuitive, scalable, or user-friendly unless backed by testable behavior.",
+    "Avoid overengineering simple features. If a feature is small, still make the requirements verifiable without inventing unrelated systems.",
     "Prefer 5-9 requirements for a production SaaS feature unless the scope is genuinely smaller.",
+    "Do not generate duplicate or overlapping REQ IDs. Do not skip numbers.",
     "",
     formatFeatureInput(input.feature),
     "",
@@ -41,13 +56,16 @@ export function buildEngineeringTasksPrompt(input: EngineeringTasksInput) {
   return [
     "Generate actionable engineering tasks from this PRD.",
     "Do not create generic tasks like Implement REQ-001.",
-    "Each task needs a meaningful engineering title and specific implementation details.",
+    "Each task needs a meaningful engineering title, specific implementation details, and verification steps.",
     "Map every task to one or more relatedRequirementKeys.",
     "Avoid duplicate tasks and weak one-to-one copies of requirements.",
     "Use task type frontend, backend, database, test, docs, infra, or other.",
     "Include at least one test task.",
+    "Separate frontend, backend/API, validation, persistence, integration, and testing tasks when those concerns are present.",
+    "Mention likely files, modules, routes, services, components, or test targets when the PRD implies them, but do not invent a repository structure if none is implied.",
     "Include backend, frontend, database, security, reporting, or docs tasks when relevant to the requirements.",
     "Include an acceptance checklist with at least 2 concrete checks for every task.",
+    "Acceptance checklist items must be verifiable through tests, UI behavior, API responses, persisted state, or release artifacts.",
     "Prefer 5-10 tasks that a developer could pick up directly.",
     "",
     `PRD: ${JSON.stringify(input.prd)}`,

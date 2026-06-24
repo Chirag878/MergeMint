@@ -7,7 +7,7 @@ export const ClarificationQuestionSchema = z.object({
 });
 
 export const ClarificationQuestionsOutputSchema = z.object({
-  questions: z.array(ClarificationQuestionSchema).max(5)
+  questions: z.array(ClarificationQuestionSchema).min(3).max(6)
 });
 
 export const PRDRequirementSchema = z.object({
@@ -23,24 +23,38 @@ export const PRDRequirementSchema = z.object({
   acceptanceCriteria: z.array(z.string().min(8)).min(2)
 });
 
-export const PRDOutputSchema = z.object({
-  title: z.string().min(1),
-  problem: z.string().min(1),
-  goals: z.array(z.string().min(1)).min(1),
-  nonGoals: z.array(z.string().min(1)).default([]),
-  userStories: z
-    .array(
-      z.object({
-        actor: z.string().min(1),
-        want: z.string().min(1),
-        benefit: z.string().min(1)
-      })
-    )
-    .default([]),
-  requirements: z.array(PRDRequirementSchema).min(1),
-  edgeCases: z.array(z.string().min(1)).default([]),
-  risks: z.array(z.string().min(1)).default([])
-});
+export const PRDOutputSchema = z
+  .object({
+    title: z.string().min(1),
+    problem: z.string().min(1),
+    goals: z.array(z.string().min(1)).min(1),
+    nonGoals: z.array(z.string().min(1)).default([]),
+    userStories: z
+      .array(
+        z.object({
+          actor: z.string().min(1),
+          want: z.string().min(1),
+          benefit: z.string().min(1)
+        })
+      )
+      .default([]),
+    requirements: z.array(PRDRequirementSchema).min(1),
+    edgeCases: z.array(z.string().min(1)).default([]),
+    risks: z.array(z.string().min(1)).default([])
+  })
+  .refine((output) => {
+    const keys = output.requirements.map((requirement) => requirement.requirementKey);
+    return new Set(keys).size === keys.length;
+  }, "Requirement IDs must be unique.")
+  .refine(
+    (output) =>
+      output.requirements.every(
+        (requirement, index) =>
+          requirement.requirementKey ===
+          `REQ-${String(index + 1).padStart(3, "0")}`
+      ),
+    "Requirement IDs must be sequential starting at REQ-001."
+  );
 
 export const EngineeringTaskSchema = z.object({
   title: z.string().min(8),
