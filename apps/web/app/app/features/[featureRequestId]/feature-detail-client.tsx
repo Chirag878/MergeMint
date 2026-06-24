@@ -52,6 +52,16 @@ type NextActionKind =
   | "open_report"
   | "rerun_qa";
 
+type FeatureDetailTab =
+  | "overview"
+  | "requirements"
+  | "pr"
+  | "qa"
+  | "approval"
+  | "report"
+  | "timeline"
+  | "debug";
+
 type ReleaseControlRoomView = {
   feature: {
     title: string;
@@ -169,6 +179,20 @@ const approvalOptions: Array<{
   { value: "rejected", label: "Reject" }
 ];
 
+const featureDetailTabs: Array<{
+  id: FeatureDetailTab;
+  label: string;
+}> = [
+  { id: "overview", label: "Overview" },
+  { id: "requirements", label: "Requirements" },
+  { id: "pr", label: "PR Evidence" },
+  { id: "qa", label: "QA Review" },
+  { id: "approval", label: "Approval" },
+  { id: "report", label: "Report" },
+  { id: "timeline", label: "Timeline" },
+  { id: "debug", label: "Debug" }
+];
+
 export function FeatureDetailClient({
   featureRequestId
 }: {
@@ -185,6 +209,7 @@ export function FeatureDetailClient({
   >(null);
   const [showApprovalConfirmation, setShowApprovalConfirmation] =
     useState(false);
+  const [activeTab, setActiveTab] = useState<FeatureDetailTab>("overview");
   const utils = trpc.useUtils();
   const controlRoom = trpc.featureRequests.getReleaseControlRoom.useQuery({
     featureRequestId
@@ -323,6 +348,23 @@ export function FeatureDetailClient({
     });
   }
 
+  function openTab(tab: FeatureDetailTab, sectionId?: string) {
+    setActiveTab(tab);
+
+    if (!sectionId) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        document.getElementById(sectionId)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }, 0);
+    });
+  }
+
   function submitApprovalDecision() {
     const note = approvalNote.trim();
     const parsedRemainingRisks = parseRemainingRisks(remainingRisks);
@@ -419,35 +461,33 @@ export function FeatureDetailClient({
       {controlRoom.data ? (
         <ReleaseControlRoom
           data={controlRoom.data}
-          onGeneratePrd={() =>
-            generatePrd.mutate({ featureRequestId: feature.id })
-          }
+          onGeneratePrd={() => {
+            openTab("requirements", "requirement-engine-section");
+            generatePrd.mutate({ featureRequestId: feature.id });
+          }}
           isGeneratingPrd={generatePrd.isPending}
-          onLinkPr={() =>
-            document.getElementById("github-pr-section")?.scrollIntoView({
-              behavior: "smooth",
-              block: "start"
-            })
-          }
-          onRunQa={() => runQaReview.mutate({ featureRequestId })}
+          onLinkPr={() => openTab("pr", "github-pr-section")}
+          onRunQa={() => {
+            openTab("qa", "ai-qa-review");
+            runQaReview.mutate({ featureRequestId });
+          }}
           isRunningQa={runQaReview.isPending}
-          onSubmitApproval={() =>
-            document.getElementById("human-approval")?.scrollIntoView({
-              behavior: "smooth",
-              block: "start"
-            })
-          }
-          onGenerateReport={() =>
-            generateReleaseReport.mutate({ featureRequestId })
-          }
+          onSubmitApproval={() => openTab("approval", "human-approval")}
+          onGenerateReport={() => {
+            openTab("report", "release-report");
+            generateReleaseReport.mutate({ featureRequestId });
+          }}
           isGeneratingReport={generateReleaseReport.isPending}
-          onRefreshSnapshot={(pullRequestId) =>
-            refreshSnapshot.mutate({ pullRequestId })
-          }
-          isRefreshingSnapshot={refreshSnapshot.isPending}
         />
       ) : null}
 
+      <FeatureDetailTabs activeTab={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "overview" ? (
+        <section
+          id="feature-overview-section"
+          className="space-y-4 scroll-mt-28"
+        >
       <div className="grid gap-4 md:grid-cols-2">
         <DetailBlock title="Business goal" value={feature.businessGoal} />
         <DetailBlock
@@ -457,8 +497,8 @@ export function FeatureDetailClient({
       </div>
 
       <section
-        id="requirement-engine"
-        className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+        id="acceptance-criteria-section"
+        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
       >
         <h2 className="text-lg font-medium">Acceptance criteria</h2>
         <StringList
@@ -466,8 +506,18 @@ export function FeatureDetailClient({
           emptyText="No acceptance criteria captured yet."
         />
       </section>
+        </section>
+      ) : null}
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      {activeTab === "requirements" ? (
+        <section
+          id="requirements-section"
+          className="space-y-4 scroll-mt-28"
+        >
+      <section
+        id="requirement-engine-section"
+        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-medium">Requirement engine</h2>
@@ -547,9 +597,10 @@ export function FeatureDetailClient({
         ) : null}
       </section>
 
-      <AiRunDebug runs={latestAiRuns} />
-
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <section
+        id="clarifications-section"
+        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      >
         <h2 className="text-lg font-medium">Clarification questions</h2>
         {clarificationQuestions.length > 0 ? (
           <div className="mt-4 space-y-3">
@@ -710,7 +761,10 @@ export function FeatureDetailClient({
           <EmptyText>No engineering tasks generated yet.</EmptyText>
         )}
       </section>
+        </section>
+      ) : null}
 
+      {activeTab === "pr" ? (
       <GitHubPullRequestSection
         data={linkedPullRequest.data}
         isLoading={linkedPullRequest.isLoading}
@@ -733,7 +787,9 @@ export function FeatureDetailClient({
         isRefreshing={refreshSnapshot.isPending}
         refreshError={refreshSnapshot.error?.message}
       />
+      ) : null}
 
+      {activeTab === "qa" ? (
       <AIQAReviewSection
         hasPrd={Boolean(prd)}
         requirementsCount={prdRequirements.length}
@@ -745,7 +801,9 @@ export function FeatureDetailClient({
         isRunning={runQaReview.isPending}
         runError={runQaReview.error?.message}
       />
+      ) : null}
 
+      {activeTab === "approval" ? (
       <HumanApprovalGateSection
         latestQaReview={latestQaReview.data}
         latestApproval={latestApproval.data}
@@ -774,7 +832,9 @@ export function FeatureDetailClient({
         confirmationVisible={showApprovalConfirmation}
         onCancelConfirmation={() => setShowApprovalConfirmation(false)}
       />
+      ) : null}
 
+      {activeTab === "report" ? (
       <ReleaseReportSection
         latestQaReview={latestQaReview.data}
         latestApproval={latestApproval.data}
@@ -785,6 +845,13 @@ export function FeatureDetailClient({
         isGenerating={generateReleaseReport.isPending}
         generateError={generateReleaseReport.error?.message}
       />
+      ) : null}
+
+      {activeTab === "timeline" && controlRoom.data ? (
+        <TrustTimeline timeline={controlRoom.data.timeline} />
+      ) : null}
+
+      {activeTab === "debug" ? <AiRunDebug runs={latestAiRuns} /> : null}
     </>
   );
 }
@@ -806,6 +873,33 @@ function DetailBlock({
   );
 }
 
+function FeatureDetailTabs({
+  activeTab,
+  onChange
+}: {
+  activeTab: FeatureDetailTab;
+  onChange: (tab: FeatureDetailTab) => void;
+}) {
+  return (
+    <nav className="sticky top-20 z-30 -mx-1 flex gap-2 overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950/90 p-2 backdrop-blur">
+      {featureDetailTabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          className={
+            activeTab === tab.id
+              ? "whitespace-nowrap rounded-md border border-emerald-300/35 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100"
+              : "whitespace-nowrap rounded-md border border-transparent px-3 py-2 text-sm font-semibold text-neutral-400 transition hover:border-neutral-700 hover:text-neutral-100"
+          }
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function ReleaseControlRoom({
   data,
   onGeneratePrd,
@@ -815,9 +909,7 @@ function ReleaseControlRoom({
   isRunningQa,
   onSubmitApproval,
   onGenerateReport,
-  isGeneratingReport,
-  onRefreshSnapshot,
-  isRefreshingSnapshot
+  isGeneratingReport
 }: {
   data: ReleaseControlRoomView;
   onGeneratePrd: () => void;
@@ -828,8 +920,6 @@ function ReleaseControlRoom({
   onSubmitApproval: () => void;
   onGenerateReport: () => void;
   isGeneratingReport: boolean;
-  onRefreshSnapshot: (pullRequestId: string) => void;
-  isRefreshingSnapshot: boolean;
 }) {
   const clientName =
     data.client?.companyName ?? data.client?.name ?? data.project.clientName;
@@ -837,14 +927,6 @@ function ReleaseControlRoom({
     ? `/reports/${data.releaseReport.shareToken}`
     : undefined;
   const prdStep = data.progress.find((step) => step.id === "prd");
-  const qaStep = data.progress.find((step) => step.id === "qa");
-  const canRunQa =
-    Boolean(data.prEvidence?.lastSnapshotAt) &&
-    (qaStep?.status === "current" || Boolean(data.qaReview));
-  const canSubmitApproval = Boolean(data.qaReview);
-  const canGenerateReport = Boolean(
-    data.qaReview && data.humanApproval.decision
-  );
 
   return (
     <section className="space-y-5 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
@@ -955,38 +1037,9 @@ function ReleaseControlRoom({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <RiskSummaryPanel riskSummary={data.riskSummary} />
-        <ReleaseReportPanel
-          report={data.releaseReport}
-          canGenerateReport={canGenerateReport}
-          onGenerateReport={onGenerateReport}
-          isGeneratingReport={isGeneratingReport}
-        />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <RequirementEvidencePanel summary={data.requirementEvidenceSummary} />
-        <div className="space-y-4">
-          <PREvidencePanel
-            evidence={data.prEvidence}
-            onLinkPr={onLinkPr}
-            onRefreshSnapshot={onRefreshSnapshot}
-            isRefreshingSnapshot={isRefreshingSnapshot}
-          />
-          <AIQAReviewPanel
-            review={data.qaReview}
-            canRunQa={canRunQa}
-            onRunQa={onRunQa}
-            isRunningQa={isRunningQa}
-          />
-          <HumanApprovalPanel
-            approval={data.humanApproval}
-            canSubmitApproval={canSubmitApproval}
-            onSubmitApproval={onSubmitApproval}
-          />
-        </div>
       </div>
 
-      <TrustTimeline timeline={data.timeline} />
     </section>
   );
 }
@@ -995,6 +1048,7 @@ function PrimaryControlRoomAction({
   action,
   reportHref,
   prdBlocked,
+  variant = "primary",
   onGeneratePrd,
   isGeneratingPrd,
   onLinkPr,
@@ -1007,6 +1061,7 @@ function PrimaryControlRoomAction({
   action: NextActionKind;
   reportHref?: string;
   prdBlocked?: boolean;
+  variant?: "primary" | "subtle";
   onGeneratePrd: () => void;
   isGeneratingPrd: boolean;
   onLinkPr: () => void;
@@ -1016,27 +1071,29 @@ function PrimaryControlRoomAction({
   onGenerateReport: () => void;
   isGeneratingReport: boolean;
 }) {
+  const buttonClass =
+    variant === "primary"
+      ? "inline-flex rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+      : "inline-flex rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 transition hover:border-neutral-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
+
   if (action === "open_report" && reportHref) {
     return (
       <Link
         href={reportHref}
         target="_blank"
-        className="inline-flex rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+        className={buttonClass}
       >
         Open public report
       </Link>
     );
   }
 
-  const buttonClass =
-    "inline-flex rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50";
-
   if (action === "generate_prd") {
     return prdBlocked ? (
       <button
         type="button"
         onClick={() =>
-          document.getElementById("requirement-engine")?.scrollIntoView({
+          document.getElementById("requirement-engine-section")?.scrollIntoView({
             behavior: "smooth",
             block: "start"
           })
@@ -1122,7 +1179,7 @@ function PrimaryControlRoomAction({
 function InlineControlRoomAction(
   props: Parameters<typeof PrimaryControlRoomAction>[0]
 ) {
-  return <PrimaryControlRoomAction {...props} />;
+  return <PrimaryControlRoomAction {...props} variant="subtle" />;
 }
 
 function WorkflowStatusBadge({
@@ -1284,7 +1341,10 @@ function PREvidencePanel({
   isRefreshingSnapshot: boolean;
 }) {
   return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
+    <section
+      id="trust-timeline-section"
+      className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-950 p-4"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-base font-medium text-neutral-100">PR Evidence</h3>
         {evidence ? <StatusBadge status={evidence.ciStatus} /> : null}
@@ -1662,7 +1722,7 @@ function AiRunDebug({ runs }: { runs: AiRunView[] }) {
   return (
     <section
       id="ai-run-debug"
-      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <h2 className="text-lg font-medium">AI run debug</h2>
       {runs.length > 0 ? (
@@ -1760,8 +1820,8 @@ function GitHubPullRequestSection({
 
   return (
     <section
-      id="github-pr-section"   
-      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      id="github-pr-section"
+      className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <h2 className="text-lg font-medium">GitHub Pull Request</h2>
 
@@ -2052,7 +2112,7 @@ function AIQAReviewSection({
   return (
     <section
       id="ai-qa-review"
-      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -2238,7 +2298,7 @@ function HumanApprovalGateSection({
   return (
     <section
       id="human-approval"
-      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -2427,7 +2487,7 @@ function ReleaseReportSection({
   return (
     <section
       id="release-report"
-      className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

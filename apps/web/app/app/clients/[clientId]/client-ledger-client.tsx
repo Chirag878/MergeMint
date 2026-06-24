@@ -24,6 +24,16 @@ const riskLabels = {
 
 const featurePriorities = ["low", "medium", "high", "urgent"] as const;
 
+type ClientLedgerTab = "ledger" | "projects" | "reports" | "risks" | "notes";
+
+const clientLedgerTabs: Array<{ id: ClientLedgerTab; label: string }> = [
+  { id: "ledger", label: "Ledger" },
+  { id: "projects", label: "Projects" },
+  { id: "reports", label: "Reports" },
+  { id: "risks", label: "Risks" },
+  { id: "notes", label: "Notes" }
+];
+
 function formatDate(value?: Date | string | null) {
   if (!value) {
     return "Not recorded";
@@ -141,6 +151,33 @@ function RequirementRiskCard({
   );
 }
 
+function ClientLedgerTabs({
+  activeTab,
+  onChange
+}: {
+  activeTab: ClientLedgerTab;
+  onChange: (tab: ClientLedgerTab) => void;
+}) {
+  return (
+    <nav className="sticky top-20 z-30 -mx-1 flex gap-2 overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950/90 p-2 backdrop-blur">
+      {clientLedgerTabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          className={`whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition ${
+            activeTab === tab.id
+              ? "bg-neutral-100 text-neutral-950"
+              : "text-neutral-300 hover:bg-neutral-900 hover:text-neutral-100"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 export function ClientLedgerClient({ clientId }: { clientId: string }) {
   const utils = trpc.useUtils();
   const ledger = trpc.clients.getDeliveryLedger.useQuery({ clientId });
@@ -169,6 +206,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   const [createdFeatureRequestId, setCreatedFeatureRequestId] = useState<
     string | null
   >(null);
+  const [activeTab, setActiveTab] = useState<ClientLedgerTab>("ledger");
 
   const invalidateLedger = async () => {
     await Promise.all([
@@ -272,6 +310,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       return;
     }
 
+    setActiveTab("ledger");
     const clientProjects = ledger.data?.projects ?? [];
 
     if (clientProjects.length === 0) {
@@ -295,6 +334,17 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     setCreatedFeatureRequestId(null);
   }
 
+  function openNewProjectForm() {
+    if (ledger.data?.client.status === "archived") {
+      return;
+    }
+
+    setActiveTab("projects");
+    setShowNewProjectForm((value) => !value);
+    setSuccess(null);
+    setCreatedFeatureRequestId(null);
+  }
+
   function openEditForm() {
     if (!ledger.data) {
       return;
@@ -307,6 +357,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     setEditContactEmail(client.contactEmail ?? "");
     setEditNotes(client.notes ?? "");
     setEditStatus(client.status);
+    setActiveTab("notes");
     setShowEditForm(true);
     setSuccess(null);
   }
@@ -386,7 +437,11 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   function onAttach(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!projectId || attachProject.isPending) {
+    if (
+      ledger.data?.client.status === "archived" ||
+      !projectId ||
+      attachProject.isPending
+    ) {
       return;
     }
 
@@ -396,6 +451,10 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   }
 
   function onDetach(projectIdToDetach: string) {
+    if (ledger.data?.client.status === "archived" || detachProject.isPending) {
+      return;
+    }
+
     const confirmed = window.confirm(
       "This will remove the project from this client ledger but will not delete projects, features, reviews, approvals, or reports."
     );
@@ -467,6 +526,22 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
             </Link>
             <button
               type="button"
+              onClick={openNewProjectForm}
+              disabled={isArchived}
+              className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              New Project
+            </button>
+            <button
+              type="button"
+              onClick={() => openFeatureForm()}
+              disabled={isArchived}
+              className="rounded-md border border-blue-800 bg-blue-950/30 px-3 py-2 text-sm font-medium text-blue-100 transition hover:border-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Add Feature Request
+            </button>
+            <button
+              type="button"
               onClick={openEditForm}
               className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
             >
@@ -483,7 +558,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           </div>
         </div>
 
-        {showEditForm ? (
+        {showEditForm && activeTab === "notes" ? (
           <form
             onSubmit={onUpdateClient}
             className="rounded-lg border border-neutral-800 bg-neutral-900 p-5"
@@ -619,20 +694,6 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
         </div>
       ) : null}
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 className="text-lg font-medium">Client Notes</h2>
-        {client.notes ? (
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-neutral-300">
-            {client.notes}
-          </p>
-        ) : (
-          <p className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
-            Add notes about scope, delivery expectations, or client
-            communication preferences.
-          </p>
-        )}
-      </section>
-
       <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Projects" value={summary.projectsCount} />
         <StatCard label="Feature requests" value={summary.featureRequestsCount} />
@@ -689,7 +750,46 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1fr_380px]">
+      <ClientLedgerTabs activeTab={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "notes" ? (
+        <section
+          id="client-notes-section"
+          className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-medium">Client Notes</h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Scope, delivery expectations, contact context, and account state.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={openEditForm}
+              className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+            >
+              Edit Client
+            </button>
+          </div>
+          {client.notes ? (
+            <p className="mt-5 whitespace-pre-wrap text-sm leading-6 text-neutral-300">
+              {client.notes}
+            </p>
+          ) : (
+            <p className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
+              Add notes about scope, delivery expectations, or client
+              communication preferences.
+            </p>
+          )}
+        </section>
+      ) : null}
+
+      {activeTab === "projects" ? (
+      <section
+        id="client-projects-section"
+        className="scroll-mt-28 grid gap-6 xl:grid-cols-[1fr_380px]"
+      >
         <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -807,7 +907,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
                     <button
                       type="button"
                       onClick={() => onDetach(project.id)}
-                      disabled={detachProject.isPending}
+                      disabled={isArchived || detachProject.isPending}
                       className="rounded-md border border-neutral-700 px-3 py-2 text-xs text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Detach
@@ -835,6 +935,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
                 <select
                   value={projectId}
                   onChange={(event) => setProjectId(event.target.value)}
+                  disabled={isArchived}
                   className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
                 >
                   <option value="">Select a project</option>
@@ -848,7 +949,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
 
               <button
                 type="submit"
-                disabled={!projectId || attachProject.isPending}
+                disabled={isArchived || !projectId || attachProject.isPending}
                 className="mt-5 w-full rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {attachProject.isPending ? "Linking..." : "Link Project"}
@@ -869,8 +970,13 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           ) : null}
         </form>
       </section>
+      ) : null}
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      {activeTab === "ledger" ? (
+      <section
+        id="client-ledger-section"
+        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      >
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-medium">Delivery Ledger</h2>
@@ -1040,7 +1146,8 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
 
         {ledger.data.deliveryItems.length === 0 ? (
           <p className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-5 text-sm text-neutral-400">
-            No feature requests are attached to this client yet.
+            No feature requests are attached to this client yet. Add a feature
+            request once this client has at least one linked project.
           </p>
         ) : null}
         <div className="mt-5 space-y-3">
@@ -1130,12 +1237,18 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           })}
         </div>
       </section>
+      ) : null}
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      {activeTab === "reports" ? (
+      <section
+        id="client-reports-section"
+        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      >
         <h2 className="text-lg font-medium">Release Report Archive</h2>
         {ledger.data.reportArchive.length === 0 ? (
           <p className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-5 text-sm text-neutral-400">
-            No release reports generated yet.
+            No release reports generated yet. Approved features will appear
+            here after a release report is generated.
           </p>
         ) : null}
         <div className="mt-5 space-y-3">
@@ -1169,12 +1282,19 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           ))}
         </div>
       </section>
+      ) : null}
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      {activeTab === "risks" ? (
+      <section
+        id="client-risks-section"
+        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      >
         <h2 className="text-lg font-medium">Risks and Pending Actions</h2>
         {ledger.data.risks.length === 0 ? (
           <p className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-5 text-sm text-neutral-400">
-            No unresolved risks recorded for this client.
+            No unresolved risks recorded for this client. Missing requirements,
+            open QA findings, pending approvals, and blocked reports will appear
+            here when they need attention.
           </p>
         ) : null}
         <div className="mt-5 space-y-3">
@@ -1224,6 +1344,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
           })}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }
