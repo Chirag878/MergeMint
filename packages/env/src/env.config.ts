@@ -10,9 +10,9 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 const rootEnvPath = resolve(currentDir, "../../../.env");
 
 if (existsSync(rootEnvPath)) {
-  config({ path: rootEnvPath });
+  config({ path: rootEnvPath, quiet: true });
 } else {
-  config();
+  config({ quiet: true });
 }
 
 export const env = createEnv({
@@ -52,7 +52,9 @@ export const env = createEnv({
   clientPrefix: "NEXT_PUBLIC_",
 
   client: {
-    NEXT_PUBLIC_APP_URL: z.string().url().optional()
+    NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+    NEXT_PUBLIC_PAYMENT_LINK: z.string().url().optional(),
+    NEXT_PUBLIC_SAMPLE_REPORT_URL: z.string().url().optional()
   },
 
   runtimeEnv: process.env,
