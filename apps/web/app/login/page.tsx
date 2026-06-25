@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { authClient, type OAuthProvider } from "@veriflow/auth/client";
 
+const postLoginPath = "/app";
+
 const providers: Array<{
   id: OAuthProvider;
   label: string;
@@ -28,7 +30,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (session.data?.user && typeof window !== "undefined") {
-    window.location.replace("/dashboard");
+    window.location.replace(postLoginPath);
   }
 
   async function signIn(provider: OAuthProvider) {
@@ -37,7 +39,7 @@ export default function LoginPage() {
 
     const result = await authClient.signIn.social({
       provider,
-      callbackURL: "/dashboard"
+      callbackURL: postLoginPath
     });
 
     if (result.error) {
