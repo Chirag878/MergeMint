@@ -208,92 +208,107 @@ async function getMembershipsForAppUser(tx: WorkspaceDb, appUserId: string) {
 export async function ensureUserWorkspace(input: EnsureUserWorkspaceInput) {
   void input.session;
 
-  return db.transaction(async (tx) => {
-    const appUser = await upsertAppUser(tx, input.user);
-    const existingMemberships = await getMembershipsForAppUser(tx, appUser.id);
+  try {
+    return await db.transaction(async (tx) => {
+      const appUser = await upsertAppUser(tx, input.user);
+      const existingMemberships = await getMembershipsForAppUser(tx, appUser.id);
 
-    if (existingMemberships[0]) {
-      const activeOrganization = existingMemberships[0].organization;
-      const subscription = await ensureSubscription(tx, activeOrganization.id);
-      await ensureUsageCounter(tx, activeOrganization.id);
+      if (existingMemberships[0]) {
+        const activeOrganization = existingMemberships[0].organization;
+        const subscription = await ensureSubscription(tx, activeOrganization.id);
+        await ensureUsageCounter(tx, activeOrganization.id);
+
+        return {
+          appUser,
+          organizations: existingMemberships.map((entry) => entry.organization),
+          activeOrganization,
+          membership: existingMemberships[0].membership,
+          subscription
+        };
+      }
+
+      const organizationName = getDefaultOrganizationName(input.user);
+      const organizationSlug = getDefaultOrganizationSlug(input.user);
+
+      const [createdOrganization] = await tx
+        .insert(organizations)
+        .values({
+          name: organizationName,
+          slug: organizationSlug
+        })
+        .onConflictDoNothing({
+          target: organizations.slug
+        })
+        .returning();
+
+      const organization =
+        createdOrganization ??
+        (
+          await tx
+            .select()
+            .from(organizations)
+            .where(eq(organizations.slug, organizationSlug))
+            .limit(1)
+        )[0];
+
+      if (!organization) {
+        throw new Error("Unable to create default organization.");
+      }
+
+      const [createdMembership] = await tx
+        .insert(organizationMembers)
+        .values({
+          organizationId: organization.id,
+          userId: appUser.id,
+          role: "owner"
+        })
+        .onConflictDoNothing({
+          target: [
+            organizationMembers.organizationId,
+            organizationMembers.userId
+          ]
+        })
+        .returning();
+
+      const membership =
+        createdMembership ??
+        (
+          await tx
+            .select()
+            .from(organizationMembers)
+            .where(
+              and(
+                eq(organizationMembers.organizationId, organization.id),
+                eq(organizationMembers.userId, appUser.id)
+              )
+            )
+            .limit(1)
+        )[0];
+
+      if (!membership) {
+        throw new Error("Unable to create organization membership.");
+      }
+
+      const subscription = await ensureSubscription(tx, organization.id);
+      await ensureUsageCounter(tx, organization.id);
 
       return {
         appUser,
-        organizations: existingMemberships.map((entry) => entry.organization),
-        activeOrganization,
-        membership: existingMemberships[0].membership,
+        organizations: [organization],
+        activeOrganization: organization,
+        membership,
         subscription
       };
-    }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
 
-    const organizationName = getDefaultOrganizationName(input.user);
-    const organizationSlug = getDefaultOrganizationSlug(input.user);
+    console.error("[auth] workspace_bootstrap_failed", {
+      message,
+      userId: input.user.id,
+      hasEmail: Boolean(input.user.email)
+    });
 
-    const [createdOrganization] = await tx
-      .insert(organizations)
-      .values({
-        name: organizationName,
-        slug: organizationSlug
-      })
-      .onConflictDoNothing({
-        target: organizations.slug
-      })
-      .returning();
-
-    const organization =
-      createdOrganization ??
-      (
-        await tx
-          .select()
-          .from(organizations)
-          .where(eq(organizations.slug, organizationSlug))
-          .limit(1)
-      )[0];
-
-    if (!organization) {
-      throw new Error("Unable to create default organization.");
-    }
-
-    const [createdMembership] = await tx
-      .insert(organizationMembers)
-      .values({
-        organizationId: organization.id,
-        userId: appUser.id,
-        role: "owner"
-      })
-      .onConflictDoNothing({
-        target: [organizationMembers.organizationId, organizationMembers.userId]
-      })
-      .returning();
-
-    const membership =
-      createdMembership ??
-      (
-        await tx
-          .select()
-          .from(organizationMembers)
-          .where(
-            and(
-              eq(organizationMembers.organizationId, organization.id),
-              eq(organizationMembers.userId, appUser.id)
-            )
-          )
-          .limit(1)
-      )[0];
-
-    if (!membership) {
-      throw new Error("Unable to create organization membership.");
-    }
-
-    const subscription = await ensureSubscription(tx, organization.id);
-    await ensureUsageCounter(tx, organization.id);
-
-    return {
-      appUser,
-      organizations: [organization],
-      activeOrganization: organization,
-      membership,
-      subscription
-    };
-  });
+    throw error;
+  }
 }
