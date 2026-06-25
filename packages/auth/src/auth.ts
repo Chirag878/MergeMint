@@ -6,6 +6,8 @@ import { getRequiredAuthEnv } from "@veriflow/env";
 
 type AuthInstance = ReturnType<typeof createAuth>;
 
+const productionAppOrigin = "https://mergemint-eight.vercel.app";
+
 let authInstance: AuthInstance | undefined;
 
 function logAuthFailure(
@@ -25,12 +27,13 @@ function getTrustedOrigins(authEnv: {
   BETTER_AUTH_URL: string;
   NEXT_PUBLIC_APP_URL?: string;
 }) {
+  const envOrigins = [authEnv.BETTER_AUTH_URL, authEnv.NEXT_PUBLIC_APP_URL].filter(
+    (origin): origin is string => Boolean(origin)
+  );
+  const normalizedOrigins = envOrigins.map((origin) => new URL(origin).origin);
+
   return Array.from(
-    new Set(
-      [authEnv.BETTER_AUTH_URL, authEnv.NEXT_PUBLIC_APP_URL].filter(
-        (origin): origin is string => Boolean(origin)
-      )
-    )
+    new Set([...envOrigins, ...normalizedOrigins, productionAppOrigin])
   );
 }
 
