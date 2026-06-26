@@ -161,7 +161,7 @@ function mockQAReview(input: QAReviewInput): QAReviewOutput {
             ],
       concern:
         index === 0
-          ? undefined
+          ? null
           : "Additional implementation or test evidence is needed before release."
     })
   );
@@ -175,7 +175,8 @@ function mockQAReview(input: QAReviewInput): QAReviewOutput {
           title: "Requirement needs stronger implementation evidence",
           description:
             "The PR snapshot shows related changes, but the diff does not prove every acceptance criterion is covered.",
-          file: input.changedFiles[0]?.filename,
+          file: input.changedFiles[0]?.filename ?? null,
+          line: null,
           suggestedFix:
             "Add implementation or tests that explicitly cover the missing acceptance criteria."
         }

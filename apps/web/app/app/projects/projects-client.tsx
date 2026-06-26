@@ -177,6 +177,12 @@ export function ProjectsClient() {
               <p className="mt-3 text-xs text-neutral-500">
                 Created {new Date(project.createdAt).toLocaleDateString()}
               </p>
+              <Link
+                href={`/app/features?projectId=${project.id}`}
+                className="mt-4 inline-flex rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+              >
+                Create Feature Request
+              </Link>
             </article>
           ))}
         </div>

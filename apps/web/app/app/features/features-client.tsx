@@ -6,7 +6,11 @@ import { trpc } from "@/trpc/react";
 
 const priorities = ["low", "medium", "high", "urgent"] as const;
 
-export function FeaturesClient() {
+export function FeaturesClient({
+  initialProjectId
+}: {
+  initialProjectId?: string;
+}) {
   const utils = trpc.useUtils();
   const projects = trpc.projects.list.useQuery();
   const features = trpc.featureRequests.list.useQuery();
@@ -33,10 +37,14 @@ export function FeaturesClient() {
   });
 
   useEffect(() => {
-    if (!projectId && projects.data?.[0]) {
-      setProjectId(projects.data[0].id);
+    if (
+      !projectId &&
+      initialProjectId &&
+      projects.data?.some((project) => project.id === initialProjectId)
+    ) {
+      setProjectId(initialProjectId);
     }
-  }, [projectId, projects.data]);
+  }, [initialProjectId, projectId, projects.data]);
 
   const projectNameById = useMemo(
     () => new Map(projects.data?.map((project) => [project.id, project.name])),
@@ -129,6 +137,7 @@ export function FeaturesClient() {
             className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
             required
           >
+            <option value="">Select a project</option>
             {projects.data?.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}

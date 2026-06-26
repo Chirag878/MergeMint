@@ -199,6 +199,7 @@ export function FeatureDetailClient({
   featureRequestId: string;
 }) {
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [prUrl, setPrUrl] = useState("");
   const [approvalDecision, setApprovalDecision] =
     useState<ApprovalDecision>("approved");
@@ -262,6 +263,9 @@ export function FeatureDetailClient({
           delete next[variables.questionId];
           return next;
         });
+        setEditingQuestionId((current) =>
+          current === variables.questionId ? null : current
+        );
         await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
         await invalidateReleaseControlRoom();
       }
@@ -325,6 +329,7 @@ export function FeatureDetailClient({
   const hasQuestions = clarificationQuestions.length > 0;
   const hasPrd = Boolean(prd);
   const hasTasks = engineeringTasks.length > 0;
+  const prdMayBeOutdated = workflow.data?.prdMayBeOutdated ?? false;
   const prdBlockedByClarifications =
     !hasPrd && unansweredRequiredClarificationQuestions.length > 0;
 
@@ -348,6 +353,20 @@ export function FeatureDetailClient({
     });
   }
 
+  function editAnswer(questionId: string, answer: string) {
+    setEditingQuestionId(questionId);
+    setAnswerDraft(questionId, answer);
+  }
+
+  function cancelEditAnswer(questionId: string) {
+    setEditingQuestionId((current) => (current === questionId ? null : current));
+    setAnswerDrafts((current) => {
+      const next = { ...current };
+      delete next[questionId];
+      return next;
+    });
+  }
+
   function openTab(tab: FeatureDetailTab, sectionId?: string) {
     setActiveTab(tab);
 
@@ -366,6 +385,13 @@ export function FeatureDetailClient({
   }
 
   function submitApprovalDecision() {
+    if (prdMayBeOutdated) {
+      setApprovalValidationError(
+        "Regenerate the PRD and rerun QA before submitting approval."
+      );
+      return;
+    }
+
     const note = approvalNote.trim();
     const parsedRemainingRisks = parseRemainingRisks(remainingRisks);
     const riskSummary = getApprovalRiskSummary(latestQaReview.data);
@@ -459,23 +485,28 @@ export function FeatureDetailClient({
       ) : null}
 
       {controlRoom.data ? (
-        <ReleaseControlRoom
-          data={controlRoom.data}
-          onGeneratePrd={() => {
-            openTab("requirements", "requirement-engine-section");
-            generatePrd.mutate({ featureRequestId: feature.id });
+          <ReleaseControlRoom
+            data={controlRoom.data}
+            prdMayBeOutdated={prdMayBeOutdated}
+            onGeneratePrd={() => {
+              openTab("requirements", "requirement-engine-section");
+              generatePrd.mutate({ featureRequestId: feature.id });
           }}
           isGeneratingPrd={generatePrd.isPending}
           onLinkPr={() => openTab("pr", "github-pr-section")}
           onRunQa={() => {
             openTab("qa", "ai-qa-review");
-            runQaReview.mutate({ featureRequestId });
+            if (!prdMayBeOutdated) {
+              runQaReview.mutate({ featureRequestId });
+            }
           }}
           isRunningQa={runQaReview.isPending}
           onSubmitApproval={() => openTab("approval", "human-approval")}
           onGenerateReport={() => {
             openTab("report", "release-report");
-            generateReleaseReport.mutate({ featureRequestId });
+            if (!prdMayBeOutdated) {
+              generateReleaseReport.mutate({ featureRequestId });
+            }
           }}
           isGeneratingReport={generateReleaseReport.isPending}
         />
@@ -551,12 +582,16 @@ export function FeatureDetailClient({
             type="button"
             onClick={() => generatePrd.mutate({ featureRequestId: feature.id })}
             disabled={
-              hasPrd || prdBlockedByClarifications || generatePrd.isPending
+              (hasPrd && !prdMayBeOutdated) ||
+              prdBlockedByClarifications ||
+              generatePrd.isPending
             }
             className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {hasPrd
-              ? "PRD generated"
+              ? prdMayBeOutdated
+                ? "Regenerate PRD"
+                : "PRD generated"
               : prdBlockedByClarifications
                 ? "Answer required questions"
               : generatePrd.isPending
@@ -566,7 +601,7 @@ export function FeatureDetailClient({
           <button
             type="button"
             onClick={() => (prd ? generateTasks.mutate({ prdId: prd.id }) : null)}
-            disabled={!prd || hasTasks || generateTasks.isPending}
+            disabled={!prd || prdMayBeOutdated || hasTasks || generateTasks.isPending}
             className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {hasTasks
@@ -585,7 +620,12 @@ export function FeatureDetailClient({
           </p>
         ) : null}
 
-        {prdBlockedByClarifications ? (
+        {prdMayBeOutdated ? (
+          <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+            PRD may be outdated because a clarification answer changed. Regenerate
+            the PRD before running QA or generating release evidence.
+          </p>
+        ) : prdBlockedByClarifications ? (
           <p className="mt-4 text-sm text-amber-300">
             Answer required clarification questions before generating the PRD.
           </p>
@@ -604,63 +644,102 @@ export function FeatureDetailClient({
         <h2 className="text-lg font-medium">Clarification questions</h2>
         {clarificationQuestions.length > 0 ? (
           <div className="mt-4 space-y-3">
-            {clarificationQuestions.map((question) => (
-              <article
-                key={question.id}
-                className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <h3 className="font-medium text-neutral-100">
-                    {question.question}
-                  </h3>
-                  <Badge>{formatQuestionPriority(question.priority)}</Badge>
-                </div>
-                {question.reason ? (
-                  <p className="mt-3 text-sm text-neutral-400">
-                    <span className="text-neutral-500">Reason:</span>{" "}
-                    {question.reason}
-                  </p>
-                ) : null}
-                {question.answer ? (
-                  <p className="mt-3 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3 text-sm text-emerald-100">
-                    <span className="text-emerald-400">Answered:</span>{" "}
-                    {question.answer}
-                  </p>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {isRequiredQuestionPriority(question.priority) ? (
-                      <p className="text-sm text-amber-300">
-                        Required before PRD generation.
-                      </p>
-                    ) : null}
-                    <textarea
-                      value={answerDrafts[question.id] ?? ""}
-                      onChange={(event) =>
-                        setAnswerDraft(question.id, event.target.value)
-                      }
-                      className="min-h-24 w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
-                      placeholder="Answer this clarification..."
-                    />
-                    <button
-                      type="button"
-                      onClick={() => saveAnswer(question.id)}
-                      disabled={
-                        answerClarification.isPending ||
-                        !(answerDrafts[question.id]?.trim().length > 0)
-                      }
-                      className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {answerClarification.isPending ? "Saving..." : "Save answer"}
-                    </button>
-                    {answerClarification.error ? (
-                      <p className="text-sm text-red-300">
-                        {answerClarification.error.message}
-                      </p>
-                    ) : null}
+            {clarificationQuestions.map((question) => {
+              const isEditing = editingQuestionId === question.id;
+              const isSavingQuestion =
+                answerClarification.isPending &&
+                answerClarification.variables?.questionId === question.id;
+              const draft = answerDrafts[question.id] ?? "";
+              const canSave = draft.trim().length > 0 && !isSavingQuestion;
+
+              return (
+                <article
+                  key={question.id}
+                  className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h3 className="font-medium text-neutral-100">
+                      {question.question}
+                    </h3>
+                    <Badge>{formatQuestionPriority(question.priority)}</Badge>
                   </div>
-                )}
-              </article>
-            ))}
+                  {question.reason ? (
+                    <p className="mt-3 text-sm text-neutral-400">
+                      <span className="text-neutral-500">Reason:</span>{" "}
+                      {question.reason}
+                    </p>
+                  ) : null}
+                  {question.answer && !isEditing ? (
+                    <div className="mt-3 space-y-3 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3">
+                      <p className="text-sm text-emerald-100">
+                        <span className="text-emerald-400">Answered:</span>{" "}
+                        {question.answer}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => editAnswer(question.id, question.answer ?? "")}
+                        disabled={answerClarification.isPending}
+                        className="rounded-md border border-emerald-800 px-3 py-1.5 text-xs font-medium text-emerald-100 transition hover:border-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {isRequiredQuestionPriority(question.priority) ? (
+                        <p className="text-sm text-amber-300">
+                          Required before PRD generation.
+                        </p>
+                      ) : null}
+                      {isEditing && prd ? (
+                        <p className="rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+                          Changing this answer will mark the current PRD as
+                          outdated until you regenerate it.
+                        </p>
+                      ) : null}
+                      <textarea
+                        value={draft}
+                        onChange={(event) =>
+                          setAnswerDraft(question.id, event.target.value)
+                        }
+                        className="min-h-24 w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
+                        placeholder="Answer this clarification..."
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => saveAnswer(question.id)}
+                          disabled={!canSave}
+                          className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isSavingQuestion
+                            ? "Saving..."
+                            : isEditing
+                              ? "Save changes"
+                              : "Save answer"}
+                        </button>
+                        {isEditing ? (
+                          <button
+                            type="button"
+                            onClick={() => cancelEditAnswer(question.id)}
+                            disabled={isSavingQuestion}
+                            className="rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        ) : null}
+                      </div>
+                      {answerClarification.error &&
+                      answerClarification.variables?.questionId === question.id ? (
+                        <p className="text-sm text-red-300">
+                          {answerClarification.error.message}
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
           </div>
         ) : (
           <EmptyText>No clarification questions generated yet.</EmptyText>
@@ -792,6 +871,7 @@ export function FeatureDetailClient({
       {activeTab === "qa" ? (
       <AIQAReviewSection
         hasPrd={Boolean(prd)}
+        prdMayBeOutdated={prdMayBeOutdated}
         requirementsCount={prdRequirements.length}
         hasPullRequestSnapshot={Boolean(linkedPullRequest.data?.latestSnapshot)}
         reviewBundle={latestQaReview.data}
@@ -806,6 +886,7 @@ export function FeatureDetailClient({
       {activeTab === "approval" ? (
       <HumanApprovalGateSection
         latestQaReview={latestQaReview.data}
+        prdMayBeOutdated={prdMayBeOutdated}
         latestApproval={latestApproval.data}
         isLoadingApproval={latestApproval.isLoading}
         approvalError={latestApproval.error?.message}
@@ -837,6 +918,7 @@ export function FeatureDetailClient({
       {activeTab === "report" ? (
       <ReleaseReportSection
         latestQaReview={latestQaReview.data}
+        prdMayBeOutdated={prdMayBeOutdated}
         latestApproval={latestApproval.data}
         latestReport={latestReleaseReport.data}
         isLoadingReport={latestReleaseReport.isLoading}
@@ -902,6 +984,7 @@ function FeatureDetailTabs({
 
 function ReleaseControlRoom({
   data,
+  prdMayBeOutdated,
   onGeneratePrd,
   isGeneratingPrd,
   onLinkPr,
@@ -912,6 +995,7 @@ function ReleaseControlRoom({
   isGeneratingReport
 }: {
   data: ReleaseControlRoomView;
+  prdMayBeOutdated: boolean;
   onGeneratePrd: () => void;
   isGeneratingPrd: boolean;
   onLinkPr: () => void;
@@ -952,6 +1036,7 @@ function ReleaseControlRoom({
           action={data.nextBestAction.kind}
           reportHref={reportHref}
           prdBlocked={prdStep?.status === "blocked"}
+          prdMayBeOutdated={prdMayBeOutdated}
           onGeneratePrd={onGeneratePrd}
           isGeneratingPrd={isGeneratingPrd}
           onLinkPr={onLinkPr}
@@ -993,6 +1078,7 @@ function ReleaseControlRoom({
                     <InlineControlRoomAction
                       action={step.actionKind}
                       reportHref={reportHref}
+                      prdMayBeOutdated={prdMayBeOutdated}
                       onGeneratePrd={onGeneratePrd}
                       isGeneratingPrd={isGeneratingPrd}
                       onLinkPr={onLinkPr}
@@ -1022,6 +1108,7 @@ function ReleaseControlRoom({
               action={data.nextBestAction.kind}
               reportHref={reportHref}
               prdBlocked={prdStep?.status === "blocked"}
+              prdMayBeOutdated={prdMayBeOutdated}
               onGeneratePrd={onGeneratePrd}
               isGeneratingPrd={isGeneratingPrd}
               onLinkPr={onLinkPr}
@@ -1048,6 +1135,7 @@ function PrimaryControlRoomAction({
   action,
   reportHref,
   prdBlocked,
+  prdMayBeOutdated,
   variant = "primary",
   onGeneratePrd,
   isGeneratingPrd,
@@ -1061,6 +1149,7 @@ function PrimaryControlRoomAction({
   action: NextActionKind;
   reportHref?: string;
   prdBlocked?: boolean;
+  prdMayBeOutdated?: boolean;
   variant?: "primary" | "subtle";
   onGeneratePrd: () => void;
   isGeneratingPrd: boolean;
@@ -1089,7 +1178,7 @@ function PrimaryControlRoomAction({
   }
 
   if (action === "generate_prd") {
-    return prdBlocked ? (
+    return prdBlocked && !prdMayBeOutdated ? (
       <button
         type="button"
         onClick={() =>
@@ -1109,7 +1198,11 @@ function PrimaryControlRoomAction({
         disabled={isGeneratingPrd}
         className={buttonClass}
       >
-        {isGeneratingPrd ? "Generating..." : "Generate PRD"}
+        {isGeneratingPrd
+          ? "Generating..."
+          : prdMayBeOutdated
+            ? "Regenerate PRD"
+            : "Generate PRD"}
       </button>
     );
   }
@@ -1127,7 +1220,7 @@ function PrimaryControlRoomAction({
       <button
         type="button"
         onClick={onRunQa}
-        disabled={isRunningQa}
+        disabled={isRunningQa || prdMayBeOutdated}
         className={buttonClass}
       >
         {isRunningQa
@@ -1158,7 +1251,12 @@ function PrimaryControlRoomAction({
 
   if (action === "submit_approval") {
     return (
-      <button type="button" onClick={onSubmitApproval} className={buttonClass}>
+      <button
+        type="button"
+        onClick={onSubmitApproval}
+        disabled={prdMayBeOutdated}
+        className={buttonClass}
+      >
         Submit approval decision
       </button>
     );
@@ -1167,8 +1265,8 @@ function PrimaryControlRoomAction({
   return (
     <button
       type="button"
-      onClick={onGenerateReport}
-      disabled={isGeneratingReport}
+    onClick={onGenerateReport}
+    disabled={isGeneratingReport || prdMayBeOutdated}
       className={buttonClass}
     >
       {isGeneratingReport ? "Generating..." : "Generate release report"}
@@ -2088,6 +2186,7 @@ function validateApprovalDecision(input: {
 
 function AIQAReviewSection({
   hasPrd,
+  prdMayBeOutdated,
   requirementsCount,
   hasPullRequestSnapshot,
   reviewBundle,
@@ -2098,6 +2197,7 @@ function AIQAReviewSection({
   runError
 }: {
   hasPrd: boolean;
+  prdMayBeOutdated: boolean;
   requirementsCount: number;
   hasPullRequestSnapshot: boolean;
   reviewBundle: QAReviewBundle | null | undefined;
@@ -2107,7 +2207,8 @@ function AIQAReviewSection({
   isRunning: boolean;
   runError?: string;
 }) {
-  const ready = hasPrd && requirementsCount > 0 && hasPullRequestSnapshot;
+  const ready =
+    hasPrd && !prdMayBeOutdated && requirementsCount > 0 && hasPullRequestSnapshot;
 
   return (
     <section
@@ -2125,7 +2226,7 @@ function AIQAReviewSection({
           <button
             type="button"
             onClick={onRun}
-            disabled={isRunning}
+            disabled={isRunning || prdMayBeOutdated}
             className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isRunning
@@ -2137,7 +2238,12 @@ function AIQAReviewSection({
         ) : null}
       </div>
 
-      {!hasPrd || requirementsCount === 0 ? (
+      {prdMayBeOutdated ? (
+        <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+          PRD may be outdated because clarification answers changed. Regenerate
+          the PRD before running QA review.
+        </p>
+      ) : !hasPrd || requirementsCount === 0 ? (
         <EmptyText>Generate PRD and requirements before running QA review.</EmptyText>
       ) : !hasPullRequestSnapshot ? (
         <EmptyText>Link a GitHub pull request before running QA review.</EmptyText>
@@ -2259,6 +2365,7 @@ function AIQAReviewSection({
 
 function HumanApprovalGateSection({
   latestQaReview,
+  prdMayBeOutdated,
   latestApproval,
   isLoadingApproval,
   approvalError,
@@ -2276,6 +2383,7 @@ function HumanApprovalGateSection({
   onCancelConfirmation
 }: {
   latestQaReview: QAReviewBundle | null | undefined;
+  prdMayBeOutdated: boolean;
   latestApproval: ApprovalView | null | undefined;
   isLoadingApproval: boolean;
   approvalError?: string;
@@ -2293,7 +2401,7 @@ function HumanApprovalGateSection({
   onCancelConfirmation: () => void;
 }) {
   const riskSummary = getApprovalRiskSummary(latestQaReview);
-  const canSubmit = Boolean(latestQaReview) && !isSubmitting;
+  const canSubmit = Boolean(latestQaReview) && !prdMayBeOutdated && !isSubmitting;
 
   return (
     <section
@@ -2310,7 +2418,12 @@ function HumanApprovalGateSection({
         {latestApproval ? <StatusBadge status={latestApproval.decision} /> : null}
       </div>
 
-      {!latestQaReview ? (
+      {prdMayBeOutdated ? (
+        <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+          PRD may be outdated. Regenerate the PRD and rerun QA before submitting
+          an approval decision.
+        </p>
+      ) : !latestQaReview ? (
         <EmptyText>Run AI QA review before submitting an approval decision.</EmptyText>
       ) : null}
 
@@ -2462,6 +2575,7 @@ function HumanApprovalGateSection({
 
 function ReleaseReportSection({
   latestQaReview,
+  prdMayBeOutdated,
   latestApproval,
   latestReport,
   isLoadingReport,
@@ -2471,6 +2585,7 @@ function ReleaseReportSection({
   generateError
 }: {
   latestQaReview: QAReviewBundle | null | undefined;
+  prdMayBeOutdated: boolean;
   latestApproval: ApprovalView | null | undefined;
   latestReport: ReleaseReportView | null | undefined;
   isLoadingReport: boolean;
@@ -2479,7 +2594,8 @@ function ReleaseReportSection({
   isGenerating: boolean;
   generateError?: string;
 }) {
-  const canGenerate = Boolean(latestQaReview && latestApproval) && !isGenerating;
+  const canGenerate =
+    Boolean(latestQaReview && latestApproval) && !prdMayBeOutdated && !isGenerating;
   const sharePath = latestReport
     ? `/reports/${latestReport.shareToken}`
     : undefined;
@@ -2502,7 +2618,12 @@ function ReleaseReportSection({
         ) : null}
       </div>
 
-      {!latestQaReview ? (
+      {prdMayBeOutdated ? (
+        <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+          PRD may be outdated. Regenerate the PRD and rerun QA before generating
+          a release report.
+        </p>
+      ) : !latestQaReview ? (
         <EmptyText>Run AI QA Review before generating release report.</EmptyText>
       ) : !latestApproval ? (
         <EmptyText>Submit an approval decision before generating release report.</EmptyText>

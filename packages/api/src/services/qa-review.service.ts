@@ -10,6 +10,7 @@ import {
 import {
   aiRuns,
   auditLogs,
+  clarificationQuestions,
   db,
   engineeringTasks,
   featureRequests,
@@ -227,6 +228,24 @@ function toRequirementEvidence(evidence: string[]): RequirementEvidence {
   };
 }
 
+async function hasClarificationAnswerAfterPrd(input: {
+  featureRequestId: string;
+  prdCreatedAt: Date;
+}) {
+  const [row] = await db
+    .select({ id: clarificationQuestions.id })
+    .from(clarificationQuestions)
+    .where(
+      and(
+        eq(clarificationQuestions.featureRequestId, input.featureRequestId),
+        sql`${clarificationQuestions.answeredAt} > ${input.prdCreatedAt}`
+      )
+    )
+    .limit(1);
+
+  return Boolean(row);
+}
+
 async function getReviewBundle(reviewId: string, organizationId: string) {
   const [review] = await db
     .select()
@@ -288,6 +307,19 @@ export async function runQaReviewForFeatureRequest(
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Generate PRD and requirements before running QA review."
+    });
+  }
+
+  if (
+    await hasClarificationAnswerAfterPrd({
+      featureRequestId: featureRequest.id,
+      prdCreatedAt: prd.createdAt
+    })
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "A clarification answer changed after the PRD was generated. Regenerate the PRD before running QA review."
     });
   }
 
@@ -443,7 +475,7 @@ export async function runQaReviewForFeatureRequest(
             requirementKey: coverageItem.requirementKey,
             status: mapCoverageStatus(coverageItem.status),
             evidence: toRequirementEvidence(coverageItem.evidence),
-            concern: coverageItem.concern
+            concern: coverageItem.concern ?? null
           }))
         )
         .returning();
@@ -456,14 +488,14 @@ export async function runQaReviewForFeatureRequest(
                 aiResult.data.findings.map((finding) => ({
                   qaReviewId: review.id,
                   pullRequestId: pullRequest.id,
-                  requirementKey: finding.requirementKey,
+                  requirementKey: finding.requirementKey ?? null,
                   severity: finding.severity,
                   category: mapFindingCategory(finding.category),
                   title: finding.title,
                   description: finding.description,
-                  file: finding.file,
-                  line: finding.line,
-                  suggestedFix: finding.suggestedFix,
+                  file: finding.file ?? null,
+                  line: finding.line ?? null,
+                  suggestedFix: finding.suggestedFix ?? null,
                   status: "open" as const
                 }))
               )

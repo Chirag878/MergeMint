@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   generateClarificationQuestions,
   generateEngineeringTasks,
@@ -226,6 +226,19 @@ function isRequiredClarification(priority: string) {
   return priority === "high" || priority === "urgent";
 }
 
+function hasClarificationAnswerChangedAfterPrd(
+  clarifications: Array<typeof clarificationQuestions.$inferSelect>,
+  prd: typeof prds.$inferSelect | null | undefined
+) {
+  if (!prd) {
+    return false;
+  }
+
+  return clarifications.some(
+    (question) => question.answeredAt && question.answeredAt > prd.createdAt
+  );
+}
+
 function mapTaskType(type: EngineeringTasksOutput["tasks"][number]["type"]) {
   return type === "infra" ? ("infrastructure" as const) : type;
 }
@@ -410,7 +423,17 @@ export async function generatePrdForFeatureRequest(
     .orderBy(desc(prds.version))
     .limit(1);
 
-  if (existingPrd) {
+  const clarifications = await db
+    .select()
+    .from(clarificationQuestions)
+    .where(eq(clarificationQuestions.featureRequestId, featureRequest.id))
+    .orderBy(clarificationQuestions.createdAt);
+  const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
+    clarifications,
+    existingPrd
+  );
+
+  if (existingPrd && !prdMayBeOutdated) {
     const requirements = await db
       .select()
       .from(prdRequirements)
@@ -422,12 +445,6 @@ export async function generatePrdForFeatureRequest(
       requirements
     };
   }
-
-  const clarifications = await db
-    .select()
-    .from(clarificationQuestions)
-    .where(eq(clarificationQuestions.featureRequestId, featureRequest.id))
-    .orderBy(clarificationQuestions.createdAt);
 
   const unansweredRequiredClarifications = clarifications.filter(
     (question) => isRequiredClarification(question.priority) && !question.answer
@@ -475,7 +492,7 @@ export async function generatePrdForFeatureRequest(
         userStories: result.data.userStories,
         edgeCases: result.data.edgeCases,
         risks: result.data.risks,
-        version: 1,
+        version: (existingPrd?.version ?? 0) + 1,
         status: "generated"
       })
       .returning();
@@ -671,23 +688,27 @@ export async function getFeatureWorkflow(
     .where(eq(prds.featureRequestId, featureRequest.id))
     .orderBy(desc(prds.version));
 
-  const prdIds = prdRows.map((prd) => prd.id);
+  const latestPrd = prdRows[0] ?? null;
+  const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
+    questions,
+    latestPrd
+  );
 
   const requirements =
-    prdIds.length > 0
+    latestPrd
       ? await db
           .select()
           .from(prdRequirements)
-          .where(inArray(prdRequirements.prdId, prdIds))
+          .where(eq(prdRequirements.prdId, latestPrd.id))
           .orderBy(prdRequirements.requirementKey)
       : [];
 
   const tasks =
-    prdIds.length > 0
+    latestPrd
       ? await db
           .select()
           .from(engineeringTasks)
-          .where(inArray(engineeringTasks.prdId, prdIds))
+          .where(eq(engineeringTasks.prdId, latestPrd.id))
           .orderBy(engineeringTasks.createdAt)
       : [];
 
@@ -717,7 +738,16 @@ export async function getFeatureWorkflow(
     unansweredRequiredClarificationQuestions: questions.filter(
       (question) => isRequiredClarification(question.priority) && !question.answer
     ),
-    prd: prdRows[0] ?? null,
+    prd: latestPrd,
+    prdMayBeOutdated,
+    staleClarificationAnswerIds: prdMayBeOutdated
+      ? questions
+          .filter(
+            (question) =>
+              question.answeredAt && latestPrd && question.answeredAt > latestPrd.createdAt
+          )
+          .map((question) => question.id)
+      : [],
     prdRequirements: requirements,
     engineeringTasks: tasks,
     latestAiRuns,

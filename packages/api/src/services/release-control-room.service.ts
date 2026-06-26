@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   aiRuns,
   approvals,
@@ -58,12 +58,26 @@ function isRiskyCoverage(status: string) {
   return status === "partial" || status === "missing" || status === "risky";
 }
 
+function hasClarificationAnswerChangedAfterPrd(
+  clarifications: Array<typeof clarificationQuestions.$inferSelect>,
+  prd: typeof prds.$inferSelect | null | undefined
+) {
+  if (!prd) {
+    return false;
+  }
+
+  return clarifications.some(
+    (question) => question.answeredAt && question.answeredAt > prd.createdAt
+  );
+}
+
 function getReleaseReadinessStatus(input: {
   prd: typeof prds.$inferSelect | null;
   pullRequest: typeof pullRequests.$inferSelect | null;
   qaReview: typeof qaReviews.$inferSelect | null;
   approval: typeof approvals.$inferSelect | null;
   releaseReport: typeof releaseReports.$inferSelect | null;
+  prdMayBeOutdated: boolean;
   riskSummary: {
     unresolvedFindingsCount: number;
     highCriticalFindingsCount: number;
@@ -71,6 +85,10 @@ function getReleaseReadinessStatus(input: {
     missingRequirementsCount: number;
   };
 }) {
+  if (input.prdMayBeOutdated) {
+    return "PRD Outdated";
+  }
+
   if (
     input.approval?.decision === "changes_requested" ||
     input.approval?.decision === "rejected" ||
@@ -114,12 +132,21 @@ function getNextBestAction(input: {
   approval: typeof approvals.$inferSelect | null;
   releaseReport: typeof releaseReports.$inferSelect | null;
   hasUnresolvedRisk: boolean;
+  prdMayBeOutdated: boolean;
 }): { kind: NextActionKind; title: string; why: string } {
   if (!input.prd) {
     return {
       kind: "generate_prd",
       title: "Generate PRD",
       why: "The feature request is captured, but the requirement baseline has not been generated yet."
+    };
+  }
+
+  if (input.prdMayBeOutdated) {
+    return {
+      kind: "generate_prd",
+      title: "Regenerate PRD",
+      why: "A clarification answer changed after the current PRD was generated, so downstream QA and release evidence may be outdated."
     };
   }
 
@@ -362,6 +389,10 @@ export async function getReleaseControlRoom(
   const latestQaReview = qaReviewRows[0] ?? null;
   const latestApproval = approvalRows[0] ?? null;
   const latestReleaseReport = releaseReportRows[0] ?? null;
+  const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
+    questions,
+    latestPrd
+  );
 
   const [requirements, latestSnapshotRows, coverageRows, findingRows] =
     await Promise.all([
@@ -470,6 +501,7 @@ export async function getReleaseControlRoom(
     qaReview: latestQaReview,
     approval: latestApproval,
     releaseReport: latestReleaseReport,
+    prdMayBeOutdated,
     hasUnresolvedRisk
   });
 
@@ -490,24 +522,40 @@ export async function getReleaseControlRoom(
       label: "PRD generated",
       completedAt: latestPrd?.createdAt ?? null,
       current: !latestPrd,
-      blocked: !latestPrd && unansweredRequiredQuestions.length > 0,
-      blockedReason: "Required clarification questions must be answered first.",
+      blocked:
+        (!latestPrd && unansweredRequiredQuestions.length > 0) ||
+        prdMayBeOutdated,
+      blockedReason: prdMayBeOutdated
+        ? "Clarification answers changed after this PRD was generated."
+        : "Required clarification questions must be answered first.",
       actionKind: "generate_prd"
     }),
     buildStep({
       id: "pr",
       label: "PR linked",
       completedAt: latestPullRequest?.createdAt ?? null,
-      current: Boolean(latestPrd && !latestPullRequest),
+      current: Boolean(latestPrd && !prdMayBeOutdated && !latestPullRequest),
       actionKind: "link_pr"
     }),
     buildStep({
       id: "qa",
       label: "AI QA reviewed",
       completedAt: latestQaReview?.createdAt ?? null,
-      current: Boolean(latestPrd && latestPullRequest && latestSnapshot && !latestQaReview),
-      blocked: Boolean(latestPrd && latestPullRequest && !latestSnapshot),
-      blockedReason: "A PR snapshot is required before QA can run.",
+      current: Boolean(
+        latestPrd &&
+          !prdMayBeOutdated &&
+          latestPullRequest &&
+          latestSnapshot &&
+          !latestQaReview
+      ),
+      blocked: Boolean(
+        latestPrd &&
+          latestPullRequest &&
+          (prdMayBeOutdated || !latestSnapshot)
+      ),
+      blockedReason: prdMayBeOutdated
+        ? "Regenerate the PRD before running QA."
+        : "A PR snapshot is required before QA can run.",
       actionKind: "run_qa_review"
     }),
     buildStep({
@@ -651,9 +699,11 @@ export async function getReleaseControlRoom(
       qaReview: latestQaReview,
       approval: latestApproval,
       releaseReport: latestReleaseReport,
+      prdMayBeOutdated,
       riskSummary
     }),
     nextBestAction,
+    prdMayBeOutdated,
     progress,
     riskSummary,
     requirementEvidenceSummary,

@@ -242,16 +242,23 @@ export const featureRequestsRouter = router({
       }
 
       if (input.projectId) {
-        await getScopedProjectOrThrow(
+        const project = await getScopedProjectOrThrow(
           input.projectId,
           workspace.activeOrganization.id
         );
+
+        if (input.clientId && project.clientId !== input.clientId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Project is not linked to this client."
+          });
+        }
       }
 
       const [updated] = await db
         .update(featureRequests)
         .set({
-          projectId: input.projectId,
+          projectId: input.projectId ?? existing.projectId,
           title: input.title,
           description: input.description,
           businessGoal: input.businessGoal,

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   appUsers,
   approvals,
@@ -17,6 +17,7 @@ import {
   qaReviews,
   releaseReports,
   repositories,
+  clarificationQuestions,
   type JsonObject
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
@@ -225,6 +226,30 @@ async function getLatestPrdOrThrow(featureRequestId: string) {
   return prd;
 }
 
+async function throwIfPrdOutdated(input: {
+  featureRequestId: string;
+  prdCreatedAt: Date;
+}) {
+  const [row] = await db
+    .select({ id: clarificationQuestions.id })
+    .from(clarificationQuestions)
+    .where(
+      and(
+        eq(clarificationQuestions.featureRequestId, input.featureRequestId),
+        sql`${clarificationQuestions.answeredAt} > ${input.prdCreatedAt}`
+      )
+    )
+    .limit(1);
+
+  if (row) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "A clarification answer changed after the PRD was generated. Regenerate the PRD and rerun QA before generating a release report."
+    });
+  }
+}
+
 async function getRequirementsOrThrow(prdId: string) {
   const requirements = await db
     .select()
@@ -400,6 +425,10 @@ export async function generateReleaseReport(
     organizationId
   );
   const prd = await getLatestPrdOrThrow(featureRequest.id);
+  await throwIfPrdOutdated({
+    featureRequestId: featureRequest.id,
+    prdCreatedAt: prd.createdAt
+  });
   const requirements = await getRequirementsOrThrow(prd.id);
   const { pullRequest, repository } = await getLinkedPullRequestOrThrow(
     featureRequest.id,

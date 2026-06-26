@@ -2,12 +2,17 @@ import { ensureUserWorkspace } from "@veriflow/api";
 import { FeaturesClient } from "./features-client";
 import { requireWebSession } from "../../server-auth";
 
-export default async function AppFeaturesPage() {
+export default async function AppFeaturesPage({
+  searchParams
+}: {
+  searchParams: Promise<{ projectId?: string }>;
+}) {
   const session = await requireWebSession();
   const workspace = await ensureUserWorkspace({
     user: session.user,
     session: session.session
   });
+  const { projectId } = await searchParams;
 
   return (
     <main className="min-h-screen bg-neutral-950 px-6 py-10 text-neutral-100">
@@ -24,7 +29,7 @@ export default async function AppFeaturesPage() {
             context.
           </p>
         </div>
-        <FeaturesClient />
+        <FeaturesClient initialProjectId={projectId} />
       </section>
     </main>
   );

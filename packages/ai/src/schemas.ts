@@ -28,7 +28,7 @@ export const PRDOutputSchema = z
     title: z.string().min(1),
     problem: z.string().min(1),
     goals: z.array(z.string().min(1)).min(1),
-    nonGoals: z.array(z.string().min(1)).default([]),
+    nonGoals: z.array(z.string().min(1)),
     userStories: z
       .array(
         z.object({
@@ -36,11 +36,10 @@ export const PRDOutputSchema = z
           want: z.string().min(1),
           benefit: z.string().min(1)
         })
-      )
-      .default([]),
+      ),
     requirements: z.array(PRDRequirementSchema).min(1),
-    edgeCases: z.array(z.string().min(1)).default([]),
-    risks: z.array(z.string().min(1)).default([])
+    edgeCases: z.array(z.string().min(1)),
+    risks: z.array(z.string().min(1))
   })
   .refine((output) => {
     const keys = output.requirements.map((requirement) => requirement.requirementKey);
@@ -86,12 +85,12 @@ export const EngineeringTasksOutputSchema = z.object({
 export const RequirementCoverageOutputSchema = z.object({
   requirementKey: z.string().regex(/^REQ-\d{3}$/),
   status: z.enum(["covered", "partially_covered", "missing", "risky"]),
-  evidence: z.array(z.string().min(1)).default([]),
-  concern: z.string().min(1).optional()
+  evidence: z.array(z.string().min(1)),
+  concern: z.string().min(1).nullable()
 });
 
 export const QAFindingOutputSchema = z.object({
-  requirementKey: z.string().regex(/^REQ-\d{3}$/).optional(),
+  requirementKey: z.string().regex(/^REQ-\d{3}$/).nullable(),
   severity: z.enum(["low", "medium", "high", "critical"]),
   category: z.enum([
     "missing_requirement",
@@ -105,9 +104,9 @@ export const QAFindingOutputSchema = z.object({
   ]),
   title: z.string().min(1),
   description: z.string().min(1),
-  file: z.string().min(1).optional(),
-  line: z.number().int().positive().optional(),
-  suggestedFix: z.string().min(1).optional()
+  file: z.string().min(1).nullable(),
+  line: z.number().int().positive().nullable(),
+  suggestedFix: z.string().min(1).nullable()
 });
 
 export const QAReviewOutputSchema = z.object({
@@ -116,7 +115,7 @@ export const QAReviewOutputSchema = z.object({
   confidenceScore: z.number().int().min(0).max(100),
   summary: z.string().min(1),
   coverage: z.array(RequirementCoverageOutputSchema).min(1),
-  findings: z.array(QAFindingOutputSchema).default([])
+  findings: z.array(QAFindingOutputSchema)
 });
 
 export type ClarificationQuestionsOutput = z.infer<
