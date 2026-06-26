@@ -147,7 +147,7 @@ function getNextBestAction(input: {
     return {
       kind: "link_pr",
       title: "Link GitHub PR",
-      why: "A PRD exists. Link the implementation PR so Veriflow can collect code evidence."
+      why: "A PRD exists. Link the implementation PR so MergeMint can collect code evidence."
     };
   }
 

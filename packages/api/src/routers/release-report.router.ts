@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   generateDeveloperFixReport,
+  generateInternalReleaseReport,
   generateReleaseReport,
   getLatestReleaseReportForFeature,
   getReleaseReportById,
@@ -25,11 +26,21 @@ export const releaseReportRouter = router({
     )
     .mutation(({ ctx, input }) => generateDeveloperFixReport(ctx, input)),
 
+  generateInternalRelease: protectedProcedure
+    .input(
+      z.object({
+        featureRequestId: z.string().uuid()
+      })
+    )
+    .mutation(({ ctx, input }) => generateInternalReleaseReport(ctx, input)),
+
   getLatestForFeature: protectedProcedure
     .input(
       z.object({
         featureRequestId: z.string().uuid(),
-        reportType: z.enum(["client_delivery", "developer_fix"]).optional()
+        reportType: z
+          .enum(["client_delivery", "developer_fix", "internal_release"])
+          .optional()
       })
     )
     .query(({ ctx, input }) =>

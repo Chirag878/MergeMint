@@ -10,7 +10,7 @@ export default async function DashboardPage() {
           Dashboard
         </p>
         <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-          Welcome to Veriflow
+          Welcome to MergeMint
         </h1>
         <p className="mt-4 text-neutral-400">
           Signed in as {session.user.name || session.user.email}.

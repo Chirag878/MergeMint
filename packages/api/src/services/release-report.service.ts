@@ -31,7 +31,10 @@ type ProtectedContext = TRPCContext & {
   session: NonNullable<TRPCContext["session"]>;
 };
 
-export type ReleaseReportType = "client_delivery" | "developer_fix";
+export type ReleaseReportType =
+  | "client_delivery"
+  | "developer_fix"
+  | "internal_release";
 
 type ReportVisibility = "public" | "private" | "internal";
 
@@ -171,9 +174,32 @@ export type DeveloperFixReportData = {
   generatedAt: string;
 };
 
+export type InternalReleaseReportData = {
+  reportType: "internal_release";
+  audience: "internal";
+  visibility: "internal";
+  reportStatus: string;
+  summary: string;
+  releaseReadinessVerdict: "Ready to Merge" | "Ready for Release" | "Approved with Risks";
+  mergeRecommendation: string;
+  technicalRisks: string[];
+  feature: ClientDeliveryReportData["feature"];
+  project: ClientDeliveryReportData["project"];
+  prd: ClientDeliveryReportData["prd"];
+  requirements: ClientDeliveryReportData["requirements"];
+  pullRequest: ClientDeliveryReportData["pullRequest"];
+  qaReview: ClientDeliveryReportData["qaReview"];
+  coverage: ClientDeliveryReportData["coverage"];
+  findings: ClientDeliveryReportData["findings"];
+  approval: ClientDeliveryReportData["approval"];
+  timeline: ReportTimelineItem[];
+  generatedAt: string;
+};
+
 export type ReleaseReportData =
   | ClientDeliveryReportData
-  | DeveloperFixReportData;
+  | DeveloperFixReportData
+  | InternalReleaseReportData;
 
 type PrivateReleaseReport = Omit<
   typeof releaseReports.$inferSelect,
@@ -258,6 +284,23 @@ function getReportType(report: typeof releaseReports.$inferSelect) {
 
 function isClientApprovedDecision(decision: string) {
   return decision === "approved" || decision === "approved_with_risk";
+}
+
+function projectHasClient(input: {
+  client: typeof clients.$inferSelect | null;
+  project: typeof projects.$inferSelect;
+}) {
+  return Boolean(input.client || input.project.clientId || input.project.clientName);
+}
+
+function getInternalReleaseVerdict(
+  decision: string
+): InternalReleaseReportData["releaseReadinessVerdict"] {
+  if (decision === "approved_with_risk") {
+    return "Approved with Risks";
+  }
+
+  return "Ready to Merge";
 }
 
 function isRejectedDecision(decision: string | null | undefined) {
@@ -637,6 +680,17 @@ function coverageSummaryText(
   return `${covered} covered, ${partial} partial, ${missing} missing, ${risky} risky.`;
 }
 
+function technicalRiskList(input: {
+  findings: ClientDeliveryReportData["findings"];
+  approvalRemainingRisks: string[];
+}) {
+  const findingRisks = input.findings
+    .filter((finding) => isOpenFindingStatus(finding.status))
+    .map((finding) => `${finding.severity}: ${finding.title}`);
+
+  return [...input.approvalRemainingRisks, ...findingRisks];
+}
+
 async function writeAuditLog(input: {
   organizationId: string;
   actorId: string;
@@ -707,6 +761,14 @@ export async function generateReleaseReport(
       code: "BAD_REQUEST",
       message:
         "Client Delivery Report can only be generated after approval. Generate a Developer Fix Report for rejected or needs-fixes work."
+    });
+  }
+
+  if (!projectHasClient({ client, project })) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "This project has no client. Generate an Internal Release Report instead."
     });
   }
 
@@ -798,6 +860,173 @@ export async function generateReleaseReport(
     organizationId,
     actorId: workspace.appUser.id,
     action: "release_report_generated",
+    entityType: "release_report",
+    entityId: report.id,
+    metadata: toJsonObject({
+      featureRequestId: featureRequest.id,
+      pullRequestId: pullRequest.id,
+      approvalId: approval.id,
+      shareToken: report.shareToken
+    })
+  });
+
+  return toTypedReport(report);
+}
+
+export async function generateInternalReleaseReport(
+  ctx: ProtectedContext,
+  input: {
+    featureRequestId: string;
+  }
+) {
+  const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+  assertRoleCan(workspace.membership.role, "project:write");
+
+  const organizationId = workspace.activeOrganization.id;
+  const { featureRequest, project, client } = await getScopedFeatureOrThrow(
+    input.featureRequestId,
+    organizationId
+  );
+
+  if (projectHasClient({ client, project })) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "This project has a client. Generate a Client Delivery Report instead."
+    });
+  }
+
+  const prd = await getLatestPrdOrThrow(featureRequest.id);
+  try {
+    await throwIfPrdOutdated({
+      featureRequestId: featureRequest.id,
+      prdCreatedAt: prd.createdAt
+    });
+  } catch (error) {
+    if (error instanceof TRPCError) {
+      throw error;
+    }
+
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Your PRD is outdated or could not be validated. Please regenerate the PRD and try again.",
+      cause: error
+    });
+  }
+
+  const requirements = await getRequirementsOrThrow(prd.id);
+  const { pullRequest, repository } = await getLinkedPullRequestOrThrow(
+    featureRequest.id,
+    organizationId
+  );
+  const snapshot = await getLatestSnapshotOrThrow(pullRequest.id);
+  const qaReviewBundle = await getLatestQaReviewOrThrow(
+    featureRequest.id,
+    organizationId
+  );
+  const { approval, approvedBy } = await getLatestApprovalOrThrow(
+    featureRequest.id,
+    organizationId
+  );
+
+  if (!isClientApprovedDecision(approval.decision)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Internal Release Report can only be generated after approval. Generate a Developer Fix Report for rejected or needs-fixes work."
+    });
+  }
+
+  const generatedAt = new Date();
+  const mappedRequirements = mapRequirements(requirements);
+  const mappedCoverage = mapCoverage(qaReviewBundle.coverage);
+  const mappedFindings = mapFindings(qaReviewBundle.findings);
+  const verdict = getInternalReleaseVerdict(approval.decision);
+  const technicalRisks = technicalRiskList({
+    findings: mappedFindings,
+    approvalRemainingRisks: approval.remainingRisks
+  });
+  const reportData: InternalReleaseReportData = {
+    reportType: "internal_release",
+    audience: "internal",
+    visibility: "internal",
+    reportStatus: getReportStatusFromDecision(approval.decision),
+    summary: `Internal release review for ${featureRequest.title}. QA coverage: ${coverageSummaryText(mappedCoverage)}`,
+    releaseReadinessVerdict: verdict,
+    mergeRecommendation:
+      approval.decision === "approved_with_risk"
+        ? "Approved with documented risks. Review the risk notes before merge or release."
+        : "Ready to merge or release based on saved requirement coverage, PR evidence, QA review, and human approval.",
+    technicalRisks,
+    feature: {
+      id: featureRequest.id,
+      title: featureRequest.title,
+      summary: featureRequest.description,
+      status: featureRequest.status
+    },
+    project: {
+      id: project.id,
+      name: project.name
+    },
+    prd: {
+      id: prd.id,
+      title: prd.title,
+      problem: prd.problem,
+      goals: prd.goals,
+      nonGoals: prd.nonGoals
+    },
+    requirements: mappedRequirements,
+    pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
+    qaReview: mapQaReview(qaReviewBundle.review),
+    coverage: mappedCoverage,
+    findings: mappedFindings,
+    approval: {
+      id: approval.id,
+      decision: approval.decision,
+      note: approval.note,
+      remainingRisks: approval.remainingRisks,
+      approvedBy,
+      createdAt: approval.createdAt.toISOString()
+    },
+    timeline: buildTimeline({
+      featureCreatedAt: featureRequest.createdAt,
+      prdCreatedAt: prd.createdAt,
+      firstRequirementCreatedAt: requirements[0]?.createdAt ?? null,
+      pullRequestCreatedAt: pullRequest.createdAt,
+      qaReviewCreatedAt: qaReviewBundle.review.createdAt,
+      approvalCreatedAt: approval.createdAt,
+      generatedAt
+    }),
+    generatedAt: generatedAt.toISOString()
+  };
+
+  const [report] = await db
+    .insert(releaseReports)
+    .values({
+      organizationId,
+      projectId: project.id,
+      featureRequestId: featureRequest.id,
+      pullRequestId: pullRequest.id,
+      approvalId: approval.id,
+      title: `Internal Release Report - ${featureRequest.title}`,
+      status: "generated",
+      shareToken: createShareToken(),
+      reportData: toJsonObject(reportData),
+      readinessScore: qaReviewBundle.review.readinessScore,
+      generatedBy: workspace.appUser.id,
+      generatedAt
+    })
+    .returning();
+
+  if (!report) {
+    throw new Error("Unable to generate internal release report.");
+  }
+
+  await writeAuditLog({
+    organizationId,
+    actorId: workspace.appUser.id,
+    action: "internal_release_report_generated",
     entityType: "release_report",
     entityId: report.id,
     metadata: toJsonObject({

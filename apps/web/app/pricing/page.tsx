@@ -8,7 +8,7 @@ export default function PricingPage() {
     <main className="min-h-screen bg-[#060706] px-5 py-10 text-neutral-100 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-4xl">
         <Link href="/" className="text-sm text-neutral-500 transition hover:text-white">
-          Back to Veriflow
+          Back to MergeMint
         </Link>
 
         <div className="mt-10 rounded-lg border border-amber-300/20 bg-[linear-gradient(135deg,rgba(245,158,11,0.14),rgba(16,185,129,0.1),rgba(255,255,255,0.03))] p-6 shadow-2xl shadow-black/30 sm:p-8 lg:p-10">

@@ -52,7 +52,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-neutral-950 px-6 py-10 text-neutral-100">
       <section className="w-full max-w-md rounded-xl border border-neutral-800 bg-neutral-900 p-8 shadow-2xl">
         <p className="text-sm font-medium uppercase tracking-[0.28em] text-blue-400">
-          Veriflow
+          MergeMint
         </p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight">
           Sign in to verify your next release.

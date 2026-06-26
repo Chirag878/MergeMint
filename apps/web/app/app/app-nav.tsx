@@ -18,9 +18,9 @@ export function AppNav() {
       <nav className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
         <Link href="/app" className="flex items-center gap-3">
           <span className="grid h-9 w-9 place-items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 text-sm font-semibold text-emerald-200">
-            VF
+            MM
           </span>
-          <span className="text-base font-semibold tracking-tight">Veriflow</span>
+          <span className="text-base font-semibold tracking-tight">MergeMint</span>
         </Link>
         <div className="flex flex-wrap gap-2 text-sm font-semibold">
           {navItems.map(([label, href]) => {

@@ -84,12 +84,12 @@ const faqs = [
   {
     question: "Is this a GitHub App?",
     answer:
-      "Veriflow is built around GitHub PR evidence and can support GitHub-connected workflows. You can also run a manual pilot flow before deeper installation."
+      "MergeMint is built around GitHub PR evidence and can support GitHub-connected workflows. You can also run a manual pilot flow before deeper installation."
   },
   {
-    question: "Does Veriflow merge PRs?",
+    question: "Does MergeMint merge PRs?",
     answer:
-      "No. GitHub remains the source of truth for merging. Veriflow verifies, approves, and generates delivery proof."
+      "No. GitHub remains the source of truth for merging. MergeMint verifies, approves, and generates delivery proof."
   },
   {
     question: "Who is this for?",
@@ -127,10 +127,10 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 text-sm font-semibold text-emerald-200">
-              VF
+              MM
             </span>
             <span className="text-base font-semibold tracking-tight">
-              Veriflow
+              MergeMint
             </span>
           </Link>
 
@@ -179,10 +179,10 @@ export default function HomePage() {
             Client delivery proof for modern software teams
           </p>
           <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[1.02] tracking-tight text-white sm:text-6xl lg:text-7xl">
-            Verify every PR before release.
+            MergeMint verifies every PR against the original requirement before you ship or share it.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-neutral-300">
-            Veriflow helps agencies and product teams prove whether a GitHub PR
+            MergeMint helps agencies and product teams prove whether a GitHub PR
             satisfies the original requirements, with PR evidence, AI QA review,
             approval history, and shareable release reports.
           </p>
@@ -219,7 +219,7 @@ export default function HomePage() {
           <SectionHeader
             eyebrow="Product preview"
             title="A proof system stakeholders can understand."
-            copy="Veriflow turns the messy middle of delivery into a clean, inspectable trail from request to release."
+            copy="MergeMint turns the messy middle of delivery into a clean, inspectable trail from request to release."
           />
           <div className="mt-10 grid gap-4 lg:grid-cols-2">
             {personaCards.map((card) => (
@@ -368,7 +368,7 @@ export default function HomePage() {
                 Founding Pilot ₹2,999
               </h2>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-neutral-300">
-                A guided way to prove Veriflow on a real client or product
+                A guided way to prove MergeMint on a real client or product
                 delivery before rolling it across the team.
               </p>
             </div>
@@ -396,7 +396,7 @@ export default function HomePage() {
           <SectionHeader
             eyebrow="FAQ"
             title="Clear answers before your first pilot."
-            copy="Veriflow is designed to sit beside your existing delivery flow, not replace the tools your team already trusts."
+            copy="MergeMint is designed to sit beside your existing delivery flow, not replace the tools your team already trusts."
           />
           <div className="mt-10 grid gap-4 lg:grid-cols-2">
             {faqs.map((faq) => (
@@ -418,7 +418,7 @@ export default function HomePage() {
 
       <footer className="border-t border-white/10 px-5 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 text-sm text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>Veriflow verifies delivery proof before release.</p>
+          <p>MergeMint verifies delivery proof before release.</p>
           <div className="flex gap-4">
             <Link href="/login" className="transition hover:text-white">
               Login

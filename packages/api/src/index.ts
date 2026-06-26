@@ -8,6 +8,7 @@ export {
   getReleaseReportByShareToken,
   type ClientDeliveryReportData,
   type DeveloperFixReportData,
+  type InternalReleaseReportData,
   type PublicReleaseReport,
   type ReleaseReportData
 } from "./services/release-report.service";

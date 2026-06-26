@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Veriflow - Verify every PR before release",
+  title: "MergeMint - Requirement-to-release proof for modern teams",
   description:
-    "Client delivery proof for requirements, GitHub PR evidence, AI QA review, approval, and shareable release reports.",
+    "MergeMint verifies every PR against the original requirement before you ship or share it.",
 };
 
 export default function RootLayout({

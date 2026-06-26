@@ -261,7 +261,7 @@ function OnboardingChoice({
   return (
     <section className="vf-fade-up rounded-lg border border-emerald-300/20 bg-emerald-300/[0.045] p-6 lg:p-8">
       <p className="text-sm font-medium uppercase tracking-[0.24em] text-emerald-200">
-        Choose how you want to use Veriflow
+        Choose how you want to use MergeMint
       </p>
       <h2 className="mt-3 text-2xl font-semibold text-white">
         Choose how you want to start

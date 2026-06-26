@@ -60,7 +60,7 @@ type FeatureDetailTab =
   | "approval"
   | "report"
   | "timeline"
-  | "debug";
+  | "token_usage";
 
 function getFriendlyQaRunError(message: string | undefined) {
   if (!message) {
@@ -208,7 +208,7 @@ const featureDetailTabs: Array<{
   { id: "approval", label: "Approval" },
   { id: "report", label: "Report" },
   { id: "timeline", label: "Timeline" },
-  { id: "debug", label: "Debug" }
+  { id: "token_usage", label: "Token Usage" }
 ];
 
 export function FeatureDetailClient({
@@ -252,6 +252,10 @@ export function FeatureDetailClient({
   const latestDeveloperFixReport = trpc.releaseReport.getLatestForFeature.useQuery({
     featureRequestId,
     reportType: "developer_fix"
+  });
+  const latestInternalReleaseReport = trpc.releaseReport.getLatestForFeature.useQuery({
+    featureRequestId,
+    reportType: "internal_release"
   });
   const invalidateReleaseControlRoom = async () => {
     await utils.featureRequests.getReleaseControlRoom.invalidate({
@@ -344,6 +348,16 @@ export function FeatureDetailClient({
         await invalidateReleaseControlRoom();
       }
     });
+  const generateInternalReleaseReport =
+    trpc.releaseReport.generateInternalRelease.useMutation({
+      onSuccess: async () => {
+        await utils.releaseReport.getLatestForFeature.invalidate({
+          featureRequestId,
+          reportType: "internal_release"
+        });
+        await invalidateReleaseControlRoom();
+      }
+    });
 
   const feature = workflow.data?.featureRequest;
   const clarificationQuestions =
@@ -364,6 +378,11 @@ export function FeatureDetailClient({
   const hasPrd = Boolean(prd);
   const hasTasks = engineeringTasks.length > 0;
   const prdMayBeOutdated = workflow.data?.prdMayBeOutdated ?? false;
+  const projectHasClient = Boolean(
+    controlRoom.data?.client ||
+      controlRoom.data?.project.clientId ||
+      controlRoom.data?.project.clientName
+  );
   const prdBlockedByClarifications =
     !hasPrd && unansweredRequiredClarificationQuestions.length > 0;
 
@@ -539,10 +558,16 @@ export function FeatureDetailClient({
           onGenerateReport={() => {
             openTab("report", "release-report");
             if (!prdMayBeOutdated) {
-              generateReleaseReport.mutate({ featureRequestId });
+              if (projectHasClient) {
+                generateReleaseReport.mutate({ featureRequestId });
+              } else {
+                generateInternalReleaseReport.mutate({ featureRequestId });
+              }
             }
           }}
-          isGeneratingReport={generateReleaseReport.isPending}
+          isGeneratingReport={
+            generateReleaseReport.isPending || generateInternalReleaseReport.isPending
+          }
         />
       ) : null}
 
@@ -954,14 +979,19 @@ export function FeatureDetailClient({
         latestQaReview={latestQaReview.data}
         prdMayBeOutdated={prdMayBeOutdated}
         latestApproval={latestApproval.data}
+        projectHasClient={projectHasClient}
         latestClientReport={latestClientDeliveryReport.data}
         latestDeveloperFixReport={latestDeveloperFixReport.data}
+        latestInternalReport={latestInternalReleaseReport.data}
         isLoadingReport={
-          latestClientDeliveryReport.isLoading || latestDeveloperFixReport.isLoading
+          latestClientDeliveryReport.isLoading ||
+          latestDeveloperFixReport.isLoading ||
+          latestInternalReleaseReport.isLoading
         }
         reportError={
           latestClientDeliveryReport.error?.message ??
-          latestDeveloperFixReport.error?.message
+          latestDeveloperFixReport.error?.message ??
+          latestInternalReleaseReport.error?.message
         }
         onGenerateClientReport={() =>
           generateReleaseReport.mutate({ featureRequestId })
@@ -969,10 +999,15 @@ export function FeatureDetailClient({
         onGenerateDeveloperFixReport={() =>
           generateDeveloperFixReport.mutate({ featureRequestId })
         }
+        onGenerateInternalReport={() =>
+          generateInternalReleaseReport.mutate({ featureRequestId })
+        }
         isGeneratingClientReport={generateReleaseReport.isPending}
         isGeneratingDeveloperFixReport={generateDeveloperFixReport.isPending}
+        isGeneratingInternalReport={generateInternalReleaseReport.isPending}
         clientGenerateError={generateReleaseReport.error?.message}
         developerGenerateError={generateDeveloperFixReport.error?.message}
+        internalGenerateError={generateInternalReleaseReport.error?.message}
       />
       ) : null}
 
@@ -980,7 +1015,7 @@ export function FeatureDetailClient({
         <TrustTimeline timeline={controlRoom.data.timeline} />
       ) : null}
 
-      {activeTab === "debug" ? <AiRunDebug runs={latestAiRuns} /> : null}
+      {activeTab === "token_usage" ? <AiRunUsage runs={latestAiRuns} /> : null}
     </>
   );
 }
@@ -1685,11 +1720,13 @@ function HumanApprovalPanel({
 
 function ReleaseReportPanel({
   report,
+  reportLabel,
   canGenerateReport,
   onGenerateReport,
   isGeneratingReport
 }: {
   report: ReleaseControlRoomView["releaseReport"];
+  reportLabel: string;
   canGenerateReport: boolean;
   onGenerateReport: () => void;
   isGeneratingReport: boolean;
@@ -1698,7 +1735,7 @@ function ReleaseReportPanel({
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-base font-medium text-neutral-100">
-          Client Delivery Report
+          {reportLabel}
         </h3>
         {report ? <StatusBadge status={report.status} /> : null}
       </div>
@@ -1727,8 +1764,8 @@ function ReleaseReportPanel({
         <div className="mt-4">
           <p className="text-sm text-neutral-500">
             {canGenerateReport
-              ? "No client delivery report has been generated."
-              : "Run QA and submit approval before generating a client delivery report."}
+              ? `No ${reportLabel.toLowerCase()} has been generated.`
+              : `Run QA and submit approval before generating a ${reportLabel.toLowerCase()}.`}
           </p>
           <button
             type="button"
@@ -1736,7 +1773,7 @@ function ReleaseReportPanel({
             disabled={!canGenerateReport || isGeneratingReport}
             className="mt-3 rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isGeneratingReport ? "Generating..." : "Generate Client Delivery Report"}
+            {isGeneratingReport ? "Generating..." : `Generate ${reportLabel}`}
           </button>
         </div>
       )}
@@ -1863,13 +1900,16 @@ function StringList({
   );
 }
 
-function AiRunDebug({ runs }: { runs: AiRunView[] }) {
+function AiRunUsage({ runs }: { runs: AiRunView[] }) {
   return (
     <section
-      id="ai-run-debug"
+      id="ai-run-usage"
       className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
     >
-      <h2 className="text-lg font-medium">AI run debug</h2>
+      <h2 className="text-lg font-medium">Token Usage</h2>
+      <p className="mt-1 text-sm text-neutral-500">
+        Safe model and token usage metadata for this feature.
+      </p>
       {runs.length > 0 ? (
         <div className="mt-4 space-y-3">
           {runs.map((run: AiRunView) => (
@@ -1896,9 +1936,6 @@ function AiRunDebug({ runs }: { runs: AiRunView[] }) {
                   No token usage recorded.
                 </p>
               )}
-              {run.error ? (
-                <p className="mt-3 text-sm text-red-300">{run.error}</p>
-              ) : null}
             </article>
           ))}
         </div>
@@ -2063,7 +2100,7 @@ function GitHubPullRequestSection({
 
           <details className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
             <summary className="cursor-pointer text-sm font-medium text-neutral-300">
-              Snapshot debug
+              Snapshot details
             </summary>
             <div className="mt-3 grid gap-2 text-sm text-neutral-500 md:grid-cols-2">
               <p>Diff length: {data.diffTextLength}</p>
@@ -2136,7 +2173,7 @@ type ReleaseReportView = {
   generatedAt: Date | string | null;
   createdAt: Date | string;
   reportData: {
-    reportType?: "client_delivery" | "developer_fix";
+    reportType?: "client_delivery" | "developer_fix" | "internal_release";
     audience?: string;
     visibility?: string;
     reportStatus?: string;
@@ -2627,30 +2664,40 @@ function ReleaseReportSection({
   latestQaReview,
   prdMayBeOutdated,
   latestApproval,
+  projectHasClient,
   latestClientReport,
   latestDeveloperFixReport,
+  latestInternalReport,
   isLoadingReport,
   reportError,
   onGenerateClientReport,
   onGenerateDeveloperFixReport,
+  onGenerateInternalReport,
   isGeneratingClientReport,
   isGeneratingDeveloperFixReport,
+  isGeneratingInternalReport,
   clientGenerateError,
-  developerGenerateError
+  developerGenerateError,
+  internalGenerateError
 }: {
   latestQaReview: QAReviewBundle | null | undefined;
   prdMayBeOutdated: boolean;
   latestApproval: ApprovalView | null | undefined;
+  projectHasClient: boolean;
   latestClientReport: ReleaseReportView | null | undefined;
   latestDeveloperFixReport: ReleaseReportView | null | undefined;
+  latestInternalReport: ReleaseReportView | null | undefined;
   isLoadingReport: boolean;
   reportError?: string;
   onGenerateClientReport: () => void;
   onGenerateDeveloperFixReport: () => void;
+  onGenerateInternalReport: () => void;
   isGeneratingClientReport: boolean;
   isGeneratingDeveloperFixReport: boolean;
+  isGeneratingInternalReport: boolean;
   clientGenerateError?: string;
   developerGenerateError?: string;
+  internalGenerateError?: string;
 }) {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -2672,8 +2719,15 @@ function ReleaseReportSection({
   const canGenerateClient =
     Boolean(latestQaReview && latestApproval) &&
     clientApproved &&
+    projectHasClient &&
     !prdMayBeOutdated &&
     !isGeneratingClientReport;
+  const canGenerateInternal =
+    Boolean(latestQaReview && latestApproval) &&
+    clientApproved &&
+    !projectHasClient &&
+    !prdMayBeOutdated &&
+    !isGeneratingInternalReport;
 
   async function copyReportLink(path: string, label: string) {
     setCopyError(null);
@@ -2722,10 +2776,11 @@ function ReleaseReportSection({
           report={latestDeveloperFixReport}
           primaryLabel={
             latestDeveloperFixReport
-              ? "Send Fix Report to Developer"
+              ? "Share Fix Report"
               : "Generate Developer Fix Report"
           }
-          copyLabel="Copy fix report link"
+          openLabel="Open Fix Report"
+          copyLabel="Copy Fix Report Link"
           copied={copiedLink === "developer_fix"}
           disabled={!canGenerateDeveloperFix}
           isGenerating={isGeneratingDeveloperFixReport}
@@ -2741,38 +2796,71 @@ function ReleaseReportSection({
                 ? "Available when QA finds gaps or a reviewer requests fixes."
                 : prdMayBeOutdated
                   ? "Regenerate PRD and rerun QA first."
-                  : undefined
+                : undefined
           }
         />
 
-        <ReportActionCard
-          title="Client Delivery Report"
-          description="This report summarizes what was requested, verified, and approved for delivery."
-          report={latestClientReport}
-          primaryLabel={
-            latestClientReport
-              ? "Generate New Client Delivery Report"
-              : "Generate Client Delivery Report"
-          }
-          copyLabel="Copy client report link"
-          copied={copiedLink === "client_delivery"}
-          disabled={!canGenerateClient}
-          isGenerating={isGeneratingClientReport}
-          generateError={clientGenerateError}
-          onGenerate={onGenerateClientReport}
-          onCopy={(path) => copyReportLink(path, "client_delivery")}
-          unavailableText={
-            !latestQaReview
-              ? "Run AI QA review first."
-              : !latestApproval
-                ? "Submit an approval decision first."
-                : !clientApproved
-                  ? "Blocked because this PR is rejected or needs fixes."
-                  : prdMayBeOutdated
-                    ? "Regenerate PRD and rerun QA first."
-                    : undefined
-          }
-        />
+        {projectHasClient ? (
+          <ReportActionCard
+            title="Client Delivery Report"
+            description="This report summarizes what was requested, verified, and approved for delivery."
+            report={latestClientReport}
+            primaryLabel={
+              latestClientReport
+                ? "Share Client Report"
+                : "Generate Client Delivery Report"
+            }
+            openLabel="Open Client Report"
+            copyLabel="Copy Client Report Link"
+            copied={copiedLink === "client_delivery"}
+            disabled={!canGenerateClient}
+            isGenerating={isGeneratingClientReport}
+            generateError={clientGenerateError}
+            onGenerate={onGenerateClientReport}
+            onCopy={(path) => copyReportLink(path, "client_delivery")}
+            unavailableText={
+              !latestQaReview
+                ? "Run AI QA review first."
+                : !latestApproval
+                  ? "Submit an approval decision first."
+                  : !clientApproved
+                    ? "Blocked because this PR is rejected or needs fixes."
+                    : prdMayBeOutdated
+                      ? "Regenerate PRD and rerun QA first."
+                      : undefined
+            }
+          />
+        ) : (
+          <ReportActionCard
+            title="Internal Release Report"
+            description="This report explains why this PR is ready to merge, ship, or release."
+            report={latestInternalReport}
+            primaryLabel={
+              latestInternalReport
+                ? "Share Internal Report"
+                : "Generate Internal Release Report"
+            }
+            openLabel="Open Internal Report"
+            copyLabel="Copy Internal Report Link"
+            copied={copiedLink === "internal_release"}
+            disabled={!canGenerateInternal}
+            isGenerating={isGeneratingInternalReport}
+            generateError={internalGenerateError}
+            onGenerate={onGenerateInternalReport}
+            onCopy={(path) => copyReportLink(path, "internal_release")}
+            unavailableText={
+              !latestQaReview
+                ? "Run AI QA review first."
+                : !latestApproval
+                  ? "Submit an approval decision first."
+                  : !clientApproved
+                    ? "Blocked because this PR is rejected or needs fixes."
+                    : prdMayBeOutdated
+                      ? "Regenerate PRD and rerun QA first."
+                      : undefined
+            }
+          />
+        )}
       </div>
     </section>
   );
@@ -2783,6 +2871,7 @@ function ReportActionCard({
   description,
   report,
   primaryLabel,
+  openLabel,
   copyLabel,
   copied,
   disabled,
@@ -2796,6 +2885,7 @@ function ReportActionCard({
   description: string;
   report: ReleaseReportView | null | undefined;
   primaryLabel: string;
+  openLabel: string;
   copyLabel: string;
   copied: boolean;
   disabled: boolean;
@@ -2857,7 +2947,7 @@ function ReportActionCard({
               target="_blank"
               className="rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
             >
-              Open report
+              {openLabel}
             </Link>
             <button
               type="button"
@@ -2962,7 +3052,27 @@ function isRequiredQuestionPriority(priority: string) {
 }
 
 function formatQuestionPriority(priority: string) {
-  return isRequiredQuestionPriority(priority) ? "must_answer" : "nice_to_have";
+  const labels: Record<string, string> = {
+    must_answer: "Must have",
+    must_have: "Must have",
+    nice_to_have: "Nice to have",
+    should_have: "Should have",
+    could_have: "Could have",
+    wont_have: "Won't have",
+    required: "Required",
+    optional: "Optional",
+    high: "Required",
+    urgent: "Required",
+    medium: "Nice to have"
+  };
+
+  return (
+    labels[priority] ??
+    priority
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ")
+  );
 }
 
 function formatApprovalDecision(decision: string) {

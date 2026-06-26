@@ -190,7 +190,7 @@ function mockClarifications(
         priority: "nice_to_have"
       },
       {
-        question: `What edge cases or failure states should Veriflow treat as unacceptable for "${context.title}"?`,
+        question: `What edge cases or failure states should MergeMint treat as unacceptable for "${context.title}"?`,
         reason:
           "Known failure states help the QA review distinguish acceptable gaps from release-blocking defects.",
         priority: "nice_to_have"

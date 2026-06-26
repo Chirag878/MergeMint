@@ -1,4 +1,4 @@
-export const APP_NAME = "Veriflow";
+export const APP_NAME = "MergeMint";
 
 export const WORKFLOW_STEPS = [
   "feature_request",
