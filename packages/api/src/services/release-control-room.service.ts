@@ -261,7 +261,8 @@ function addTimelineItem(
 
 export async function getReleaseControlRoom(
   ctx: ProtectedContext,
-  featureRequestId: string
+  featureRequestId: string,
+  options: { includeTimeline?: boolean } = {}
 ) {
   const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
   assertRoleCan(workspace.membership.role, "project:read");
@@ -359,21 +360,30 @@ export async function getReleaseControlRoom(
         )
       )
       .orderBy(desc(releaseReports.createdAt)),
-    db
-      .select({
-        id: aiRuns.id,
-        agentType: aiRuns.agentType,
-        status: aiRuns.status,
-        createdAt: aiRuns.createdAt
-      })
-      .from(aiRuns)
-      .where(
-        and(
-          eq(aiRuns.featureRequestId, scoped.feature.id),
-          eq(aiRuns.organizationId, organizationId)
+    options.includeTimeline
+      ? db
+          .select({
+            id: aiRuns.id,
+            agentType: aiRuns.agentType,
+            status: aiRuns.status,
+            createdAt: aiRuns.createdAt
+          })
+          .from(aiRuns)
+          .where(
+            and(
+              eq(aiRuns.featureRequestId, scoped.feature.id),
+              eq(aiRuns.organizationId, organizationId)
+            )
+          )
+          .orderBy(desc(aiRuns.createdAt))
+      : Promise.resolve(
+          [] as Array<{
+            id: string;
+            agentType: string;
+            status: string;
+            createdAt: Date;
+          }>
         )
-      )
-      .orderBy(desc(aiRuns.createdAt))
   ]);
 
   const latestPrd = prdRows[0] ?? null;
@@ -574,94 +584,96 @@ export async function getReleaseControlRoom(
     source: TimelineSource;
     description: string;
   }> = [];
-  addTimelineItem(timeline, {
-    title: "Feature created",
-    timestamp: scoped.feature.createdAt,
-    source: "user",
-    description: "The original client feature request was captured."
-  });
-  addTimelineItem(timeline, {
-    title: "Clarification questions generated",
-    timestamp: questions[0]?.createdAt,
-    source: "AI",
-    description: `${questions.length} clarification question${
-      questions.length === 1 ? "" : "s"
-    } generated.`
-  });
-  addTimelineItem(timeline, {
-    title: "PRD generated",
-    timestamp: latestPrd?.createdAt,
-    source: "AI",
-    description: latestPrd
-      ? `PRD v${latestPrd.version} established the release baseline.`
-      : ""
-  });
-  addTimelineItem(timeline, {
-    title: "Requirements generated",
-    timestamp: requirements[0]?.createdAt,
-    source: "AI",
-    description: `${requirements.length} requirement${
-      requirements.length === 1 ? "" : "s"
-    } generated from the PRD.`
-  });
-  addTimelineItem(timeline, {
-    title: "GitHub PR linked",
-    timestamp: latestPullRequest?.createdAt,
-    source: "GitHub",
-    description: latestPullRequest
-      ? `${latestRepository?.fullName ?? "Repository"} #${
-          latestPullRequest.githubPrNumber
-        } linked.`
-      : ""
-  });
-  addTimelineItem(timeline, {
-    title: "PR snapshot refreshed",
-    timestamp: latestSnapshot?.createdAt,
-    source: "GitHub",
-    description: latestSnapshot
-      ? `${latestSnapshot.changedFiles.length} changed file${
-          latestSnapshot.changedFiles.length === 1 ? "" : "s"
-        } captured.`
-      : ""
-  });
-  addTimelineItem(timeline, {
-    title: "AI QA review generated",
-    timestamp: latestQaReview?.createdAt,
-    source: "AI",
-    description: latestQaReview
-      ? `Review v${latestQaReview.reviewVersion} returned ${latestQaReview.overallStatus}.`
-      : ""
-  });
-  for (const approval of approvalRows) {
+  if (options.includeTimeline) {
     addTimelineItem(timeline, {
-      title: "Approval decision recorded",
-      timestamp: approval.createdAt,
+      title: "Feature created",
+      timestamp: scoped.feature.createdAt,
       source: "user",
-      description: `Human decision: ${approval.decision}.`
+      description: "The original client feature request was captured."
     });
-  }
-  addTimelineItem(timeline, {
-    title: "Release report generated",
-    timestamp: latestReleaseReport?.generatedAt ?? latestReleaseReport?.createdAt,
-    source: "system",
-    description: latestReleaseReport
-      ? `Shareable report "${latestReleaseReport.title}" was generated.`
-      : ""
-  });
-
-  const clarificationRun = safeAiRuns.find(
-    (run) => run.agentType === "clarification"
-  );
-  if (clarificationRun && questions.length === 0) {
     addTimelineItem(timeline, {
-      title: "Clarification run recorded",
-      timestamp: clarificationRun.createdAt,
+      title: "Clarification questions generated",
+      timestamp: questions[0]?.createdAt,
       source: "AI",
-      description: `Clarification agent ${clarificationRun.status}.`
+      description: `${questions.length} clarification question${
+        questions.length === 1 ? "" : "s"
+      } generated.`
     });
-  }
+    addTimelineItem(timeline, {
+      title: "PRD generated",
+      timestamp: latestPrd?.createdAt,
+      source: "AI",
+      description: latestPrd
+        ? `PRD v${latestPrd.version} established the release baseline.`
+        : ""
+    });
+    addTimelineItem(timeline, {
+      title: "Requirements generated",
+      timestamp: requirements[0]?.createdAt,
+      source: "AI",
+      description: `${requirements.length} requirement${
+        requirements.length === 1 ? "" : "s"
+      } generated from the PRD.`
+    });
+    addTimelineItem(timeline, {
+      title: "GitHub PR linked",
+      timestamp: latestPullRequest?.createdAt,
+      source: "GitHub",
+      description: latestPullRequest
+        ? `${latestRepository?.fullName ?? "Repository"} #${
+            latestPullRequest.githubPrNumber
+          } linked.`
+        : ""
+    });
+    addTimelineItem(timeline, {
+      title: "PR snapshot refreshed",
+      timestamp: latestSnapshot?.createdAt,
+      source: "GitHub",
+      description: latestSnapshot
+        ? `${latestSnapshot.changedFiles.length} changed file${
+            latestSnapshot.changedFiles.length === 1 ? "" : "s"
+          } captured.`
+        : ""
+    });
+    addTimelineItem(timeline, {
+      title: "AI QA review generated",
+      timestamp: latestQaReview?.createdAt,
+      source: "AI",
+      description: latestQaReview
+        ? `Review v${latestQaReview.reviewVersion} returned ${latestQaReview.overallStatus}.`
+        : ""
+    });
+    for (const approval of approvalRows) {
+      addTimelineItem(timeline, {
+        title: "Approval decision recorded",
+        timestamp: approval.createdAt,
+        source: "user",
+        description: `Human decision: ${approval.decision}.`
+      });
+    }
+    addTimelineItem(timeline, {
+      title: "Release report generated",
+      timestamp: latestReleaseReport?.generatedAt ?? latestReleaseReport?.createdAt,
+      source: "system",
+      description: latestReleaseReport
+        ? `Shareable report "${latestReleaseReport.title}" was generated.`
+        : ""
+    });
 
-  timeline.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    const clarificationRun = safeAiRuns.find(
+      (run) => run.agentType === "clarification"
+    );
+    if (clarificationRun && questions.length === 0) {
+      addTimelineItem(timeline, {
+        title: "Clarification run recorded",
+        timestamp: clarificationRun.createdAt,
+        source: "AI",
+        description: `Clarification agent ${clarificationRun.status}.`
+      });
+    }
+
+    timeline.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  }
 
   return {
     feature: {

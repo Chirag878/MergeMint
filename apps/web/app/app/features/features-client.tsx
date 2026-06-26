@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/react";
 
 const priorities = ["low", "medium", "high", "urgent"] as const;
@@ -11,6 +12,7 @@ export function FeaturesClient({
 }: {
   initialProjectId?: string;
 }) {
+  const router = useRouter();
   const utils = trpc.useUtils();
   const projects = trpc.projects.list.useQuery();
   const features = trpc.featureRequests.list.useQuery();
@@ -24,7 +26,10 @@ export function FeaturesClient({
   const [success, setSuccess] = useState<string | null>(null);
 
   const createFeature = trpc.featureRequests.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: (featureRequest) => {
+      utils.featureRequests.list.setData(undefined, (current) =>
+        current ? [featureRequest, ...current] : [featureRequest]
+      );
       setTitle("");
       setDescription("");
       setBusinessGoal("");
@@ -32,7 +37,8 @@ export function FeaturesClient({
       setAcceptanceCriteria("");
       setPriority("medium");
       setSuccess("Feature request created.");
-      await utils.featureRequests.list.invalidate();
+      router.push(`/app/features/${featureRequest.id}`);
+      void utils.featureRequests.list.invalidate();
     }
   });
 

@@ -19,14 +19,30 @@ export function ClientsClient() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const createClient = trpc.clients.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: (client) => {
+      utils.clients.list.setData(undefined, (current) => {
+        const createdClient = {
+          ...client,
+          projectsCount: 0,
+          featureRequestsCount: 0,
+          reportsCount: 0,
+          openFindingsCount: 0,
+          pendingApprovalsCount: 0
+        };
+
+        return current ? [createdClient, ...current] : [createdClient];
+      });
+      utils.clients.listBasic.setData(undefined, (current) =>
+        current ? [client, ...current] : [client]
+      );
       setName("");
       setCompanyName("");
       setContactName("");
       setContactEmail("");
       setNotes("");
       setSuccess("Client created.");
-      await utils.clients.list.invalidate();
+      void utils.clients.list.invalidate();
+      void utils.clients.listBasic.invalidate();
     }
   });
 

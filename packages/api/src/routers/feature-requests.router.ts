@@ -132,7 +132,8 @@ export const featureRequestsRouter = router({
             eq(featureRequests.organizationId, workspace.activeOrganization.id)
           )
         )
-        .orderBy(desc(featureRequests.createdAt));
+        .orderBy(desc(featureRequests.createdAt))
+        .limit(100);
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -144,7 +145,8 @@ export const featureRequestsRouter = router({
       .select()
       .from(featureRequests)
       .where(eq(featureRequests.organizationId, workspace.activeOrganization.id))
-      .orderBy(desc(featureRequests.createdAt));
+      .orderBy(desc(featureRequests.createdAt))
+      .limit(100);
   }),
 
   getById: protectedProcedure
@@ -182,11 +184,14 @@ export const featureRequestsRouter = router({
   getReleaseControlRoom: protectedProcedure
     .input(
       z.object({
-        featureRequestId: z.string().uuid()
+        featureRequestId: z.string().uuid(),
+        includeTimeline: z.boolean().optional()
       })
     )
     .query(({ ctx, input }) =>
-      getReleaseControlRoom(ctx, input.featureRequestId)
+      getReleaseControlRoom(ctx, input.featureRequestId, {
+        includeTimeline: input.includeTimeline
+      })
     ),
 
   updateDraft: protectedProcedure

@@ -6,6 +6,7 @@ import {
   detachProjectFromClient,
   getClientById,
   getClientDeliveryLedger,
+  listBasicClients,
   listClients,
   updateClient
 } from "../services/client.service";
@@ -59,6 +60,8 @@ export const clientRouter = router({
     .mutation(({ ctx, input }) => createClient(ctx, input)),
 
   list: protectedProcedure.query(({ ctx }) => listClients(ctx)),
+
+  listBasic: protectedProcedure.query(({ ctx }) => listBasicClients(ctx)),
 
   getById: protectedProcedure
     .input(

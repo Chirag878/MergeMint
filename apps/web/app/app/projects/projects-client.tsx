@@ -2,23 +2,26 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/react";
 
 export function ProjectsClient() {
+  const router = useRouter();
   const utils = trpc.useUtils();
   const projects = trpc.projects.list.useQuery();
-  const clients = trpc.clients.list.useQuery();
+  const clients = trpc.clients.listBasic.useQuery();
   const createProject = trpc.projects.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: (project) => {
+      utils.projects.list.setData(undefined, (current) =>
+        current ? [project, ...current] : [project]
+      );
       setName("");
       setDescription("");
       setClientName("");
       setClientId("");
       setSuccess("Project created.");
-      await Promise.all([
-        utils.projects.list.invalidate(),
-        utils.clients.list.invalidate()
-      ]);
+      router.push(`/app/features?projectId=${project.id}`);
+      void utils.projects.list.invalidate();
     }
   });
 

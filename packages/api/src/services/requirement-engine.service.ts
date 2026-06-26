@@ -667,17 +667,18 @@ export async function getFeatureWorkflow(
     workspace.activeOrganization.id
   );
 
-  const questions = await db
-    .select()
-    .from(clarificationQuestions)
-    .where(eq(clarificationQuestions.featureRequestId, featureRequest.id))
-    .orderBy(clarificationQuestions.createdAt);
-
-  const prdRows = await db
-    .select()
-    .from(prds)
-    .where(eq(prds.featureRequestId, featureRequest.id))
-    .orderBy(desc(prds.version));
+  const [questions, prdRows] = await Promise.all([
+    db
+      .select()
+      .from(clarificationQuestions)
+      .where(eq(clarificationQuestions.featureRequestId, featureRequest.id))
+      .orderBy(clarificationQuestions.createdAt),
+    db
+      .select()
+      .from(prds)
+      .where(eq(prds.featureRequestId, featureRequest.id))
+      .orderBy(desc(prds.version))
+  ]);
 
   const latestPrd = prdRows[0] ?? null;
   const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
@@ -685,43 +686,20 @@ export async function getFeatureWorkflow(
     latestPrd
   );
 
-  const requirements =
-    latestPrd
-      ? await db
+  const [requirements, tasks] = latestPrd
+    ? await Promise.all([
+        db
           .select()
           .from(prdRequirements)
           .where(eq(prdRequirements.prdId, latestPrd.id))
-          .orderBy(prdRequirements.requirementKey)
-      : [];
-
-  const tasks =
-    latestPrd
-      ? await db
+          .orderBy(prdRequirements.requirementKey),
+        db
           .select()
           .from(engineeringTasks)
           .where(eq(engineeringTasks.prdId, latestPrd.id))
           .orderBy(engineeringTasks.createdAt)
-      : [];
-
-  const latestAiRuns = await db
-    .select({
-      id: aiRuns.id,
-      agentType: aiRuns.agentType,
-      model: aiRuns.model,
-      status: aiRuns.status,
-      tokenUsage: aiRuns.tokenUsage,
-      error: aiRuns.error,
-      createdAt: aiRuns.createdAt
-    })
-    .from(aiRuns)
-    .where(
-      and(
-        eq(aiRuns.organizationId, workspace.activeOrganization.id),
-        eq(aiRuns.featureRequestId, featureRequest.id)
-      )
-    )
-    .orderBy(desc(aiRuns.createdAt))
-    .limit(5);
+      ])
+    : [[], []];
 
   return {
     featureRequest,
@@ -740,10 +718,42 @@ export async function getFeatureWorkflow(
       : [],
     prdRequirements: requirements,
     engineeringTasks: tasks,
-    latestAiRuns,
+    latestAiRuns: [],
     questions,
     prds: prdRows,
     requirements,
     tasks
   };
+}
+
+export async function getFeatureAiRunUsage(
+  ctx: ProtectedContext,
+  featureRequestId: string
+) {
+  const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+  assertRoleCan(workspace.membership.role, "project:read");
+
+  const featureRequest = await getScopedFeatureOrThrow(
+    featureRequestId,
+    workspace.activeOrganization.id
+  );
+
+  return db
+    .select({
+      id: aiRuns.id,
+      agentType: aiRuns.agentType,
+      model: aiRuns.model,
+      status: aiRuns.status,
+      tokenUsage: aiRuns.tokenUsage,
+      createdAt: aiRuns.createdAt
+    })
+    .from(aiRuns)
+    .where(
+      and(
+        eq(aiRuns.organizationId, workspace.activeOrganization.id),
+        eq(aiRuns.featureRequestId, featureRequest.id)
+      )
+    )
+    .orderBy(desc(aiRuns.createdAt))
+    .limit(5);
 }

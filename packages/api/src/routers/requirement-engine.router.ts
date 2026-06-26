@@ -3,6 +3,7 @@ import {
   answerClarificationQuestion,
   generateClarificationsForFeatureRequest,
   generateEngineeringTasksForPrd,
+  getFeatureAiRunUsage,
   generatePrdForFeatureRequest,
   getFeatureWorkflow
 } from "../services/requirement-engine.service";
@@ -17,6 +18,16 @@ export const requirementEngineRouter = router({
     )
     .query(({ ctx, input }) =>
       getFeatureWorkflow(ctx, input.featureRequestId)
+    ),
+
+  getAiRunUsage: protectedProcedure
+    .input(
+      z.object({
+        featureRequestId: z.string().uuid()
+      })
+    )
+    .query(({ ctx, input }) =>
+      getFeatureAiRunUsage(ctx, input.featureRequestId)
     ),
 
   generateClarifications: protectedProcedure

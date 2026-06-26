@@ -87,7 +87,9 @@ type ReleaseControlRoomView = {
     priority: string;
   };
   project: {
+    id?: string;
     name: string;
+    clientId?: string | null;
     clientName: string | null;
   };
   client: {
@@ -96,6 +98,7 @@ type ReleaseControlRoomView = {
     status: string;
   } | null;
   releaseReadinessStatus: string;
+  prdMayBeOutdated?: boolean;
   nextBestAction: {
     kind: NextActionKind;
     title: string;
@@ -230,32 +233,66 @@ export function FeatureDetailClient({
     useState(false);
   const [activeTab, setActiveTab] = useState<FeatureDetailTab>("overview");
   const utils = trpc.useUtils();
+  const featureQuery = trpc.featureRequests.getById.useQuery({
+    id: featureRequestId
+  });
   const controlRoom = trpc.featureRequests.getReleaseControlRoom.useQuery({
     featureRequestId
   });
+  const timelineControlRoom = trpc.featureRequests.getReleaseControlRoom.useQuery(
+    {
+      featureRequestId,
+      includeTimeline: true
+    },
+    {
+      enabled: activeTab === "timeline"
+    }
+  );
   const workflow = trpc.requirementEngine.getWorkflow.useQuery({
     featureRequestId
+  }, {
+    enabled: activeTab === "requirements"
+  });
+  const aiRunUsage = trpc.requirementEngine.getAiRunUsage.useQuery({
+    featureRequestId
+  }, {
+    enabled: activeTab === "token_usage"
   });
   const linkedPullRequest = trpc.github.getFeaturePullRequest.useQuery({
     featureRequestId
+  }, {
+    enabled: activeTab === "pr" || activeTab === "qa"
   });
   const latestQaReview = trpc.qaReview.getLatest.useQuery({
     featureRequestId
+  }, {
+    enabled:
+      activeTab === "qa" ||
+      activeTab === "approval" ||
+      activeTab === "report"
   });
   const latestApproval = trpc.approval.getLatest.useQuery({
     featureRequestId
+  }, {
+    enabled: activeTab === "approval" || activeTab === "report"
   });
   const latestClientDeliveryReport = trpc.releaseReport.getLatestForFeature.useQuery({
     featureRequestId,
     reportType: "client_delivery"
+  }, {
+    enabled: activeTab === "report"
   });
   const latestDeveloperFixReport = trpc.releaseReport.getLatestForFeature.useQuery({
     featureRequestId,
     reportType: "developer_fix"
+  }, {
+    enabled: activeTab === "report"
   });
   const latestInternalReleaseReport = trpc.releaseReport.getLatestForFeature.useQuery({
     featureRequestId,
     reportType: "internal_release"
+  }, {
+    enabled: activeTab === "report"
   });
   const invalidateReleaseControlRoom = async () => {
     await utils.featureRequests.getReleaseControlRoom.invalidate({
@@ -359,7 +396,7 @@ export function FeatureDetailClient({
       }
     });
 
-  const feature = workflow.data?.featureRequest;
+  const feature = featureQuery.data ?? workflow.data?.featureRequest;
   const clarificationQuestions =
     workflow.data?.clarificationQuestions ?? workflow.data?.questions ?? [];
   const unansweredRequiredClarificationQuestions =
@@ -372,12 +409,13 @@ export function FeatureDetailClient({
     workflow.data?.prdRequirements ?? workflow.data?.requirements ?? [];
   const engineeringTasks =
     workflow.data?.engineeringTasks ?? workflow.data?.tasks ?? [];
-  const latestAiRuns = workflow.data?.latestAiRuns ?? [];
+  const latestAiRuns = aiRunUsage.data ?? [];
 
   const hasQuestions = clarificationQuestions.length > 0;
   const hasPrd = Boolean(prd);
   const hasTasks = engineeringTasks.length > 0;
-  const prdMayBeOutdated = workflow.data?.prdMayBeOutdated ?? false;
+  const prdMayBeOutdated =
+    controlRoom.data?.prdMayBeOutdated ?? workflow.data?.prdMayBeOutdated ?? false;
   const projectHasClient = Boolean(
     controlRoom.data?.client ||
       controlRoom.data?.project.clientId ||
@@ -481,19 +519,19 @@ export function FeatureDetailClient({
     });
   }
 
-  if (workflow.isLoading) {
+  if (featureQuery.isLoading) {
     return (
       <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-5 text-sm text-neutral-400">
-        Loading...
+        Loading feature...
       </div>
     );
   }
 
-  if (workflow.error || !feature) {
+  if (featureQuery.error || !feature) {
     return (
       <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-5">
         <p className="text-sm text-red-200">
-          {workflow.error?.message ?? "Feature request not found."}
+          {featureQuery.error?.message ?? "Feature request not found."}
         </p>
         <Link
           href="/app/features"
@@ -1011,11 +1049,21 @@ export function FeatureDetailClient({
       />
       ) : null}
 
-      {activeTab === "timeline" && controlRoom.data ? (
-        <TrustTimeline timeline={controlRoom.data.timeline} />
+      {activeTab === "timeline" && timelineControlRoom.isLoading ? (
+        <SectionSkeleton title="Loading timeline..." />
       ) : null}
 
-      {activeTab === "token_usage" ? <AiRunUsage runs={latestAiRuns} /> : null}
+      {activeTab === "timeline" && timelineControlRoom.data ? (
+        <TrustTimeline timeline={timelineControlRoom.data.timeline} />
+      ) : null}
+
+      {activeTab === "token_usage" && aiRunUsage.isLoading ? (
+        <SectionSkeleton title="Loading token usage..." />
+      ) : null}
+
+      {activeTab === "token_usage" && !aiRunUsage.isLoading ? (
+        <AiRunUsage runs={latestAiRuns} />
+      ) : null}
     </>
   );
 }
@@ -3020,6 +3068,19 @@ function Badge({ children }: { children: React.ReactNode }) {
 
 function EmptyText({ children }: { children: React.ReactNode }) {
   return <p className="mt-3 text-sm text-neutral-500">{children}</p>;
+}
+
+function SectionSkeleton({ title }: { title: string }) {
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <p className="text-sm text-neutral-400">{title}</p>
+      <div className="mt-4 space-y-3">
+        <div className="h-4 w-2/3 animate-pulse rounded bg-neutral-800" />
+        <div className="h-4 w-1/2 animate-pulse rounded bg-neutral-800" />
+        <div className="h-16 animate-pulse rounded-md bg-neutral-950" />
+      </div>
+    </section>
+  );
 }
 
 function formatDate(date: Date | string) {

@@ -89,7 +89,8 @@ export const projectsRouter = router({
       .select()
       .from(projects)
       .where(eq(projects.organizationId, workspace.activeOrganization.id))
-      .orderBy(desc(projects.createdAt));
+      .orderBy(desc(projects.createdAt))
+      .limit(100);
   }),
 
   getById: protectedProcedure

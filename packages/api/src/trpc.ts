@@ -25,8 +25,8 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 
   const durationMs = Date.now() - start;
 
-  if (process.env.NODE_ENV === "development") {
-    console.log(`[tRPC] ${path} completed in ${durationMs}ms`);
+  if (process.env.NODE_ENV === "development" && durationMs > 700) {
+    console.warn(`[tRPC slow] ${path} completed in ${durationMs}ms`);
   }
 
   return result;

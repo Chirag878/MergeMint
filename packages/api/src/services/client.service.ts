@@ -307,6 +307,123 @@ async function getOrganizationLedgerRows(organizationId: string) {
   };
 }
 
+async function getClientLedgerRows(organizationId: string, clientId: string) {
+  const clientProjects = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.organizationId, organizationId), eq(projects.clientId, clientId)))
+    .orderBy(desc(projects.createdAt));
+
+  const projectIds = clientProjects.map((project) => project.id);
+  const clientFeatures = projectIds.length
+    ? await db
+        .select()
+        .from(featureRequests)
+        .where(
+          and(
+            eq(featureRequests.organizationId, organizationId),
+            inArray(featureRequests.projectId, projectIds)
+          )
+        )
+        .orderBy(desc(featureRequests.createdAt))
+    : [];
+
+  const featureIds = clientFeatures.map((feature) => feature.id);
+
+  const [
+    clientPrds,
+    clientPullRequests,
+    clientQaReviews,
+    clientApprovals,
+    clientReleaseReports
+  ] = await Promise.all([
+    featureIds.length
+      ? db
+          .select()
+          .from(prds)
+          .where(inArray(prds.featureRequestId, featureIds))
+          .orderBy(desc(prds.version), desc(prds.createdAt))
+      : Promise.resolve([] as PrdRow[]),
+    featureIds.length
+      ? db
+          .select()
+          .from(pullRequests)
+          .where(
+            and(
+              eq(pullRequests.organizationId, organizationId),
+              inArray(pullRequests.featureRequestId, featureIds)
+            )
+          )
+          .orderBy(desc(pullRequests.updatedAt))
+      : Promise.resolve([] as PullRequestRow[]),
+    featureIds.length
+      ? db
+          .select()
+          .from(qaReviews)
+          .where(
+            and(
+              eq(qaReviews.organizationId, organizationId),
+              inArray(qaReviews.featureRequestId, featureIds)
+            )
+          )
+          .orderBy(desc(qaReviews.reviewVersion), desc(qaReviews.createdAt))
+      : Promise.resolve([] as QaReviewRow[]),
+    featureIds.length
+      ? db
+          .select()
+          .from(approvals)
+          .where(
+            and(
+              eq(approvals.organizationId, organizationId),
+              inArray(approvals.featureRequestId, featureIds)
+            )
+          )
+          .orderBy(desc(approvals.createdAt))
+      : Promise.resolve([] as ApprovalRow[]),
+    featureIds.length
+      ? db
+          .select()
+          .from(releaseReports)
+          .where(
+            and(
+              eq(releaseReports.organizationId, organizationId),
+              inArray(releaseReports.featureRequestId, featureIds)
+            )
+          )
+          .orderBy(desc(releaseReports.createdAt))
+      : Promise.resolve([] as ReleaseReportRow[])
+  ]);
+
+  const qaReviewIds = clientQaReviews.map((review) => review.id);
+  const [clientCoverage, clientFindings] = await Promise.all([
+    qaReviewIds.length
+      ? db
+          .select()
+          .from(qaRequirementCoverage)
+          .where(inArray(qaRequirementCoverage.qaReviewId, qaReviewIds))
+      : Promise.resolve([] as CoverageRow[]),
+    qaReviewIds.length
+      ? db
+          .select()
+          .from(qaFindings)
+          .where(inArray(qaFindings.qaReviewId, qaReviewIds))
+          .orderBy(desc(qaFindings.createdAt))
+      : Promise.resolve([] as FindingRow[])
+  ]);
+
+  return {
+    projects: clientProjects,
+    featureRequests: clientFeatures,
+    prds: clientPrds,
+    pullRequests: clientPullRequests,
+    qaReviews: clientQaReviews,
+    coverage: clientCoverage,
+    findings: clientFindings,
+    approvals: clientApprovals,
+    releaseReports: clientReleaseReports
+  };
+}
+
 function buildClientStats(input: {
   clientId: string;
   rows: Awaited<ReturnType<typeof getOrganizationLedgerRows>>;
@@ -413,7 +530,8 @@ export async function listClients(ctx: ProtectedContext) {
       .select()
       .from(clients)
       .where(eq(clients.organizationId, workspace.activeOrganization.id))
-      .orderBy(desc(clients.createdAt)),
+      .orderBy(desc(clients.createdAt))
+      .limit(100),
     getOrganizationLedgerRows(workspace.activeOrganization.id)
   ]);
 
@@ -423,6 +541,29 @@ export async function listClients(ctx: ProtectedContext) {
       clientId: client.id,
       rows: ledgerRows
     })
+  }));
+}
+
+export async function listBasicClients(ctx: ProtectedContext) {
+  const workspace = await getWorkspace(ctx);
+  assertRoleCan(workspace.membership.role, "project:read");
+
+  const clientRows = await db
+    .select({
+      id: clients.id,
+      name: clients.name,
+      companyName: clients.companyName,
+      status: clients.status,
+      createdAt: clients.createdAt
+    })
+    .from(clients)
+    .where(eq(clients.organizationId, workspace.activeOrganization.id))
+    .orderBy(desc(clients.createdAt))
+    .limit(100);
+
+  return clientRows.map((client) => ({
+    ...client,
+    status: isClientStatus(client.status) ? client.status : "active"
   }));
 }
 
@@ -632,16 +773,11 @@ export async function getClientDeliveryLedger(
 
   const organizationId = workspace.activeOrganization.id;
   const client = await getScopedClientOrThrow(clientId, organizationId);
-  const rows = await getOrganizationLedgerRows(organizationId);
+  const rows = await getClientLedgerRows(organizationId, client.id);
 
-  const clientProjects = rows.projects.filter(
-    (project) => project.clientId === client.id
-  );
+  const clientProjects = rows.projects;
   const projectById = new Map(clientProjects.map((project) => [project.id, project]));
-  const projectIds = new Set(projectById.keys());
-  const clientFeatures = rows.featureRequests.filter((feature) =>
-    projectIds.has(feature.projectId)
-  );
+  const clientFeatures = rows.featureRequests;
   const featureIds = new Set(clientFeatures.map((feature) => feature.id));
   const featureById = new Map(clientFeatures.map((feature) => [feature.id, feature]));
 

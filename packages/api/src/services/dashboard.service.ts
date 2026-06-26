@@ -71,7 +71,6 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
     clientRows,
     projectRows,
     featureRows,
-    prdRows,
     pullRequestRows,
     qaReviewRows,
     approvalRows,
@@ -92,7 +91,6 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
       .from(featureRequests)
       .where(eq(featureRequests.organizationId, organizationId))
       .orderBy(desc(featureRequests.createdAt)),
-    db.select().from(prds).orderBy(desc(prds.createdAt)),
     db
       .select()
       .from(pullRequests)
@@ -116,16 +114,22 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
   ]);
 
   const featureIds = featureRows.map((feature) => feature.id);
-  const scopedPrds = prdRows.filter((prd) =>
-    featureIds.includes(prd.featureRequestId)
-  );
   const qaReviewIds = qaReviewRows.map((review) => review.id);
-  const findingRows = qaReviewIds.length
-    ? await db
-        .select()
-        .from(qaFindings)
-        .where(inArray(qaFindings.qaReviewId, qaReviewIds))
-    : [];
+  const [scopedPrds, findingRows] = await Promise.all([
+    featureIds.length
+      ? db
+          .select()
+          .from(prds)
+          .where(inArray(prds.featureRequestId, featureIds))
+          .orderBy(desc(prds.createdAt))
+      : Promise.resolve([] as Array<typeof prds.$inferSelect>),
+    qaReviewIds.length
+      ? db
+          .select()
+          .from(qaFindings)
+          .where(inArray(qaFindings.qaReviewId, qaReviewIds))
+      : Promise.resolve([] as Array<typeof qaFindings.$inferSelect>)
+  ]);
 
   const projectById = new Map(projectRows.map((project) => [project.id, project]));
   const clientById = new Map(clientRows.map((client) => [client.id, client]));

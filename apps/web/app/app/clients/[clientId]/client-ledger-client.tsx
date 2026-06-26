@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/react";
 
 const nextActionBadges = {
@@ -179,9 +180,9 @@ function ClientLedgerTabs({
 }
 
 export function ClientLedgerClient({ clientId }: { clientId: string }) {
+  const router = useRouter();
   const utils = trpc.useUtils();
   const ledger = trpc.clients.getDeliveryLedger.useQuery({ clientId });
-  const projects = trpc.projects.list.useQuery();
   const [projectId, setProjectId] = useState("");
   const [success, setSuccess] = useState<string | null>(null);
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
@@ -207,6 +208,10 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
     string | null
   >(null);
   const [activeTab, setActiveTab] = useState<ClientLedgerTab>("ledger");
+  const projects = trpc.projects.list.useQuery(undefined, {
+    enabled: activeTab === "projects" || showNewProjectForm,
+    staleTime: 30_000
+  });
 
   const invalidateLedger = async () => {
     await Promise.all([
@@ -233,22 +238,26 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
   });
 
   const createProject = trpc.projects.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: (project) => {
+      utils.projects.list.setData(undefined, (current) =>
+        current ? [project, ...current] : [project]
+      );
       setShowNewProjectForm(false);
       setNewProjectName("");
       setNewProjectDescription("");
       setCreatedFeatureRequestId(null);
+      setFeatureProjectId(project.id);
       setSuccess("Project created for this client.");
-      await Promise.all([
-        utils.clients.getDeliveryLedger.invalidate({ clientId }),
-        utils.clients.list.invalidate(),
-        utils.projects.list.invalidate()
-      ]);
+      void utils.clients.getDeliveryLedger.invalidate({ clientId });
+      void utils.projects.list.invalidate();
     }
   });
 
   const createFeatureRequest = trpc.featureRequests.create.useMutation({
-    onSuccess: async (featureRequest) => {
+    onSuccess: (featureRequest) => {
+      utils.featureRequests.list.setData(undefined, (current) =>
+        current ? [featureRequest, ...current] : [featureRequest]
+      );
       setShowFeatureForm(false);
       setFeatureProjectId("");
       setFeatureTitle("");
@@ -259,11 +268,9 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       setFeaturePriority("medium");
       setCreatedFeatureRequestId(featureRequest.id);
       setSuccess("Feature request created.");
-      await Promise.all([
-        utils.clients.getDeliveryLedger.invalidate({ clientId }),
-        utils.clients.list.invalidate(),
-        utils.featureRequests.list.invalidate()
-      ]);
+      router.push(`/app/features/${featureRequest.id}`);
+      void utils.clients.getDeliveryLedger.invalidate({ clientId });
+      void utils.featureRequests.list.invalidate();
     }
   });
 
