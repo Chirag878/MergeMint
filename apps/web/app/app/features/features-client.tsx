@@ -30,6 +30,9 @@ export function FeaturesClient({
       utils.featureRequests.list.setData(undefined, (current) =>
         current ? [featureRequest, ...current] : [featureRequest]
       );
+      const featureProject = projects.data?.find(
+        (project) => project.id === featureRequest.projectId
+      );
       setTitle("");
       setDescription("");
       setBusinessGoal("");
@@ -38,6 +41,16 @@ export function FeaturesClient({
       setPriority("medium");
       setSuccess("Feature request created.");
       router.push(`/app/features/${featureRequest.id}`);
+      void utils.featureRequests.listByProject.invalidate({
+        projectId: featureRequest.projectId
+      });
+      if (featureProject?.clientId) {
+        void utils.clients.getDeliveryLedger.invalidate({
+          clientId: featureProject.clientId
+        });
+        void utils.clients.list.invalidate();
+      }
+      void utils.dashboard.getSummary.invalidate();
       void utils.featureRequests.list.invalidate();
     }
   });

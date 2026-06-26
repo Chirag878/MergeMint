@@ -21,6 +21,13 @@ export function ProjectsClient() {
       setClientId("");
       setSuccess("Project created.");
       router.push(`/app/features?projectId=${project.id}`);
+      if (project.clientId) {
+        void utils.clients.getDeliveryLedger.invalidate({
+          clientId: project.clientId
+        });
+        void utils.clients.list.invalidate();
+      }
+      void utils.dashboard.getSummary.invalidate();
       void utils.projects.list.invalidate();
     }
   });

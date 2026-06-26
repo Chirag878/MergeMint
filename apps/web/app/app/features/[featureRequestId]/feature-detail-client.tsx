@@ -295,9 +295,15 @@ export function FeatureDetailClient({
     enabled: activeTab === "report"
   });
   const invalidateReleaseControlRoom = async () => {
-    await utils.featureRequests.getReleaseControlRoom.invalidate({
-      featureRequestId
-    });
+    await Promise.all([
+      utils.featureRequests.getReleaseControlRoom.invalidate({
+        featureRequestId
+      }),
+      utils.featureRequests.getReleaseControlRoom.invalidate({
+        featureRequestId,
+        includeTimeline: true
+      })
+    ]);
   };
   const generateClarifications =
     trpc.requirementEngine.generateClarifications.useMutation({
@@ -410,9 +416,20 @@ export function FeatureDetailClient({
   const engineeringTasks =
     workflow.data?.engineeringTasks ?? workflow.data?.tasks ?? [];
   const latestAiRuns = aiRunUsage.data ?? [];
+  const controlRoomRequirementsCount = controlRoom.data
+    ? Object.values(controlRoom.data.requirementEvidenceSummary).reduce(
+        (total, items) => total + items.length,
+        0
+      )
+    : 0;
+  const controlRoomHasPrd = Boolean(
+    controlRoom.data?.progress.some(
+      (step) => step.id === "prd" && step.status === "complete"
+    )
+  );
 
   const hasQuestions = clarificationQuestions.length > 0;
-  const hasPrd = Boolean(prd);
+  const hasPrd = Boolean(prd) || controlRoomHasPrd;
   const hasTasks = engineeringTasks.length > 0;
   const prdMayBeOutdated =
     controlRoom.data?.prdMayBeOutdated ?? workflow.data?.prdMayBeOutdated ?? false;
@@ -423,6 +440,8 @@ export function FeatureDetailClient({
   );
   const prdBlockedByClarifications =
     !hasPrd && unansweredRequiredClarificationQuestions.length > 0;
+  const qaRequirementsCount =
+    prdRequirements.length > 0 ? prdRequirements.length : controlRoomRequirementsCount;
 
   function setAnswerDraft(questionId: string, value: string) {
     setAnswerDrafts((current) => ({
@@ -967,9 +986,9 @@ export function FeatureDetailClient({
 
       {activeTab === "qa" ? (
       <AIQAReviewSection
-        hasPrd={Boolean(prd)}
+        hasPrd={hasPrd}
         prdMayBeOutdated={prdMayBeOutdated}
-        requirementsCount={prdRequirements.length}
+        requirementsCount={qaRequirementsCount}
         hasPullRequestSnapshot={Boolean(linkedPullRequest.data?.latestSnapshot)}
         reviewBundle={latestQaReview.data}
         isLoading={latestQaReview.isLoading}

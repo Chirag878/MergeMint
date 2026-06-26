@@ -249,6 +249,8 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       setFeatureProjectId(project.id);
       setSuccess("Project created for this client.");
       void utils.clients.getDeliveryLedger.invalidate({ clientId });
+      void utils.clients.list.invalidate();
+      void utils.dashboard.getSummary.invalidate();
       void utils.projects.list.invalidate();
     }
   });
@@ -270,6 +272,11 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       setSuccess("Feature request created.");
       router.push(`/app/features/${featureRequest.id}`);
       void utils.clients.getDeliveryLedger.invalidate({ clientId });
+      void utils.clients.list.invalidate();
+      void utils.dashboard.getSummary.invalidate();
+      void utils.featureRequests.listByProject.invalidate({
+        projectId: featureRequest.projectId
+      });
       void utils.featureRequests.list.invalidate();
     }
   });
