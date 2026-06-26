@@ -1,10 +1,12 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import {
   approvals,
   auditLogs,
+  clarificationQuestions,
   db,
   featureRequests,
+  prds,
   pullRequests,
   qaFindings,
   qaRequirementCoverage,
@@ -13,6 +15,7 @@ import {
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
+import { normalizeDbTimestamp } from "./prd-staleness";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -112,6 +115,41 @@ async function getLatestQaReviewOrThrow(
   }
 
   return review;
+}
+
+async function throwIfPrdOutdated(featureRequestId: string) {
+  const [prd] = await db
+    .select()
+    .from(prds)
+    .where(eq(prds.featureRequestId, featureRequestId))
+    .orderBy(desc(prds.version), desc(prds.createdAt))
+    .limit(1);
+
+  if (!prd) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Regenerate PRD before submitting approval."
+    });
+  }
+
+  const prdCreatedAt = normalizeDbTimestamp(prd.createdAt);
+  const [staleAnswer] = await db
+    .select({ id: clarificationQuestions.id })
+    .from(clarificationQuestions)
+    .where(
+      and(
+        eq(clarificationQuestions.featureRequestId, featureRequestId),
+        gt(clarificationQuestions.answeredAt, prdCreatedAt)
+      )
+    )
+    .limit(1);
+
+  if (staleAnswer) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "PRD is outdated. Regenerate PRD before submitting approval."
+    });
+  }
 }
 
 async function getApprovalRiskSummary(qaReviewId: string) {
@@ -250,6 +288,20 @@ export async function createApprovalDecision(
     featureRequest.id,
     workspace.activeOrganization.id
   );
+  try {
+    await throwIfPrdOutdated(featureRequest.id);
+  } catch (error) {
+    if (error instanceof TRPCError) {
+      throw error;
+    }
+
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Your PRD is outdated or could not be validated. Please regenerate the PRD and try again.",
+      cause: error
+    });
+  }
   const note = input.note?.trim() || undefined;
   const remainingRisks =
     input.remainingRisks?.map((risk) => risk.trim()).filter(Boolean) ?? [];

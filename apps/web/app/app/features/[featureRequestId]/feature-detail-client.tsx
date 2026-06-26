@@ -62,6 +62,24 @@ type FeatureDetailTab =
   | "timeline"
   | "debug";
 
+function getFriendlyQaRunError(message: string | undefined) {
+  if (!message) {
+    return undefined;
+  }
+
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes("failed query") ||
+    normalized.includes("clarification_questions") ||
+    normalized.includes("invalid timestamp") ||
+    normalized.includes("could not be validated")
+  ) {
+    return "Your PRD is outdated or could not be validated. Please regenerate the PRD and try again.";
+  }
+
+  return message;
+}
+
 type ReleaseControlRoomView = {
   feature: {
     title: string;
@@ -879,7 +897,7 @@ export function FeatureDetailClient({
         error={latestQaReview.error?.message}
         onRun={() => runQaReview.mutate({ featureRequestId })}
         isRunning={runQaReview.isPending}
-        runError={runQaReview.error?.message}
+        runError={getFriendlyQaRunError(runQaReview.error?.message)}
       />
       ) : null}
 

@@ -20,6 +20,7 @@ import {
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
+import { hasClarificationAnswerChangedAfterPrd } from "./prd-staleness";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -56,19 +57,6 @@ function isHighCritical(finding: typeof qaFindings.$inferSelect) {
 
 function isRiskyCoverage(status: string) {
   return status === "partial" || status === "missing" || status === "risky";
-}
-
-function hasClarificationAnswerChangedAfterPrd(
-  clarifications: Array<typeof clarificationQuestions.$inferSelect>,
-  prd: typeof prds.$inferSelect | null | undefined
-) {
-  if (!prd) {
-    return false;
-  }
-
-  return clarifications.some(
-    (question) => question.answeredAt && question.answeredAt > prd.createdAt
-  );
 }
 
 function getReleaseReadinessStatus(input: {

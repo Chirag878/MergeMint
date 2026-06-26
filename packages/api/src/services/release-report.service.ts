@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import {
   appUsers,
   approvals,
@@ -22,6 +22,7 @@ import {
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
+import { normalizeDbTimestamp } from "./prd-staleness";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -230,13 +231,14 @@ async function throwIfPrdOutdated(input: {
   featureRequestId: string;
   prdCreatedAt: Date;
 }) {
+  const prdCreatedAt = normalizeDbTimestamp(input.prdCreatedAt);
   const [row] = await db
     .select({ id: clarificationQuestions.id })
     .from(clarificationQuestions)
     .where(
       and(
         eq(clarificationQuestions.featureRequestId, input.featureRequestId),
-        sql`${clarificationQuestions.answeredAt} > ${input.prdCreatedAt}`
+        gt(clarificationQuestions.answeredAt, prdCreatedAt)
       )
     )
     .limit(1);
@@ -425,10 +427,23 @@ export async function generateReleaseReport(
     organizationId
   );
   const prd = await getLatestPrdOrThrow(featureRequest.id);
-  await throwIfPrdOutdated({
-    featureRequestId: featureRequest.id,
-    prdCreatedAt: prd.createdAt
-  });
+  try {
+    await throwIfPrdOutdated({
+      featureRequestId: featureRequest.id,
+      prdCreatedAt: prd.createdAt
+    });
+  } catch (error) {
+    if (error instanceof TRPCError) {
+      throw error;
+    }
+
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Your PRD is outdated or could not be validated. Please regenerate the PRD and try again.",
+      cause: error
+    });
+  }
   const requirements = await getRequirementsOrThrow(prd.id);
   const { pullRequest, repository } = await getLinkedPullRequestOrThrow(
     featureRequest.id,

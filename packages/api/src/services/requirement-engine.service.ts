@@ -23,6 +23,10 @@ import {
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
+import {
+  hasClarificationAnswerChangedAfterPrd,
+  isClarificationAnswerNewerThanPrd
+} from "./prd-staleness";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -224,19 +228,6 @@ function mapQuestionPriority(priority: "must_answer" | "nice_to_have") {
 
 function isRequiredClarification(priority: string) {
   return priority === "high" || priority === "urgent";
-}
-
-function hasClarificationAnswerChangedAfterPrd(
-  clarifications: Array<typeof clarificationQuestions.$inferSelect>,
-  prd: typeof prds.$inferSelect | null | undefined
-) {
-  if (!prd) {
-    return false;
-  }
-
-  return clarifications.some(
-    (question) => question.answeredAt && question.answeredAt > prd.createdAt
-  );
 }
 
 function mapTaskType(type: EngineeringTasksOutput["tasks"][number]["type"]) {
@@ -742,9 +733,8 @@ export async function getFeatureWorkflow(
     prdMayBeOutdated,
     staleClarificationAnswerIds: prdMayBeOutdated
       ? questions
-          .filter(
-            (question) =>
-              question.answeredAt && latestPrd && question.answeredAt > latestPrd.createdAt
+          .filter((question) =>
+            latestPrd ? isClarificationAnswerNewerThanPrd(question, latestPrd) : false
           )
           .map((question) => question.id)
       : [],

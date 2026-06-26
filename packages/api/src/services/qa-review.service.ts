@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import {
   generateQAReview,
   getAIConfig,
@@ -28,6 +28,7 @@ import {
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
+import { normalizeDbTimestamp } from "./prd-staleness";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -232,13 +233,14 @@ async function hasClarificationAnswerAfterPrd(input: {
   featureRequestId: string;
   prdCreatedAt: Date;
 }) {
+  const prdCreatedAt = normalizeDbTimestamp(input.prdCreatedAt);
   const [row] = await db
     .select({ id: clarificationQuestions.id })
     .from(clarificationQuestions)
     .where(
       and(
         eq(clarificationQuestions.featureRequestId, input.featureRequestId),
-        sql`${clarificationQuestions.answeredAt} > ${input.prdCreatedAt}`
+        gt(clarificationQuestions.answeredAt, prdCreatedAt)
       )
     )
     .limit(1);
@@ -310,16 +312,25 @@ export async function runQaReviewForFeatureRequest(
     });
   }
 
-  if (
-    await hasClarificationAnswerAfterPrd({
+  let prdOutdated = false;
+  try {
+    prdOutdated = await hasClarificationAnswerAfterPrd({
       featureRequestId: featureRequest.id,
       prdCreatedAt: prd.createdAt
-    })
-  ) {
+    });
+  } catch (error) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message:
-        "A clarification answer changed after the PRD was generated. Regenerate the PRD before running QA review."
+        "Your PRD is outdated or could not be validated. Please regenerate the PRD and try again.",
+      cause: error
+    });
+  }
+
+  if (prdOutdated) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "PRD is outdated. Regenerate PRD before QA review."
     });
   }
 
