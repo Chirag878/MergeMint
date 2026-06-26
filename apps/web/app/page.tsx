@@ -57,6 +57,21 @@ const workflowSteps = [
   }
 ];
 
+const proofSteps = [
+  {
+    title: "Capture the request",
+    copy: "Turn client or product requirements into clear acceptance criteria."
+  },
+  {
+    title: "Verify the PR",
+    copy: "Compare GitHub changes against the agreed scope before release."
+  },
+  {
+    title: "Share the proof",
+    copy: "Generate a clean report with coverage, risks, approvals, and evidence."
+  }
+];
+
 const reportPoints = [
   "What was requested",
   "What changed in the PR",
@@ -121,15 +136,15 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#060706] text-neutral-100">
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-64 bg-[linear-gradient(90deg,rgba(16,185,129,0.18),rgba(14,165,233,0.14),rgba(245,158,11,0.1))] blur-3xl" />
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.2),rgba(14,165,233,0.1),transparent_62%)] blur-3xl" />
 
-      <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#060706]/78 backdrop-blur-xl">
+      <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#060706]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 text-sm font-semibold text-emerald-200">
               MM
             </span>
-            <span className="text-base font-semibold tracking-tight">
+            <span className="text-base font-semibold tracking-normal">
               MergeMint
             </span>
           </Link>
@@ -165,33 +180,36 @@ export default function HomePage() {
             </Link>
             <Link
               href={primaryCtaHref}
-              className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+              className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 shadow-sm shadow-white/10 transition hover:-translate-y-0.5 hover:bg-white"
             >
-              Start pilot
+              Start free pilot
             </Link>
           </div>
         </div>
       </nav>
 
-      <section className="relative mx-auto grid min-h-[calc(100vh-72px)] max-w-7xl items-center gap-12 px-5 py-16 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:px-8 lg:py-20">
-        <div className="vf-fade-up">
-          <p className="text-sm font-medium uppercase tracking-[0.24em] text-emerald-300">
-            Client delivery proof for modern software teams
+      <section className="relative mx-auto grid min-h-[680px] max-w-7xl items-center gap-12 px-5 py-16 sm:px-6 sm:py-20 lg:grid-cols-[0.92fr_1.08fr] lg:px-8 lg:py-24">
+        <div className="vf-fade-up max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            REQUIREMENT-TO-RELEASE PROOF
           </p>
-          <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[1.02] tracking-tight text-white sm:text-6xl lg:text-7xl">
-            MergeMint verifies every PR against the original requirement before you ship or share it.
+          <h1
+            className="mt-6 max-w-4xl text-[2.75rem] font-semibold leading-[1.02] tracking-normal text-white sm:text-[3.5rem] lg:text-[4.5rem]"
+            style={{ textWrap: "balance" }}
+          >
+            Prove every PR is ready to ship.
           </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-neutral-300">
-            MergeMint helps agencies and product teams prove whether a GitHub PR
-            satisfies the original requirements, with PR evidence, AI QA review,
-            approval history, and shareable release reports.
+          <p className="mt-6 max-w-2xl text-base leading-7 text-neutral-300 sm:text-lg">
+            MergeMint verifies each pull request against the original
+            requirements, QA evidence, and approval history before your team
+            ships or shares the release.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
               href={primaryCtaHref}
-              className="inline-flex justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-neutral-950 transition hover:-translate-y-0.5 hover:bg-neutral-100"
+              className="inline-flex justify-center rounded-md bg-white px-5 py-3 text-sm font-semibold text-neutral-950 shadow-lg shadow-white/10 transition hover:-translate-y-0.5 hover:bg-neutral-100"
             >
-              Start founding pilot
+              Start free pilot
             </Link>
             <a
               href={secondaryCtaHref}
@@ -199,16 +217,44 @@ export default function HomePage() {
               rel={sampleReportUrl ? "noreferrer" : undefined}
               className="inline-flex justify-center rounded-md border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/10"
             >
-              {sampleReportUrl ? "View sample report" : "See how it works"}
+              View sample report
             </a>
           </div>
           <p className="mt-6 max-w-xl text-sm leading-6 text-neutral-500">
-            Built for agencies, freelancers, AI studios, founders, CTOs, PMs,
-            and teams working with outsourced or internal developers.
+            Built for agencies, founders, CTOs, PMs, and teams that need clear
+            delivery evidence without slowing down GitHub.
           </p>
         </div>
 
         <HeroConsole />
+      </section>
+
+      <section className="relative border-y border-white/10 bg-white/[0.025] px-5 py-16 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <SectionHeader
+            eyebrow="How teams use it"
+            title="From request to release proof."
+            copy="A focused workflow for turning scope, code, QA, and approval into evidence your team can trust."
+          />
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {proofSteps.map((step, index) => (
+              <article
+                key={step.title}
+                className="rounded-lg border border-white/10 bg-white/[0.035] p-6 transition hover:-translate-y-1 hover:border-emerald-300/30 hover:bg-white/[0.055]"
+              >
+                <span className="text-sm font-semibold text-emerald-300">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <h3 className="mt-5 text-lg font-semibold text-white">
+                  {step.title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-neutral-400">
+                  {step.copy}
+                </p>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section
@@ -364,7 +410,7 @@ export default function HomePage() {
               <p className="text-sm font-medium uppercase tracking-[0.24em] text-amber-200">
                 Founding pilot
               </p>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              <h2 className="mt-4 text-3xl font-semibold tracking-normal text-white sm:text-4xl">
                 Founding Pilot ₹2,999
               </h2>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-neutral-300">
@@ -447,7 +493,7 @@ function SectionHeader({
       <p className="text-sm font-medium uppercase tracking-[0.24em] text-emerald-300">
         {eyebrow}
       </p>
-      <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+      <h2 className="mt-4 text-3xl font-semibold tracking-normal text-white sm:text-4xl">
         {title}
       </h2>
       <p className="mt-4 text-sm leading-7 text-neutral-400">{copy}</p>
@@ -458,35 +504,34 @@ function SectionHeader({
 function HeroConsole() {
   return (
     <div className="vf-fade-up relative lg:pl-4">
-      <div className="vf-preview-scan rounded-lg border border-white/10 bg-[#0b0f0d] p-3 shadow-2xl shadow-black/50">
-        <div className="rounded-md border border-white/10 bg-black/35 p-4">
-          <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+      <div className="vf-preview-scan rounded-xl border border-white/10 bg-[#0b0f0d] p-3 shadow-2xl shadow-black/50">
+        <div className="rounded-lg border border-white/10 bg-black/35 p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-5">
             <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">
-                Release Control Room
+              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
+                PR Verification
               </p>
-              <h2 className="mt-2 text-xl font-semibold text-white">
-                Invoice automation approval
+              <h2 className="mt-2 text-xl font-semibold tracking-normal text-white">
+                Payment retry PR
               </h2>
             </div>
-            <StatusChip tone="amber">Review risks</StatusChip>
+            <StatusChip tone="green">Ready</StatusChip>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <Metric label="Coverage" value="9/10" />
-            <Metric label="Readiness" value="86" />
-            <Metric label="Findings" value="2" />
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <Metric label="Requirements covered" value="8/9" />
+            <Metric label="QA confidence" value="92%" />
           </div>
 
-          <div className="mt-5 space-y-3">
+          <div className="mt-5 space-y-3 rounded-lg border border-white/10 bg-white/[0.025] p-3">
             {[
-              ["REQ-001", "Webhook event captured", "covered"],
-              ["REQ-004", "Duplicate invoice guard", "partial"],
-              ["REQ-008", "Client approval email", "covered"]
+              ["REQ-001", "Retry failed card charge", "covered"],
+              ["REQ-004", "Expose final failure state", "minor risk"],
+              ["REQ-008", "Notify account owner", "covered"]
             ].map(([key, text, status]) => (
               <div
                 key={key}
-                className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/[0.035] p-3"
+                className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/25 p-3"
               >
                 <div>
                   <p className="text-xs font-medium text-sky-300">{key}</p>
@@ -499,13 +544,28 @@ function HeroConsole() {
             ))}
           </div>
 
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border border-amber-300/20 bg-amber-300/5 p-4">
+              <p className="text-xs text-neutral-500">Approval</p>
+              <p className="mt-2 text-sm font-medium text-amber-100">
+                Ready with minor risk
+              </p>
+            </div>
+            <div className="rounded-md border border-emerald-300/20 bg-emerald-300/5 p-4">
+              <p className="text-xs text-neutral-500">Report</p>
+              <p className="mt-2 text-sm font-medium text-emerald-100">
+                Ready to share
+              </p>
+            </div>
+          </div>
+
           <div className="mt-5 rounded-md border border-emerald-300/20 bg-emerald-300/5 p-4">
             <p className="text-sm font-medium text-emerald-200">
-              Next: Generate release report
+              Release report ready
             </p>
             <p className="mt-2 text-xs leading-5 text-neutral-400">
-              Human approval recorded with one accepted risk. Shareable proof is
-              ready for the client.
+              Coverage, QA evidence, approval status, and PR details are linked
+              in one shareable proof artifact.
             </p>
           </div>
         </div>
