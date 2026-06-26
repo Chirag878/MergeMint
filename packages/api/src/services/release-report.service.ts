@@ -5,6 +5,7 @@ import {
   appUsers,
   approvals,
   auditLogs,
+  clients,
   db,
   featureRequests,
   prdRequirements,
@@ -30,8 +31,27 @@ type ProtectedContext = TRPCContext & {
   session: NonNullable<TRPCContext["session"]>;
 };
 
-export type ReleaseReportData = {
+export type ReleaseReportType = "client_delivery" | "developer_fix";
+
+type ReportVisibility = "public" | "private" | "internal";
+
+type ReportTimelineItem = {
+  label: string;
+  at: string | null;
+};
+
+export type ClientDeliveryReportData = {
+  reportType: "client_delivery";
+  audience: "client";
+  visibility: "public";
   reportStatus: string;
+  summary: string;
+  deliveryVerdict: "Ready to Release" | "Approved" | "Approved with Notes";
+  client: {
+    id: string | null;
+    name: string | null;
+    companyName: string | null;
+  };
   feature: {
     id: string;
     title: string;
@@ -106,8 +126,54 @@ export type ReleaseReportData = {
     approvedBy: string;
     createdAt: string;
   };
+  timeline: ReportTimelineItem[];
   generatedAt: string;
 };
+
+export type DeveloperFixReportData = {
+  reportType: "developer_fix";
+  audience: "developer";
+  visibility: "private";
+  reportStatus: "needs_fixes" | "rejected" | "partially_delivered";
+  summary: string;
+  instruction: string;
+  feature: {
+    id: string;
+    title: string;
+    summary: string;
+  };
+  project: {
+    id: string;
+    name: string;
+  };
+  pullRequest: ClientDeliveryReportData["pullRequest"];
+  qaReview: ClientDeliveryReportData["qaReview"];
+  requirements: ClientDeliveryReportData["requirements"];
+  coverage: ClientDeliveryReportData["coverage"];
+  findings: ClientDeliveryReportData["findings"];
+  failedRequirements: ClientDeliveryReportData["requirements"];
+  partialRequirements: ClientDeliveryReportData["requirements"];
+  highRiskGaps: Array<{
+    title: string;
+    severity: string;
+    requirementKey: string | null;
+    suggestedFix: string | null;
+  }>;
+  suggestedNextActions: string[];
+  approval: {
+    id: string;
+    decision: string;
+    note: string | null;
+    remainingRisks: string[];
+    reviewer: string;
+    createdAt: string;
+  } | null;
+  generatedAt: string;
+};
+
+export type ReleaseReportData =
+  | ClientDeliveryReportData
+  | DeveloperFixReportData;
 
 type PrivateReleaseReport = Omit<
   typeof releaseReports.$inferSelect,
@@ -140,9 +206,15 @@ function toJsonObject(value: unknown): JsonObject {
 }
 
 function toTypedReport(report: typeof releaseReports.$inferSelect) {
+  const reportData = report.reportData as Partial<ReleaseReportData>;
   return {
     ...report,
-    reportData: report.reportData as ReleaseReportData
+    reportData: reportData.reportType
+      ? (reportData as ReleaseReportData)
+      : ({
+          ...(reportData as Record<string, unknown>),
+          reportType: "client_delivery"
+        } as ReleaseReportData)
   } satisfies PrivateReleaseReport;
 }
 
@@ -179,6 +251,27 @@ function getReportStatusFromDecision(decision: string) {
   return "changes_requested";
 }
 
+function getReportType(report: typeof releaseReports.$inferSelect) {
+  const reportData = report.reportData as Partial<ReleaseReportData>;
+  return reportData.reportType ?? "client_delivery";
+}
+
+function isClientApprovedDecision(decision: string) {
+  return decision === "approved" || decision === "approved_with_risk";
+}
+
+function isRejectedDecision(decision: string | null | undefined) {
+  return decision === "rejected" || decision === "changes_requested";
+}
+
+function isRiskyCoverageStatus(status: string) {
+  return status === "partial" || status === "missing" || status === "risky";
+}
+
+function isOpenFindingStatus(status: string) {
+  return status === "open" || status === "needs_human_review";
+}
+
 async function getScopedFeatureOrThrow(
   featureRequestId: string,
   organizationId: string
@@ -186,10 +279,15 @@ async function getScopedFeatureOrThrow(
   const [row] = await db
     .select({
       featureRequest: featureRequests,
-      project: projects
+      project: projects,
+      client: clients
     })
     .from(featureRequests)
     .innerJoin(projects, eq(featureRequests.projectId, projects.id))
+    .leftJoin(
+      clients,
+      and(eq(projects.clientId, clients.id), eq(clients.organizationId, organizationId))
+    )
     .where(
       and(
         eq(featureRequests.id, featureRequestId),
@@ -394,6 +492,151 @@ async function getLatestApprovalOrThrow(
   };
 }
 
+async function getLatestApproval(
+  featureRequestId: string,
+  organizationId: string
+) {
+  const [approval] = await db
+    .select()
+    .from(approvals)
+    .where(
+      and(
+        eq(approvals.featureRequestId, featureRequestId),
+        eq(approvals.organizationId, organizationId)
+      )
+    )
+    .orderBy(desc(approvals.createdAt))
+    .limit(1);
+
+  if (!approval) {
+    return null;
+  }
+
+  const [approver] = approval.approvedBy
+    ? await db
+        .select()
+        .from(appUsers)
+        .where(eq(appUsers.id, approval.approvedBy))
+        .limit(1)
+    : [];
+
+  return {
+    approval,
+    approvedBy: approver?.name ?? "Human reviewer"
+  };
+}
+
+function mapRequirements(requirements: Array<typeof prdRequirements.$inferSelect>) {
+  return requirements.map((requirement) => ({
+    key: requirement.requirementKey,
+    title: requirement.requirementKey,
+    description: requirement.requirement,
+    acceptanceCriteria: requirement.acceptanceCriteria,
+    priority: requirement.priority
+  }));
+}
+
+function mapPullRequest(input: {
+  pullRequest: typeof pullRequests.$inferSelect;
+  repository: typeof repositories.$inferSelect;
+  snapshot: typeof prSnapshots.$inferSelect;
+}): ClientDeliveryReportData["pullRequest"] {
+  return {
+    id: input.pullRequest.id,
+    provider: "github",
+    repository: input.repository.fullName,
+    owner: input.repository.owner,
+    repo: input.repository.name,
+    number: input.pullRequest.githubPrNumber,
+    title: input.pullRequest.title,
+    url: input.pullRequest.htmlUrl,
+    author: input.pullRequest.author,
+    sourceBranch: input.pullRequest.branch,
+    targetBranch: input.pullRequest.baseBranch,
+    state: input.pullRequest.state,
+    merged: Boolean(input.pullRequest.mergedAt),
+    latestCommitSha: input.snapshot.commitSha ?? input.pullRequest.latestCommitSha
+  };
+}
+
+function mapQaReview(
+  review: typeof qaReviews.$inferSelect
+): ClientDeliveryReportData["qaReview"] {
+  return {
+    id: review.id,
+    overallStatus: review.overallStatus,
+    readinessScore: review.readinessScore,
+    confidenceScore: review.confidenceScore,
+    summary: review.summary,
+    reviewVersion: review.reviewVersion,
+    createdAt: review.createdAt.toISOString()
+  };
+}
+
+function mapCoverage(
+  coverageRows: Array<typeof qaRequirementCoverage.$inferSelect>
+): ClientDeliveryReportData["coverage"] {
+  return coverageRows.map((coverage) => ({
+    requirementKey: coverage.requirementKey,
+    status: coverage.status,
+    evidence: coverage.evidence,
+    concern: coverage.concern
+  }));
+}
+
+function mapFindings(
+  findingRows: Array<typeof qaFindings.$inferSelect>
+): ClientDeliveryReportData["findings"] {
+  return findingRows.map((finding) => ({
+    severity: finding.severity,
+    category: finding.category,
+    title: finding.title,
+    description: finding.description,
+    requirementKey: finding.requirementKey,
+    file: finding.file,
+    line: finding.line,
+    suggestedFix: finding.suggestedFix,
+    status: finding.status
+  }));
+}
+
+function buildTimeline(input: {
+  featureCreatedAt: Date;
+  prdCreatedAt: Date;
+  firstRequirementCreatedAt: Date | null;
+  pullRequestCreatedAt: Date;
+  qaReviewCreatedAt: Date;
+  approvalCreatedAt: Date | null;
+  generatedAt: Date;
+}): ReportTimelineItem[] {
+  return [
+    { label: "Feature created", at: input.featureCreatedAt.toISOString() },
+    { label: "PRD generated", at: input.prdCreatedAt.toISOString() },
+    {
+      label: "Requirements generated",
+      at: input.firstRequirementCreatedAt?.toISOString() ?? null
+    },
+    { label: "PR linked", at: input.pullRequestCreatedAt.toISOString() },
+    { label: "QA review completed", at: input.qaReviewCreatedAt.toISOString() },
+    {
+      label: "Approval completed",
+      at: input.approvalCreatedAt?.toISOString() ?? null
+    },
+    { label: "Report generated", at: input.generatedAt.toISOString() }
+  ];
+}
+
+function coverageSummaryText(
+  coverage: ClientDeliveryReportData["coverage"]
+) {
+  const covered = coverage.filter((item) => item.status === "covered").length;
+  const partial = coverage.filter((item) => item.status === "partial").length;
+  const missing = coverage.filter((item) => item.status === "missing").length;
+  const risky = coverage.filter((item) => item.status === "risky").length;
+
+  return `${covered} covered, ${partial} partial, ${missing} missing, ${risky} risky.`;
+}
+
 async function writeAuditLog(input: {
   organizationId: string;
   actorId: string;
@@ -422,7 +665,7 @@ export async function generateReleaseReport(
   assertRoleCan(workspace.membership.role, "project:write");
 
   const organizationId = workspace.activeOrganization.id;
-  const { featureRequest, project } = await getScopedFeatureOrThrow(
+  const { featureRequest, project, client } = await getScopedFeatureOrThrow(
     input.featureRequestId,
     organizationId
   );
@@ -458,10 +701,35 @@ export async function generateReleaseReport(
     featureRequest.id,
     organizationId
   );
+
+  if (!isClientApprovedDecision(approval.decision)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Client Delivery Report can only be generated after approval. Generate a Developer Fix Report for rejected or needs-fixes work."
+    });
+  }
+
   const generatedAt = new Date();
   const reportStatus = getReportStatusFromDecision(approval.decision);
-  const reportData: ReleaseReportData = {
+  const mappedRequirements = mapRequirements(requirements);
+  const mappedCoverage = mapCoverage(qaReviewBundle.coverage);
+  const mappedFindings = mapFindings(qaReviewBundle.findings);
+  const reportData: ClientDeliveryReportData = {
+    reportType: "client_delivery",
+    audience: "client",
+    visibility: "public",
     reportStatus,
+    summary: `This report summarizes what was requested, verified, and approved for ${featureRequest.title}.`,
+    deliveryVerdict:
+      approval.decision === "approved_with_risk"
+        ? "Approved with Notes"
+        : "Ready to Release",
+    client: {
+      id: client?.id ?? null,
+      name: client?.name ?? project.clientName ?? null,
+      companyName: client?.companyName ?? null
+    },
     feature: {
       id: featureRequest.id,
       title: featureRequest.title,
@@ -479,55 +747,11 @@ export async function generateReleaseReport(
       goals: prd.goals,
       nonGoals: prd.nonGoals
     },
-    requirements: requirements.map((requirement) => ({
-      key: requirement.requirementKey,
-      title: requirement.requirementKey,
-      description: requirement.requirement,
-      acceptanceCriteria: requirement.acceptanceCriteria,
-      priority: requirement.priority
-    })),
-    pullRequest: {
-      id: pullRequest.id,
-      provider: "github",
-      repository: repository.fullName,
-      owner: repository.owner,
-      repo: repository.name,
-      number: pullRequest.githubPrNumber,
-      title: pullRequest.title,
-      url: pullRequest.htmlUrl,
-      author: pullRequest.author,
-      sourceBranch: pullRequest.branch,
-      targetBranch: pullRequest.baseBranch,
-      state: pullRequest.state,
-      merged: Boolean(pullRequest.mergedAt),
-      latestCommitSha: snapshot.commitSha ?? pullRequest.latestCommitSha
-    },
-    qaReview: {
-      id: qaReviewBundle.review.id,
-      overallStatus: qaReviewBundle.review.overallStatus,
-      readinessScore: qaReviewBundle.review.readinessScore,
-      confidenceScore: qaReviewBundle.review.confidenceScore,
-      summary: qaReviewBundle.review.summary,
-      reviewVersion: qaReviewBundle.review.reviewVersion,
-      createdAt: qaReviewBundle.review.createdAt.toISOString()
-    },
-    coverage: qaReviewBundle.coverage.map((coverage) => ({
-      requirementKey: coverage.requirementKey,
-      status: coverage.status,
-      evidence: coverage.evidence,
-      concern: coverage.concern
-    })),
-    findings: qaReviewBundle.findings.map((finding) => ({
-      severity: finding.severity,
-      category: finding.category,
-      title: finding.title,
-      description: finding.description,
-      requirementKey: finding.requirementKey,
-      file: finding.file,
-      line: finding.line,
-      suggestedFix: finding.suggestedFix,
-      status: finding.status
-    })),
+    requirements: mappedRequirements,
+    pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
+    qaReview: mapQaReview(qaReviewBundle.review),
+    coverage: mappedCoverage,
+    findings: mappedFindings,
     approval: {
       id: approval.id,
       decision: approval.decision,
@@ -536,6 +760,15 @@ export async function generateReleaseReport(
       approvedBy,
       createdAt: approval.createdAt.toISOString()
     },
+    timeline: buildTimeline({
+      featureCreatedAt: featureRequest.createdAt,
+      prdCreatedAt: prd.createdAt,
+      firstRequirementCreatedAt: requirements[0]?.createdAt ?? null,
+      pullRequestCreatedAt: pullRequest.createdAt,
+      qaReviewCreatedAt: qaReviewBundle.review.createdAt,
+      approvalCreatedAt: approval.createdAt,
+      generatedAt
+    }),
     generatedAt: generatedAt.toISOString()
   };
 
@@ -547,7 +780,7 @@ export async function generateReleaseReport(
       featureRequestId: featureRequest.id,
       pullRequestId: pullRequest.id,
       approvalId: approval.id,
-      title: featureRequest.title,
+      title: `Client Delivery Report - ${featureRequest.title}`,
       status: "generated",
       shareToken: createShareToken(),
       reportData: toJsonObject(reportData),
@@ -578,16 +811,193 @@ export async function generateReleaseReport(
   return toTypedReport(report);
 }
 
+export async function generateDeveloperFixReport(
+  ctx: ProtectedContext,
+  input: {
+    featureRequestId: string;
+  }
+) {
+  const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+  assertRoleCan(workspace.membership.role, "project:write");
+
+  const organizationId = workspace.activeOrganization.id;
+  const { featureRequest, project } = await getScopedFeatureOrThrow(
+    input.featureRequestId,
+    organizationId
+  );
+  const prd = await getLatestPrdOrThrow(featureRequest.id);
+  try {
+    await throwIfPrdOutdated({
+      featureRequestId: featureRequest.id,
+      prdCreatedAt: prd.createdAt
+    });
+  } catch (error) {
+    if (error instanceof TRPCError) {
+      throw error;
+    }
+
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Your PRD is outdated or could not be validated. Please regenerate the PRD and try again.",
+      cause: error
+    });
+  }
+
+  const requirements = await getRequirementsOrThrow(prd.id);
+  const { pullRequest, repository } = await getLinkedPullRequestOrThrow(
+    featureRequest.id,
+    organizationId
+  );
+  const snapshot = await getLatestSnapshotOrThrow(pullRequest.id);
+  const qaReviewBundle = await getLatestQaReviewOrThrow(
+    featureRequest.id,
+    organizationId
+  );
+  const latestApproval = await getLatestApproval(featureRequest.id, organizationId);
+  const mappedRequirements = mapRequirements(requirements);
+  const mappedCoverage = mapCoverage(qaReviewBundle.coverage);
+  const mappedFindings = mapFindings(qaReviewBundle.findings);
+  const riskyCoverage = mappedCoverage.filter((coverage) =>
+    isRiskyCoverageStatus(coverage.status)
+  );
+  const openFindings = mappedFindings.filter((finding) =>
+    isOpenFindingStatus(finding.status)
+  );
+  const highRiskGaps = openFindings.filter(
+    (finding) => finding.severity === "high" || finding.severity === "critical"
+  );
+  const hasQaGaps = riskyCoverage.length > 0 || openFindings.length > 0;
+  const wasRejected = isRejectedDecision(latestApproval?.approval.decision);
+
+  if (!hasQaGaps && !wasRejected) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Developer Fix Report can only be generated when QA found gaps or the human reviewer requested fixes."
+    });
+  }
+
+  const requirementByKey = new Map(
+    mappedRequirements.map((requirement) => [requirement.key, requirement])
+  );
+  const failedRequirements = riskyCoverage
+    .filter((coverage) => coverage.status === "missing" || coverage.status === "risky")
+    .map((coverage) => requirementByKey.get(coverage.requirementKey))
+    .filter((requirement): requirement is ClientDeliveryReportData["requirements"][number] =>
+      Boolean(requirement)
+    );
+  const partialRequirements = riskyCoverage
+    .filter((coverage) => coverage.status === "partial")
+    .map((coverage) => requirementByKey.get(coverage.requirementKey))
+    .filter((requirement): requirement is ClientDeliveryReportData["requirements"][number] =>
+      Boolean(requirement)
+    );
+  const generatedAt = new Date();
+  const verdict = wasRejected
+    ? "rejected"
+    : failedRequirements.length > 0
+      ? "needs_fixes"
+      : "partially_delivered";
+  const reportData: DeveloperFixReportData = {
+    reportType: "developer_fix",
+    audience: "developer",
+    visibility: "private",
+    reportStatus: verdict,
+    summary: `QA found ${coverageSummaryText(mappedCoverage)} Fix the listed gaps, push updates to the same PR, then rerun QA review.`,
+    instruction:
+      "Fix these gaps, push updates to the same PR, then rerun QA review.",
+    feature: {
+      id: featureRequest.id,
+      title: featureRequest.title,
+      summary: featureRequest.description
+    },
+    project: {
+      id: project.id,
+      name: project.name
+    },
+    pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
+    qaReview: mapQaReview(qaReviewBundle.review),
+    requirements: mappedRequirements,
+    coverage: mappedCoverage,
+    findings: mappedFindings,
+    failedRequirements,
+    partialRequirements,
+    highRiskGaps: highRiskGaps.map((finding) => ({
+      title: finding.title,
+      severity: finding.severity,
+      requirementKey: finding.requirementKey,
+      suggestedFix: finding.suggestedFix
+    })),
+    suggestedNextActions: [
+      "Review each missing or partial requirement below.",
+      "Apply the suggested fixes in the linked GitHub PR.",
+      "Push updates to the same PR branch.",
+      "Refresh the PR snapshot and rerun AI QA review."
+    ],
+    approval: latestApproval
+      ? {
+          id: latestApproval.approval.id,
+          decision: latestApproval.approval.decision,
+          note: latestApproval.approval.note,
+          remainingRisks: latestApproval.approval.remainingRisks,
+          reviewer: latestApproval.approvedBy,
+          createdAt: latestApproval.approval.createdAt.toISOString()
+        }
+      : null,
+    generatedAt: generatedAt.toISOString()
+  };
+
+  const [report] = await db
+    .insert(releaseReports)
+    .values({
+      organizationId,
+      projectId: project.id,
+      featureRequestId: featureRequest.id,
+      pullRequestId: pullRequest.id,
+      approvalId: latestApproval?.approval.id ?? null,
+      title: `Developer Fix Report - ${featureRequest.title}`,
+      status: "generated",
+      shareToken: createShareToken(),
+      reportData: toJsonObject(reportData),
+      readinessScore: qaReviewBundle.review.readinessScore,
+      generatedBy: workspace.appUser.id,
+      generatedAt
+    })
+    .returning();
+
+  if (!report) {
+    throw new Error("Unable to generate developer fix report.");
+  }
+
+  await writeAuditLog({
+    organizationId,
+    actorId: workspace.appUser.id,
+    action: "developer_fix_report_generated",
+    entityType: "release_report",
+    entityId: report.id,
+    metadata: toJsonObject({
+      featureRequestId: featureRequest.id,
+      pullRequestId: pullRequest.id,
+      approvalId: latestApproval?.approval.id ?? null,
+      shareToken: report.shareToken
+    })
+  });
+
+  return toTypedReport(report);
+}
+
 export async function getLatestReleaseReportForFeature(
   ctx: ProtectedContext,
-  featureRequestId: string
+  featureRequestId: string,
+  reportType?: ReleaseReportType
 ) {
   const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
   assertRoleCan(workspace.membership.role, "project:read");
 
   await getScopedFeatureOrThrow(featureRequestId, workspace.activeOrganization.id);
 
-  const [report] = await db
+  const reports = await db
     .select()
     .from(releaseReports)
     .where(
@@ -597,7 +1007,11 @@ export async function getLatestReleaseReportForFeature(
       )
     )
     .orderBy(desc(releaseReports.createdAt))
-    .limit(1);
+    .limit(reportType ? 50 : 1);
+
+  const report = reportType
+    ? reports.find((candidate) => getReportType(candidate) === reportType)
+    : reports[0];
 
   return report ? toTypedReport(report) : null;
 }

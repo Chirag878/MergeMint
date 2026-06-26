@@ -245,8 +245,13 @@ export function FeatureDetailClient({
   const latestApproval = trpc.approval.getLatest.useQuery({
     featureRequestId
   });
-  const latestReleaseReport = trpc.releaseReport.getLatestForFeature.useQuery({
-    featureRequestId
+  const latestClientDeliveryReport = trpc.releaseReport.getLatestForFeature.useQuery({
+    featureRequestId,
+    reportType: "client_delivery"
+  });
+  const latestDeveloperFixReport = trpc.releaseReport.getLatestForFeature.useQuery({
+    featureRequestId,
+    reportType: "developer_fix"
   });
   const invalidateReleaseControlRoom = async () => {
     await utils.featureRequests.getReleaseControlRoom.invalidate({
@@ -323,11 +328,22 @@ export function FeatureDetailClient({
   const generateReleaseReport = trpc.releaseReport.generate.useMutation({
     onSuccess: async () => {
       await utils.releaseReport.getLatestForFeature.invalidate({
-        featureRequestId
+        featureRequestId,
+        reportType: "client_delivery"
       });
       await invalidateReleaseControlRoom();
     }
   });
+  const generateDeveloperFixReport =
+    trpc.releaseReport.generateDeveloperFix.useMutation({
+      onSuccess: async () => {
+        await utils.releaseReport.getLatestForFeature.invalidate({
+          featureRequestId,
+          reportType: "developer_fix"
+        });
+        await invalidateReleaseControlRoom();
+      }
+    });
 
   const feature = workflow.data?.featureRequest;
   const clarificationQuestions =
@@ -938,12 +954,25 @@ export function FeatureDetailClient({
         latestQaReview={latestQaReview.data}
         prdMayBeOutdated={prdMayBeOutdated}
         latestApproval={latestApproval.data}
-        latestReport={latestReleaseReport.data}
-        isLoadingReport={latestReleaseReport.isLoading}
-        reportError={latestReleaseReport.error?.message}
-        onGenerate={() => generateReleaseReport.mutate({ featureRequestId })}
-        isGenerating={generateReleaseReport.isPending}
-        generateError={generateReleaseReport.error?.message}
+        latestClientReport={latestClientDeliveryReport.data}
+        latestDeveloperFixReport={latestDeveloperFixReport.data}
+        isLoadingReport={
+          latestClientDeliveryReport.isLoading || latestDeveloperFixReport.isLoading
+        }
+        reportError={
+          latestClientDeliveryReport.error?.message ??
+          latestDeveloperFixReport.error?.message
+        }
+        onGenerateClientReport={() =>
+          generateReleaseReport.mutate({ featureRequestId })
+        }
+        onGenerateDeveloperFixReport={() =>
+          generateDeveloperFixReport.mutate({ featureRequestId })
+        }
+        isGeneratingClientReport={generateReleaseReport.isPending}
+        isGeneratingDeveloperFixReport={generateDeveloperFixReport.isPending}
+        clientGenerateError={generateReleaseReport.error?.message}
+        developerGenerateError={generateDeveloperFixReport.error?.message}
       />
       ) : null}
 
@@ -1669,7 +1698,7 @@ function ReleaseReportPanel({
     <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-base font-medium text-neutral-100">
-          Release Report
+          Client Delivery Report
         </h3>
         {report ? <StatusBadge status={report.status} /> : null}
       </div>
@@ -1698,8 +1727,8 @@ function ReleaseReportPanel({
         <div className="mt-4">
           <p className="text-sm text-neutral-500">
             {canGenerateReport
-              ? "No release report has been generated."
-              : "Run QA and submit approval before generating a release report."}
+              ? "No client delivery report has been generated."
+              : "Run QA and submit approval before generating a client delivery report."}
           </p>
           <button
             type="button"
@@ -1707,7 +1736,7 @@ function ReleaseReportPanel({
             disabled={!canGenerateReport || isGeneratingReport}
             className="mt-3 rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isGeneratingReport ? "Generating..." : "Generate report"}
+            {isGeneratingReport ? "Generating..." : "Generate Client Delivery Report"}
           </button>
         </div>
       )}
@@ -2107,10 +2136,13 @@ type ReleaseReportView = {
   generatedAt: Date | string | null;
   createdAt: Date | string;
   reportData: {
+    reportType?: "client_delivery" | "developer_fix";
+    audience?: string;
+    visibility?: string;
     reportStatus?: string;
     approval?: {
       decision?: string;
-    };
+    } | null;
   };
 };
 
@@ -2595,28 +2627,65 @@ function ReleaseReportSection({
   latestQaReview,
   prdMayBeOutdated,
   latestApproval,
-  latestReport,
+  latestClientReport,
+  latestDeveloperFixReport,
   isLoadingReport,
   reportError,
-  onGenerate,
-  isGenerating,
-  generateError
+  onGenerateClientReport,
+  onGenerateDeveloperFixReport,
+  isGeneratingClientReport,
+  isGeneratingDeveloperFixReport,
+  clientGenerateError,
+  developerGenerateError
 }: {
   latestQaReview: QAReviewBundle | null | undefined;
   prdMayBeOutdated: boolean;
   latestApproval: ApprovalView | null | undefined;
-  latestReport: ReleaseReportView | null | undefined;
+  latestClientReport: ReleaseReportView | null | undefined;
+  latestDeveloperFixReport: ReleaseReportView | null | undefined;
   isLoadingReport: boolean;
   reportError?: string;
-  onGenerate: () => void;
-  isGenerating: boolean;
-  generateError?: string;
+  onGenerateClientReport: () => void;
+  onGenerateDeveloperFixReport: () => void;
+  isGeneratingClientReport: boolean;
+  isGeneratingDeveloperFixReport: boolean;
+  clientGenerateError?: string;
+  developerGenerateError?: string;
 }) {
-  const canGenerate =
-    Boolean(latestQaReview && latestApproval) && !prdMayBeOutdated && !isGenerating;
-  const sharePath = latestReport
-    ? `/reports/${latestReport.shareToken}`
-    : undefined;
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const riskSummary = getApprovalRiskSummary(latestQaReview);
+  const approvalDecision = latestApproval?.decision;
+  const needsFixes =
+    riskSummary.hasUnresolvedRisk ||
+    approvalDecision === "rejected" ||
+    approvalDecision === "changes_requested";
+  const fixReportIsPrimary =
+    needsFixes && approvalDecision !== "approved" && approvalDecision !== "approved_with_risk";
+  const clientApproved =
+    approvalDecision === "approved" || approvalDecision === "approved_with_risk";
+  const canGenerateDeveloperFix =
+    Boolean(latestQaReview) &&
+    fixReportIsPrimary &&
+    !prdMayBeOutdated &&
+    !isGeneratingDeveloperFixReport;
+  const canGenerateClient =
+    Boolean(latestQaReview && latestApproval) &&
+    clientApproved &&
+    !prdMayBeOutdated &&
+    !isGeneratingClientReport;
+
+  async function copyReportLink(path: string, label: string) {
+    setCopyError(null);
+    try {
+      const url = new URL(path, window.location.origin).toString();
+      await navigator.clipboard.writeText(url);
+      setCopiedLink(label);
+      window.setTimeout(() => setCopiedLink(null), 2000);
+    } catch {
+      setCopyError("Could not copy link. Open the report and copy the URL.");
+    }
+  }
 
   return (
     <section
@@ -2625,106 +2694,186 @@ function ReleaseReportSection({
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-medium">Release Report</h2>
+          <h2 className="text-lg font-medium">Reports</h2>
           <p className="mt-1 text-sm text-neutral-500">
-            Generate the client-ready verification artifact from stored PRD, PR,
-            QA, and approval data.
+            Generate the right artifact for the current audience: developer fix
+            guidance or client delivery proof.
           </p>
         </div>
-        {latestReport ? (
-          <StatusBadge status={latestReport.reportData.reportStatus ?? latestReport.status} />
-        ) : null}
       </div>
 
       {prdMayBeOutdated ? (
         <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
           PRD may be outdated. Regenerate the PRD and rerun QA before generating
-          a release report.
+          reports.
         </p>
       ) : !latestQaReview ? (
-        <EmptyText>Run AI QA Review before generating release report.</EmptyText>
-      ) : !latestApproval ? (
-        <EmptyText>Submit an approval decision before generating release report.</EmptyText>
+        <EmptyText>Run AI QA Review before generating reports.</EmptyText>
       ) : null}
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        {latestQaReview && latestApproval ? (
-          <button
-            type="button"
-            onClick={onGenerate}
-            disabled={!canGenerate}
-            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isGenerating
-              ? "Generating..."
-              : latestReport
-                ? "Generate new report"
-                : "Generate Release Report"}
-          </button>
-        ) : null}
-      </div>
 
       {isLoadingReport ? <EmptyText>Loading latest release report...</EmptyText> : null}
       {reportError ? <p className="mt-3 text-sm text-red-300">{reportError}</p> : null}
+      {copyError ? <p className="mt-3 text-sm text-red-300">{copyError}</p> : null}
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        <ReportActionCard
+          title="Developer Fix Report"
+          description="This report explains what needs to be fixed before this PR can be approved."
+          report={latestDeveloperFixReport}
+          primaryLabel={
+            latestDeveloperFixReport
+              ? "Send Fix Report to Developer"
+              : "Generate Developer Fix Report"
+          }
+          copyLabel="Copy fix report link"
+          copied={copiedLink === "developer_fix"}
+          disabled={!canGenerateDeveloperFix}
+          isGenerating={isGeneratingDeveloperFixReport}
+          generateError={developerGenerateError}
+          onGenerate={onGenerateDeveloperFixReport}
+          onCopy={(path) => copyReportLink(path, "developer_fix")}
+          unavailableText={
+            !latestQaReview
+              ? "Run AI QA review first."
+              : clientApproved
+                ? "Approved; existing fix reports remain available, but the client report is primary."
+                : !needsFixes
+                ? "Available when QA finds gaps or a reviewer requests fixes."
+                : prdMayBeOutdated
+                  ? "Regenerate PRD and rerun QA first."
+                  : undefined
+          }
+        />
+
+        <ReportActionCard
+          title="Client Delivery Report"
+          description="This report summarizes what was requested, verified, and approved for delivery."
+          report={latestClientReport}
+          primaryLabel={
+            latestClientReport
+              ? "Generate New Client Delivery Report"
+              : "Generate Client Delivery Report"
+          }
+          copyLabel="Copy client report link"
+          copied={copiedLink === "client_delivery"}
+          disabled={!canGenerateClient}
+          isGenerating={isGeneratingClientReport}
+          generateError={clientGenerateError}
+          onGenerate={onGenerateClientReport}
+          onCopy={(path) => copyReportLink(path, "client_delivery")}
+          unavailableText={
+            !latestQaReview
+              ? "Run AI QA review first."
+              : !latestApproval
+                ? "Submit an approval decision first."
+                : !clientApproved
+                  ? "Blocked because this PR is rejected or needs fixes."
+                  : prdMayBeOutdated
+                    ? "Regenerate PRD and rerun QA first."
+                    : undefined
+          }
+        />
+      </div>
+    </section>
+  );
+}
+
+function ReportActionCard({
+  title,
+  description,
+  report,
+  primaryLabel,
+  copyLabel,
+  copied,
+  disabled,
+  isGenerating,
+  generateError,
+  onGenerate,
+  onCopy,
+  unavailableText
+}: {
+  title: string;
+  description: string;
+  report: ReleaseReportView | null | undefined;
+  primaryLabel: string;
+  copyLabel: string;
+  copied: boolean;
+  disabled: boolean;
+  isGenerating: boolean;
+  generateError?: string;
+  onGenerate: () => void;
+  onCopy: (path: string) => void;
+  unavailableText?: string;
+}) {
+  const sharePath = report ? `/reports/${report.shareToken}` : undefined;
+
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-medium text-neutral-100">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-neutral-500">{description}</p>
+        </div>
+        {report ? (
+          <StatusBadge status={report.reportData.reportStatus ?? report.status} />
+        ) : null}
+      </div>
+
+      {report ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+            <p className="text-xs text-neutral-500">Latest</p>
+            <p className="mt-1 text-sm text-neutral-100">{report.title}</p>
+          </div>
+          <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+            <p className="text-xs text-neutral-500">Generated</p>
+            <p className="mt-1 text-sm text-neutral-100">
+              {formatDate(report.generatedAt ?? report.createdAt)}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {unavailableText ? (
+        <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-900 p-3 text-sm text-neutral-400">
+          {unavailableText}
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={disabled}
+          className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isGenerating ? "Generating..." : primaryLabel}
+        </button>
+
+        {sharePath ? (
+          <>
+            <Link
+              href={sharePath}
+              target="_blank"
+              className="rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
+            >
+              Open report
+            </Link>
+            <button
+              type="button"
+              onClick={() => onCopy(sharePath)}
+              className="rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
+            >
+              {copied ? "Copied" : copyLabel}
+            </button>
+          </>
+        ) : null}
+      </div>
+
       {generateError ? (
         <p className="mt-3 text-sm text-red-300">{generateError}</p>
       ) : null}
-
-      {latestReport ? (
-        <div className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm text-neutral-500">Latest report</p>
-              <h3 className="mt-1 font-medium text-neutral-100">
-                {latestReport.title}
-              </h3>
-            </div>
-            <p className="text-xs text-neutral-500">
-              {formatDate(latestReport.generatedAt ?? latestReport.createdAt)}
-            </p>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
-              <p className="text-xs text-neutral-500">Status</p>
-              <p className="mt-1 text-sm text-neutral-100">
-                {latestReport.reportData.reportStatus ?? latestReport.status}
-              </p>
-            </div>
-            <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
-              <p className="text-xs text-neutral-500">Readiness score</p>
-              <p className="mt-1 text-sm text-neutral-100">
-                {latestReport.readinessScore ?? 0}
-              </p>
-            </div>
-            <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
-              <p className="text-xs text-neutral-500">Approval decision</p>
-              <p className="mt-1 text-sm text-neutral-100">
-                {formatApprovalDecision(
-                  latestReport.reportData.approval?.decision ?? "approved"
-                )}
-              </p>
-            </div>
-          </div>
-
-          {sharePath ? (
-            <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-900 p-3">
-              <p className="text-xs text-neutral-500">Share URL</p>
-              <p className="mt-2 break-all font-mono text-sm text-blue-200">
-                {sharePath}
-              </p>
-              <Link
-                href={sharePath}
-                target="_blank"
-                className="mt-3 inline-flex rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
-              >
-                Open public report
-              </Link>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
+    </div>
   );
 }
 

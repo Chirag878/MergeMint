@@ -57,6 +57,11 @@ function toJsonObject(value: unknown): JsonObject {
   return JSON.parse(JSON.stringify(value)) as JsonObject;
 }
 
+function isClientDeliveryReport(report: ReleaseReportRow) {
+  const reportData = report.reportData as { reportType?: string };
+  return !reportData.reportType || reportData.reportType === "client_delivery";
+}
+
 function isClientStatus(value: string): value is ClientStatus {
   return value === "active" || value === "archived";
 }
@@ -322,8 +327,9 @@ function buildClientStats(input: {
       featureIds.has(approval.featureRequestId)
     )
   );
-  const clientReports = input.rows.releaseReports.filter((report) =>
-    featureIds.has(report.featureRequestId)
+  const clientReports = input.rows.releaseReports.filter(
+    (report) =>
+      featureIds.has(report.featureRequestId) && isClientDeliveryReport(report)
   );
 
   let openFindingsCount = 0;
@@ -652,7 +658,10 @@ export async function getClientDeliveryLedger(
     rows.approvals.filter((approval) => featureIds.has(approval.featureRequestId))
   );
   const latestReleaseReport = latestByFeature(
-    rows.releaseReports.filter((report) => featureIds.has(report.featureRequestId))
+    rows.releaseReports.filter(
+      (report) =>
+        featureIds.has(report.featureRequestId) && isClientDeliveryReport(report)
+    )
   );
 
   const coverageByReviewId = new Map<string, CoverageRow[]>();
@@ -669,8 +678,9 @@ export async function getClientDeliveryLedger(
     findingsByReviewId.set(finding.qaReviewId, existing);
   }
 
-  const clientReports = rows.releaseReports.filter((report) =>
-    featureIds.has(report.featureRequestId)
+  const clientReports = rows.releaseReports.filter(
+    (report) =>
+      featureIds.has(report.featureRequestId) && isClientDeliveryReport(report)
   );
 
   const deliveryItems = clientFeatures.map((feature) => {

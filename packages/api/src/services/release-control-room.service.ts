@@ -59,6 +59,11 @@ function isRiskyCoverage(status: string) {
   return status === "partial" || status === "missing" || status === "risky";
 }
 
+function isClientDeliveryReport(report: typeof releaseReports.$inferSelect) {
+  const reportData = report.reportData as { reportType?: string };
+  return !reportData.reportType || reportData.reportType === "client_delivery";
+}
+
 function getReleaseReadinessStatus(input: {
   prd: typeof prds.$inferSelect | null;
   pullRequest: typeof pullRequests.$inferSelect | null;
@@ -376,7 +381,8 @@ export async function getReleaseControlRoom(
   const latestRepository = pullRequestRows[0]?.repository ?? null;
   const latestQaReview = qaReviewRows[0] ?? null;
   const latestApproval = approvalRows[0] ?? null;
-  const latestReleaseReport = releaseReportRows[0] ?? null;
+  const latestReleaseReport =
+    releaseReportRows.find(isClientDeliveryReport) ?? null;
   const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
     questions,
     latestPrd

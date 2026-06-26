@@ -20,6 +20,7 @@ type ProtectedContext = TRPCContext & {
   session: NonNullable<TRPCContext["session"]>;
 };
 type FeatureRow = typeof featureRequests.$inferSelect;
+type ReleaseReportRow = typeof releaseReports.$inferSelect;
 
 function toBootstrapInput(ctx: ProtectedContext) {
   return {
@@ -42,6 +43,11 @@ function latestByFeature<T extends { featureRequestId: string; createdAt: Date }
   }
 
   return map;
+}
+
+function isClientDeliveryReport(report: ReleaseReportRow) {
+  const reportData = report.reportData as { reportType?: string };
+  return !reportData.reportType || reportData.reportType === "client_delivery";
 }
 
 function isOpenFinding(finding: typeof qaFindings.$inferSelect) {
@@ -127,7 +133,9 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
   const latestPullRequest = latestByFeature(pullRequestRows);
   const latestQaReview = latestByFeature(qaReviewRows);
   const latestApproval = latestByFeature(approvalRows);
-  const latestReleaseReport = latestByFeature(releaseReportRows);
+  const latestReleaseReport = latestByFeature(
+    releaseReportRows.filter(isClientDeliveryReport)
+  );
   const openFindingsByReviewId = new Map<string, number>();
 
   for (const finding of findingRows.filter(isOpenFinding)) {

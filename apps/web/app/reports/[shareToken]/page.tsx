@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
-import { getReleaseReportByShareToken } from "@veriflow/api";
+import {
+  getReleaseReportByShareToken,
+  type DeveloperFixReportData
+} from "@veriflow/api";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +20,10 @@ export default async function PublicReleaseReportPage({
   }
 
   const data = report.reportData;
+  if (data.reportType === "developer_fix") {
+    return <DeveloperFixReportPage data={data} />;
+  }
+
   const coverageSummary = getCoverageSummary(data.coverage, data.findings);
   const decisionBanner = getDecisionBanner(
     data.approval.decision,
@@ -282,6 +289,171 @@ export default async function PublicReleaseReportPage({
   );
 }
 
+function DeveloperFixReportPage({ data }: { data: DeveloperFixReportData }) {
+  const failedKeys = new Set([
+    ...data.failedRequirements.map((requirement) => requirement.key),
+    ...data.partialRequirements.map((requirement) => requirement.key)
+  ]);
+  const priorityRequirements = data.requirements.filter((requirement) =>
+    failedKeys.has(requirement.key)
+  );
+
+  return (
+    <main className="min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
+      <article className="mx-auto max-w-6xl space-y-6">
+        <header className="rounded-lg border border-amber-800 bg-neutral-900 p-6 shadow-2xl shadow-black/20 print:border-neutral-300 print:bg-white print:shadow-none md:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-5">
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="grid size-9 place-items-center rounded-md border border-amber-800 bg-amber-950/50 text-sm font-semibold text-amber-200">
+                  V
+                </div>
+                <p className="text-sm font-medium uppercase tracking-[0.28em] text-amber-300">
+                  Developer Fix Report
+                </p>
+                <StatusPill status="internal" />
+              </div>
+              <h1 className="mt-6 text-3xl font-semibold tracking-tight md:text-5xl">
+                {data.feature.title}
+              </h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-400 md:text-base">
+                This report explains what needs to be fixed before this PR can
+                be approved.
+              </p>
+            </div>
+            <div className="space-y-3 text-right">
+              <PrintButton />
+              <StatusPill status={data.reportStatus} />
+              <p className="text-xs text-neutral-500">
+                Generated {formatDate(data.generatedAt)}
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <DecisionBanner
+          banner={{
+            tone: data.reportStatus === "rejected" ? "red" : "amber",
+            message: data.instruction
+          }}
+        />
+
+        <section className="grid gap-4 md:grid-cols-4">
+          <Metric label="Failed" value={`${data.failedRequirements.length}`} />
+          <Metric label="Partial" value={`${data.partialRequirements.length}`} />
+          <Metric label="Open Findings" value={`${data.findings.filter((finding) => isOpenFindingStatus(finding.status)).length}`} />
+          <Metric label="Readiness" value={`${data.qaReview.readinessScore ?? 0}`} />
+        </section>
+
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+          <SectionHeading eyebrow="Pull request" title={data.pullRequest.title} />
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+              <KeyValue label="Repository" value={data.pullRequest.repository} />
+              <KeyValue label="PR number" value={`#${data.pullRequest.number}`} />
+              <KeyValue
+                label="Branches"
+                value={`${data.pullRequest.sourceBranch} -> ${data.pullRequest.targetBranch}`}
+              />
+            </div>
+            <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+              <KeyValue label="Verdict" value={formatLabel(data.reportStatus)} />
+              <KeyValue label="AI verdict" value={formatLabel(data.qaReview.overallStatus)} />
+              <a
+                href={data.pullRequest.url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
+              >
+                Open GitHub PR
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+          <SectionHeading
+            eyebrow="Fix these first"
+            title={`${priorityRequirements.length} requirements need attention`}
+          />
+          <div className="mt-5 space-y-3">
+            {priorityRequirements.map((requirement) => {
+              const coverage = data.coverage.find(
+                (item) => item.requirementKey === requirement.key
+              );
+              const relatedFindings = data.findings.filter(
+                (finding) => finding.requirementKey === requirement.key
+              );
+
+              return (
+                <article
+                  key={requirement.key}
+                  className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-amber-200">
+                        {requirement.key}
+                      </p>
+                      <h3 className="mt-1 font-medium text-neutral-100">
+                        {requirement.description}
+                      </h3>
+                    </div>
+                    <StatusPill status={coverage?.status ?? "not_reviewed"} />
+                  </div>
+                  <EvidenceBlock evidence={coverage?.evidence} />
+                  {coverage?.concern ? (
+                    <p className="mt-3 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+                      Concern: {coverage.concern}
+                    </p>
+                  ) : null}
+                  {relatedFindings.map((finding, index) => (
+                    <div
+                      key={`${finding.title}-${index}`}
+                      className="mt-3 rounded-md border border-neutral-800 bg-neutral-900 p-3"
+                    >
+                      <div className="flex flex-wrap gap-2">
+                        <SeverityPill severity={finding.severity} />
+                        <StatusPill status={finding.status} />
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-neutral-100">
+                        {finding.title}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-neutral-300">
+                        {finding.description}
+                      </p>
+                      {finding.suggestedFix ? (
+                        <p className="mt-3 rounded-md border border-blue-900 bg-blue-950/30 p-3 text-sm text-blue-100">
+                          Suggested fix: {finding.suggestedFix}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+          <SectionHeading eyebrow="Next actions" title="How to get this PR approved" />
+          <StringList title="Steps" items={data.suggestedNextActions} />
+          {data.approval?.note ? (
+            <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm leading-6 text-neutral-300">
+              Reviewer note: {data.approval.note}
+            </p>
+          ) : null}
+        </section>
+
+        <footer className="rounded-lg border border-neutral-800 bg-neutral-900 p-5 text-sm text-neutral-500">
+          <p>This is an internal/developer-facing report, not a client delivery report.</p>
+          <p className="mt-3">{data.instruction}</p>
+        </footer>
+      </article>
+    </main>
+  );
+}
+
 function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div>
@@ -522,4 +694,8 @@ function getDecisionBanner(
 
 function isApprovedAiVerdict(value: string) {
   return value === "approved" || value === "passed";
+}
+
+function isOpenFindingStatus(value: string) {
+  return value === "open" || value === "needs_human_review";
 }

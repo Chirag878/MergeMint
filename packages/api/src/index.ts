@@ -6,6 +6,8 @@ export { getAuthDebugDiagnostics } from "./services/auth-debug.service";
 export { getPlanEntitlements } from "./services/plan-entitlements.service";
 export {
   getReleaseReportByShareToken,
+  type ClientDeliveryReportData,
+  type DeveloperFixReportData,
   type PublicReleaseReport,
   type ReleaseReportData
 } from "./services/release-report.service";
