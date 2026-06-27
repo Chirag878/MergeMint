@@ -139,11 +139,22 @@ type ReleaseControlRoomView = {
     branch: string;
     baseBranch: string;
     htmlUrl: string;
+    state: string;
     changedFilesCount: number;
     additions: number;
     deletions: number;
     ciStatus: string;
     lastSnapshotAt: Date | string | null;
+    latestReviewAt: Date | string | null;
+    prUpdatedAfterLastReview: boolean;
+    rereviewRequired: boolean;
+    latestWebhookEvent: {
+      eventType: string;
+      action: string | null;
+      status: string;
+      receivedAt: Date | string;
+      processedAt: Date | string | null;
+    } | null;
   } | null;
   qaReview: {
     reviewVersion: number;
@@ -1178,6 +1189,9 @@ function ReleaseControlRoom({
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge>{data.feature.status}</Badge>
             <StatusBadge status={data.releaseReadinessStatus} />
+            {data.prEvidence?.rereviewRequired ? (
+              <StatusBadge status="Re-review required" />
+            ) : null}
             <Badge>{data.feature.priority}</Badge>
           </div>
         </div>
@@ -1594,10 +1608,24 @@ function PREvidencePanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-base font-medium text-neutral-100">PR Evidence</h3>
-        {evidence ? <StatusBadge status={evidence.ciStatus} /> : null}
+        {evidence ? (
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge status={evidence.state} />
+            <StatusBadge status={evidence.ciStatus} />
+            {evidence.rereviewRequired ? (
+              <StatusBadge status="Re-review required" />
+            ) : null}
+          </div>
+        ) : null}
       </div>
       {evidence ? (
         <div className="mt-4 space-y-3">
+          {evidence.rereviewRequired ? (
+            <p className="rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+              PR updated after last QA review. Re-review required before approval
+              or release reporting.
+            </p>
+          ) : null}
           <div>
             <p className="font-medium text-neutral-100">{evidence.title}</p>
             <p className="mt-1 text-sm text-neutral-500">
@@ -1617,7 +1645,24 @@ function PREvidencePanel({
                 ? formatDate(evidence.lastSnapshotAt)
                 : "Not captured"}
             </p>
+            <p className="sm:col-span-2">
+              Latest QA review:{" "}
+              {evidence.latestReviewAt
+                ? formatDate(evidence.latestReviewAt)
+                : "Not reviewed"}
+            </p>
           </div>
+          {evidence.latestWebhookEvent ? (
+            <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3 text-sm">
+              <p className="font-medium text-neutral-200">GitHub activity</p>
+              <p className="mt-1 text-neutral-500">
+                {evidence.latestWebhookEvent.action ??
+                  evidence.latestWebhookEvent.eventType}{" "}
+                webhook {evidence.latestWebhookEvent.status} at{" "}
+                {formatDate(evidence.latestWebhookEvent.receivedAt)}
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <a
               href={evidence.htmlUrl}
@@ -2051,6 +2096,22 @@ function GitHubPullRequestSection({
         } | null;
         changedFilesCount: number;
         diffTextLength: number;
+        latestWebhookEvent: {
+          eventType: string;
+          action: string | null;
+          status: string;
+          receivedAt: Date | string;
+          processedAt: Date | string | null;
+          errorMessage: string | null;
+          payloadSummary: Record<string, unknown> | null;
+        } | null;
+        latestQaReview: {
+          id: string;
+          reviewVersion: number;
+          createdAt: Date | string;
+        } | null;
+        prUpdatedAfterLastReview: boolean;
+        rereviewRequired: boolean;
       }
     | null
     | undefined;
@@ -2119,8 +2180,18 @@ function GitHubPullRequestSection({
               <div className="flex flex-wrap gap-2">
                 <Badge>{data.pullRequest.state}</Badge>
                 <Badge>{data.latestSnapshot?.ciStatus ?? "unknown"}</Badge>
+                {data.rereviewRequired ? (
+                  <StatusBadge status="Re-review required" />
+                ) : null}
               </div>
             </div>
+
+            {data.rereviewRequired ? (
+              <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+                PR updated after last QA review. Re-review required; webhook
+                sync does not run AI automatically.
+              </p>
+            ) : null}
 
             <div className="mt-4 grid gap-3 text-sm text-neutral-400 md:grid-cols-2">
               <p>
@@ -2139,7 +2210,38 @@ function GitHubPullRequestSection({
                 <span className="text-neutral-500">Changed files:</span>{" "}
                 {data.changedFilesCount}
               </p>
+              <p>
+                <span className="text-neutral-500">Last PR sync:</span>{" "}
+                {data.latestSnapshot
+                  ? formatDate(data.latestSnapshot.createdAt)
+                  : "Not captured"}
+              </p>
+              <p>
+                <span className="text-neutral-500">Latest QA review:</span>{" "}
+                {data.latestQaReview
+                  ? formatDate(data.latestQaReview.createdAt)
+                  : "Not reviewed"}
+              </p>
             </div>
+
+            {data.latestWebhookEvent ? (
+              <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-900 p-3 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-neutral-200">
+                      Latest GitHub webhook
+                    </p>
+                    <p className="mt-1 text-neutral-500">
+                      {data.latestWebhookEvent.action ??
+                        data.latestWebhookEvent.eventType}{" "}
+                      from GitHub at{" "}
+                      {formatDate(data.latestWebhookEvent.receivedAt)}
+                    </p>
+                  </div>
+                  <StatusBadge status={data.latestWebhookEvent.status} />
+                </div>
+              </div>
+            ) : null}
 
             <div className="mt-4 flex flex-wrap gap-3">
               <a
@@ -3046,12 +3148,25 @@ function Score({ label, value }: { label: string; value: number | null }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const normalizedStatus = status.toLowerCase();
   const classes =
-    status === "covered" || status === "passed"
+    normalizedStatus === "covered" ||
+    normalizedStatus === "passed" ||
+    normalizedStatus === "success" ||
+    normalizedStatus === "processed" ||
+    normalizedStatus === "open" ||
+    normalizedStatus === "merged"
       ? "border-emerald-800 bg-emerald-950/30 text-emerald-200"
-      : status === "partial" || status === "needs_changes"
+      : normalizedStatus === "partial" ||
+          normalizedStatus === "needs_changes" ||
+          normalizedStatus === "pending" ||
+          normalizedStatus === "ignored" ||
+          normalizedStatus === "re-review required"
         ? "border-amber-800 bg-amber-950/30 text-amber-200"
-        : status === "missing" || status === "failed"
+        : normalizedStatus === "missing" ||
+            normalizedStatus === "failed" ||
+            normalizedStatus === "failure" ||
+            normalizedStatus === "closed"
           ? "border-red-800 bg-red-950/30 text-red-200"
           : "border-violet-800 bg-violet-950/30 text-violet-200";
 

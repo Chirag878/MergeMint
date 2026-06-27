@@ -171,9 +171,23 @@ export const githubWebhookEvents = pgTable(
     organizationId: uuid("organization_id").references(() => organizations.id, {
       onDelete: "set null"
     }),
+    repositoryOwner: text("repository_owner"),
+    repositoryName: text("repository_name"),
+    prNumber: integer("pr_number"),
+    matchedFeatureRequestId: uuid("matched_feature_request_id").references(
+      () => featureRequests.id,
+      { onDelete: "set null" }
+    ),
     eventType: text("event_type").notNull(),
+    action: text("action"),
+    status: text("status").notNull().default("received"),
     deliveryId: text("delivery_id").notNull(),
-    payload: jsonb("payload").$type<JsonObject>().notNull(),
+    errorMessage: text("error_message"),
+    payload: jsonb("payload").$type<JsonObject>(),
+    payloadSummary: jsonb("payload_summary").$type<JsonObject>(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -184,7 +198,17 @@ export const githubWebhookEvents = pgTable(
       table.deliveryId
     ),
     index("github_webhook_events_organization_id_idx").on(table.organizationId),
+    index("github_webhook_events_repository_pr_idx").on(
+      table.repositoryOwner,
+      table.repositoryName,
+      table.prNumber
+    ),
+    index("github_webhook_events_matched_feature_request_id_idx").on(
+      table.matchedFeatureRequestId
+    ),
     index("github_webhook_events_event_type_idx").on(table.eventType),
+    index("github_webhook_events_status_idx").on(table.status),
+    index("github_webhook_events_received_at_idx").on(table.receivedAt),
     index("github_webhook_events_processed_at_idx").on(table.processedAt),
     index("github_webhook_events_created_at_idx").on(table.createdAt)
   ]

@@ -9,9 +9,11 @@ import {
   auditLogs,
   db,
   featureRequests,
+  githubWebhookEvents,
   prSnapshots,
   projects,
   pullRequests,
+  qaReviews,
   repositories,
   type ChangedFile,
   type GitHubCheckSnapshot,
@@ -411,22 +413,63 @@ export async function getPullRequestForFeatureRequest(
     .orderBy(desc(prSnapshots.createdAt))
     .limit(1);
 
+  const [latestReview] = await db
+    .select()
+    .from(qaReviews)
+    .where(
+      and(
+        eq(qaReviews.pullRequestId, pullRequest.id),
+        eq(qaReviews.organizationId, workspace.activeOrganization.id)
+      )
+    )
+    .orderBy(desc(qaReviews.reviewVersion), desc(qaReviews.createdAt))
+    .limit(1);
+
+  const [latestWebhookEvent] = await db
+    .select()
+    .from(githubWebhookEvents)
+    .where(eq(githubWebhookEvents.matchedFeatureRequestId, featureRequestId))
+    .orderBy(desc(githubWebhookEvents.receivedAt))
+    .limit(1);
+
+  const prUpdatedAfterLastReview = Boolean(
+    latestSnapshot && latestReview && latestSnapshot.createdAt > latestReview.createdAt
+  );
+
   return {
     pullRequest,
     repository: repository ?? null,
     latestSnapshot: latestSnapshot ?? null,
     changedFilesCount: latestSnapshot?.changedFiles.length ?? 0,
-    diffTextLength: latestSnapshot?.diffText?.length ?? 0
+    diffTextLength: latestSnapshot?.diffText?.length ?? 0,
+    latestWebhookEvent: latestWebhookEvent
+      ? {
+          id: latestWebhookEvent.id,
+          eventType: latestWebhookEvent.eventType,
+          action: latestWebhookEvent.action,
+          status: latestWebhookEvent.status,
+          receivedAt: latestWebhookEvent.receivedAt,
+          processedAt: latestWebhookEvent.processedAt,
+          errorMessage: latestWebhookEvent.errorMessage,
+          payloadSummary: latestWebhookEvent.payloadSummary
+        }
+      : null,
+    latestQaReview: latestReview
+      ? {
+          id: latestReview.id,
+          reviewVersion: latestReview.reviewVersion,
+          createdAt: latestReview.createdAt
+        }
+      : null,
+    prUpdatedAfterLastReview,
+    rereviewRequired: prUpdatedAfterLastReview
   };
 }
 
-export async function refreshPullRequestSnapshot(
-  ctx: ProtectedContext,
-  pullRequestId: string
-) {
-  const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
-  assertRoleCan(workspace.membership.role, "create_feature_request");
-
+export async function syncLinkedPullRequestSnapshot(input: {
+  organizationId: string;
+  pullRequestId: string;
+}) {
   const [row] = await db
     .select({
       pullRequest: pullRequests,
@@ -441,10 +484,10 @@ export async function refreshPullRequestSnapshot(
     )
     .where(
       and(
-        eq(pullRequests.id, pullRequestId),
-        eq(pullRequests.organizationId, workspace.activeOrganization.id),
-        eq(repositories.organizationId, workspace.activeOrganization.id),
-        eq(featureRequests.organizationId, workspace.activeOrganization.id)
+        eq(pullRequests.id, input.pullRequestId),
+        eq(pullRequests.organizationId, input.organizationId),
+        eq(repositories.organizationId, input.organizationId),
+        eq(featureRequests.organizationId, input.organizationId)
       )
     )
     .limit(1);
@@ -463,7 +506,7 @@ export async function refreshPullRequestSnapshot(
   });
 
   const pullRequest = await upsertPullRequest({
-    organizationId: workspace.activeOrganization.id,
+    organizationId: input.organizationId,
     projectId: row.pullRequest.projectId,
     featureRequestId: row.pullRequest.featureRequestId,
     repositoryId: row.repository.id,
@@ -474,24 +517,45 @@ export async function refreshPullRequestSnapshot(
     snapshot
   });
 
+  return {
+    pullRequest,
+    repository: row.repository,
+    featureRequest: row.featureRequest,
+    latestSnapshot: mapSnapshotSummary(snapshotResult.snapshot),
+    newSnapshotCreated: snapshotResult.created
+  };
+}
+
+export async function refreshPullRequestSnapshot(
+  ctx: ProtectedContext,
+  pullRequestId: string
+) {
+  const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+  assertRoleCan(workspace.membership.role, "create_feature_request");
+
+  const result = await syncLinkedPullRequestSnapshot({
+    organizationId: workspace.activeOrganization.id,
+    pullRequestId
+  });
+
   await writeAuditLog({
     organizationId: workspace.activeOrganization.id,
     actorId: workspace.appUser.id,
-    action: snapshotResult.created
+    action: result.newSnapshotCreated
       ? "github_pr_snapshot_created"
       : "github_pr_snapshot_refreshed",
     entityType: "pull_request",
-    entityId: pullRequest.id,
+    entityId: result.pullRequest.id,
     metadata: toJsonObject({
-      snapshotId: snapshotResult.snapshot.id,
-      commitSha: snapshotResult.snapshot.commitSha,
-      created: snapshotResult.created
+      snapshotId: result.latestSnapshot.snapshotId,
+      commitSha: result.latestSnapshot.commitSha,
+      created: result.newSnapshotCreated
     })
   });
 
   return {
-    pullRequest,
-    latestSnapshot: mapSnapshotSummary(snapshotResult.snapshot),
-    newSnapshotCreated: snapshotResult.created
+    pullRequest: result.pullRequest,
+    latestSnapshot: result.latestSnapshot,
+    newSnapshotCreated: result.newSnapshotCreated
   };
 }

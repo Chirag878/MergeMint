@@ -7,6 +7,7 @@ import {
   clients,
   db,
   featureRequests,
+  githubWebhookEvents,
   prdRequirements,
   prds,
   prSnapshots,
@@ -71,6 +72,7 @@ function getReleaseReadinessStatus(input: {
   approval: typeof approvals.$inferSelect | null;
   releaseReport: typeof releaseReports.$inferSelect | null;
   prdMayBeOutdated: boolean;
+  prUpdatedAfterLastReview: boolean;
   riskSummary: {
     unresolvedFindingsCount: number;
     highCriticalFindingsCount: number;
@@ -80,6 +82,10 @@ function getReleaseReadinessStatus(input: {
 }) {
   if (input.prdMayBeOutdated) {
     return "PRD Outdated";
+  }
+
+  if (input.prUpdatedAfterLastReview) {
+    return "Re-review Required";
   }
 
   if (
@@ -126,6 +132,7 @@ function getNextBestAction(input: {
   releaseReport: typeof releaseReports.$inferSelect | null;
   hasUnresolvedRisk: boolean;
   prdMayBeOutdated: boolean;
+  prUpdatedAfterLastReview: boolean;
 }): { kind: NextActionKind; title: string; why: string } {
   if (!input.prd) {
     return {
@@ -159,14 +166,11 @@ function getNextBestAction(input: {
     };
   }
 
-  if (
-    input.latestSnapshot &&
-    input.latestSnapshot.createdAt > input.qaReview.createdAt
-  ) {
+  if (input.prUpdatedAfterLastReview) {
     return {
       kind: "rerun_qa",
       title: "Re-run QA after PR changes",
-      why: "The latest PR snapshot is newer than the latest QA review."
+      why: "GitHub refreshed the PR snapshot after the latest QA review."
     };
   }
 
@@ -398,7 +402,7 @@ export async function getReleaseControlRoom(
     latestPrd
   );
 
-  const [requirements, latestSnapshotRows, coverageRows, findingRows] =
+  const [requirements, latestSnapshotRows, coverageRows, findingRows, webhookEventRows] =
     await Promise.all([
       latestPrd
         ? db
@@ -428,10 +432,22 @@ export async function getReleaseControlRoom(
             .from(qaFindings)
             .where(eq(qaFindings.qaReviewId, latestQaReview.id))
             .orderBy(desc(qaFindings.createdAt))
-        : Promise.resolve([] as Array<typeof qaFindings.$inferSelect>)
+        : Promise.resolve([] as Array<typeof qaFindings.$inferSelect>),
+      latestPullRequest
+        ? db
+            .select()
+            .from(githubWebhookEvents)
+            .where(eq(githubWebhookEvents.matchedFeatureRequestId, scoped.feature.id))
+            .orderBy(desc(githubWebhookEvents.receivedAt))
+            .limit(1)
+        : Promise.resolve([] as Array<typeof githubWebhookEvents.$inferSelect>)
     ]);
 
   const latestSnapshot = latestSnapshotRows[0] ?? null;
+  const latestWebhookEvent = webhookEventRows[0] ?? null;
+  const prUpdatedAfterLastReview = Boolean(
+    latestSnapshot && latestQaReview && latestSnapshot.createdAt > latestQaReview.createdAt
+  );
   const coverageByRequirementKey = new Map(
     coverageRows.map((coverage) => [coverage.requirementKey, coverage])
   );
@@ -506,6 +522,7 @@ export async function getReleaseControlRoom(
     approval: latestApproval,
     releaseReport: latestReleaseReport,
     prdMayBeOutdated,
+    prUpdatedAfterLastReview,
     hasUnresolvedRisk
   });
 
@@ -626,6 +643,14 @@ export async function getReleaseControlRoom(
         : ""
     });
     addTimelineItem(timeline, {
+      title: "GitHub webhook received",
+      timestamp: latestWebhookEvent?.receivedAt,
+      source: "GitHub",
+      description: latestWebhookEvent
+        ? `${latestWebhookEvent.action ?? latestWebhookEvent.eventType} event ${latestWebhookEvent.status}.`
+        : ""
+    });
+    addTimelineItem(timeline, {
       title: "PR snapshot refreshed",
       timestamp: latestSnapshot?.createdAt,
       source: "GitHub",
@@ -706,6 +731,7 @@ export async function getReleaseControlRoom(
       approval: latestApproval,
       releaseReport: latestReleaseReport,
       prdMayBeOutdated,
+      prUpdatedAfterLastReview,
       riskSummary
     }),
     nextBestAction,
@@ -722,11 +748,24 @@ export async function getReleaseControlRoom(
           branch: latestPullRequest.branch,
           baseBranch: latestPullRequest.baseBranch,
           htmlUrl: latestPullRequest.htmlUrl,
+          state: latestPullRequest.state,
           changedFilesCount: latestSnapshot?.changedFiles.length ?? 0,
           additions,
           deletions,
           ciStatus: latestSnapshot?.ciStatus ?? "unknown",
-          lastSnapshotAt: latestSnapshot?.createdAt ?? null
+          lastSnapshotAt: latestSnapshot?.createdAt ?? null,
+          latestReviewAt: latestQaReview?.createdAt ?? null,
+          prUpdatedAfterLastReview,
+          rereviewRequired: prUpdatedAfterLastReview,
+          latestWebhookEvent: latestWebhookEvent
+            ? {
+                eventType: latestWebhookEvent.eventType,
+                action: latestWebhookEvent.action,
+                status: latestWebhookEvent.status,
+                receivedAt: latestWebhookEvent.receivedAt,
+                processedAt: latestWebhookEvent.processedAt
+              }
+            : null
         }
       : null,
     qaReview: latestQaReview
