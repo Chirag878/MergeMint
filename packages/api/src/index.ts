@@ -13,4 +13,5 @@ export {
   type ReleaseReportData
 } from "./services/release-report.service";
 export { processGitHubWebhook } from "./services/github-webhook.service";
+export { completeGitHubAppInstallation } from "./services/github-app.service";
 export type { AppRouter } from "./root";

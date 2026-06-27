@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -11,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { ciStatusEnum, githubPrStateEnum } from "./enums";
+import { appUsers } from "./auth";
 import { featureRequests } from "./feature-requests";
 import { organizations } from "./organizations";
 import { projects } from "./projects";
@@ -20,6 +22,45 @@ import type {
   GitHubCommitSnapshot,
   JsonObject
 } from "./types";
+
+export const githubAppInstallations = pgTable(
+  "github_app_installations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    installationId: bigint("installation_id", { mode: "number" }).notNull(),
+    accountLogin: text("account_login").notNull(),
+    accountId: bigint("account_id", { mode: "number" }),
+    accountType: text("account_type"),
+    repositorySelection: text("repository_selection"),
+    permissions: jsonb("permissions").$type<JsonObject>(),
+    events: jsonb("events").$type<JsonObject>(),
+    installedByUserId: uuid("installed_by_user_id").references(() => appUsers.id, {
+      onDelete: "set null"
+    }),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => [
+    uniqueIndex("github_app_installations_installation_id_unique").on(
+      table.installationId
+    ),
+    index("github_app_installations_organization_id_idx").on(
+      table.organizationId
+    ),
+    index("github_app_installations_account_login_idx").on(table.accountLogin),
+    index("github_app_installations_installed_by_user_id_idx").on(
+      table.installedByUserId
+    )
+  ]
+);
 
 export const githubConnections = pgTable(
   "github_connections",
@@ -59,11 +100,20 @@ export const repositories = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     githubRepoId: text("github_repo_id").notNull(),
+    githubAppInstallationId: bigint("github_app_installation_id", {
+      mode: "number"
+    }).references(() => githubAppInstallations.installationId, {
+      onDelete: "set null"
+    }),
     owner: text("owner").notNull(),
     name: text("name").notNull(),
     fullName: text("full_name").notNull(),
     defaultBranch: text("default_branch").notNull().default("main"),
     isPrivate: boolean("private").notNull().default(false),
+    githubAppSelected: boolean("github_app_selected").notNull().default(true),
+    githubAppSyncedAt: timestamp("github_app_synced_at", {
+      withTimezone: true
+    }),
     connectedAt: timestamp("connected_at", { withTimezone: true })
       .defaultNow()
       .notNull()
@@ -78,9 +128,46 @@ export const repositories = pgTable(
       table.fullName
     ),
     index("repositories_organization_id_idx").on(table.organizationId),
+    index("repositories_github_app_installation_id_idx").on(
+      table.githubAppInstallationId
+    ),
     index("repositories_github_repo_id_idx").on(table.githubRepoId),
     index("repositories_full_name_idx").on(table.fullName),
+    index("repositories_owner_name_idx").on(table.owner, table.name),
     index("repositories_connected_at_idx").on(table.connectedAt)
+  ]
+);
+
+export const projectGithubRepositories = pgTable(
+  "project_github_repositories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => repositories.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => [
+    uniqueIndex("project_github_repositories_project_unique").on(
+      table.projectId
+    ),
+    index("project_github_repositories_organization_id_idx").on(
+      table.organizationId
+    ),
+    index("project_github_repositories_repository_id_idx").on(
+      table.repositoryId
+    )
   ]
 );
 
@@ -171,6 +258,7 @@ export const githubWebhookEvents = pgTable(
     organizationId: uuid("organization_id").references(() => organizations.id, {
       onDelete: "set null"
     }),
+    installationId: bigint("installation_id", { mode: "number" }),
     repositoryOwner: text("repository_owner"),
     repositoryName: text("repository_name"),
     prNumber: integer("pr_number"),

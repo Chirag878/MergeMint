@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import {
   db,
   featureRequests,
+  githubAppInstallations,
   githubWebhookEvents,
   pullRequests,
   repositories,
@@ -33,6 +34,29 @@ type GitHubWebhookPayload = {
       login?: string;
     };
   };
+  installation?: {
+    id?: number;
+    account?: {
+      login?: string;
+      id?: number;
+      type?: string;
+    };
+    repository_selection?: string;
+    permissions?: unknown;
+    events?: unknown;
+    suspended_at?: string | null;
+  };
+  repositories_added?: Array<{
+    id?: number;
+    name?: string;
+    full_name?: string;
+    private?: boolean;
+  }>;
+  repositories_removed?: Array<{
+    id?: number;
+    name?: string;
+    full_name?: string;
+  }>;
   pull_request?: {
     number?: number;
     title?: string;
@@ -90,6 +114,10 @@ function getPullRequestNumber(payload: GitHubWebhookPayload) {
   return payload.pull_request?.number ?? null;
 }
 
+function getInstallationId(payload: GitHubWebhookPayload) {
+  return payload.installation?.id ?? null;
+}
+
 function getPrState(payload: GitHubWebhookPayload): "open" | "closed" | "merged" {
   if (payload.pull_request?.merged) {
     return "merged";
@@ -106,6 +134,11 @@ function buildPayloadSummary(payload: GitHubWebhookPayload, result?: JsonObject)
       owner: getRepositoryOwner(payload),
       name: getRepositoryName(payload),
       fullName: payload.repository?.full_name ?? null
+    },
+    installation: {
+      id: getInstallationId(payload),
+      accountLogin: payload.installation?.account?.login ?? null,
+      repositorySelection: payload.installation?.repository_selection ?? null
     },
     pullRequest: pullRequest
       ? {
@@ -200,6 +233,156 @@ async function updateLinkedPullRequestState(
     .where(eq(pullRequests.id, match.pullRequest.id));
 }
 
+async function getStoredInstallation(installationId: number | null) {
+  if (!installationId) {
+    return null;
+  }
+
+  const [installation] = await db
+    .select()
+    .from(githubAppInstallations)
+    .where(eq(githubAppInstallations.installationId, installationId))
+    .limit(1);
+
+  return installation ?? null;
+}
+
+async function processInstallationEvent(payload: GitHubWebhookPayload) {
+  const installationId = getInstallationId(payload);
+  const storedInstallation = await getStoredInstallation(installationId);
+
+  if (!storedInstallation || !installationId) {
+    return {
+      status: "ignored" as const,
+      organizationId: null,
+      result: "unmatched_installation"
+    };
+  }
+
+  const suspendedAt =
+    payload.action === "deleted"
+      ? new Date()
+      : payload.installation?.suspended_at
+        ? new Date(payload.installation.suspended_at)
+        : null;
+
+  await db
+    .update(githubAppInstallations)
+    .set({
+      accountLogin:
+        payload.installation?.account?.login ?? storedInstallation.accountLogin,
+      accountId: payload.installation?.account?.id ?? storedInstallation.accountId,
+      accountType:
+        payload.installation?.account?.type ?? storedInstallation.accountType,
+      repositorySelection:
+        payload.installation?.repository_selection ??
+        storedInstallation.repositorySelection,
+      permissions: payload.installation?.permissions
+        ? toJsonObject(payload.installation.permissions)
+        : storedInstallation.permissions,
+      events: payload.installation?.events
+        ? toJsonObject(payload.installation.events)
+        : storedInstallation.events,
+      suspendedAt,
+      updatedAt: new Date()
+    })
+    .where(eq(githubAppInstallations.installationId, installationId));
+
+  if (payload.action === "deleted" || payload.action === "suspend") {
+    await db
+      .update(repositories)
+      .set({
+        githubAppSelected: false,
+        githubAppSyncedAt: new Date()
+      })
+      .where(eq(repositories.githubAppInstallationId, installationId));
+  }
+
+  return {
+    status: "processed" as const,
+    organizationId: storedInstallation.organizationId,
+    result: "installation_updated"
+  };
+}
+
+async function processInstallationRepositoriesEvent(payload: GitHubWebhookPayload) {
+  const installationId = getInstallationId(payload);
+  const storedInstallation = await getStoredInstallation(installationId);
+
+  if (!storedInstallation || !installationId) {
+    return {
+      status: "ignored" as const,
+      organizationId: null,
+      result: "unmatched_installation"
+    };
+  }
+
+  const now = new Date();
+  for (const repository of payload.repositories_removed ?? []) {
+    if (!repository.id) {
+      continue;
+    }
+
+    await db
+      .update(repositories)
+      .set({
+        githubAppSelected: false,
+        githubAppSyncedAt: now
+      })
+      .where(
+        and(
+          eq(repositories.organizationId, storedInstallation.organizationId),
+          eq(repositories.githubRepoId, String(repository.id))
+        )
+      );
+  }
+
+  for (const repository of payload.repositories_added ?? []) {
+    if (!repository.id || !repository.full_name) {
+      continue;
+    }
+
+    const [owner, name] = repository.full_name.split("/");
+
+    if (!owner || !name) {
+      continue;
+    }
+
+    await db
+      .insert(repositories)
+      .values({
+        organizationId: storedInstallation.organizationId,
+        githubRepoId: String(repository.id),
+        githubAppInstallationId: installationId,
+        owner,
+        name,
+        fullName: repository.full_name,
+        defaultBranch: "main",
+        isPrivate: repository.private ?? false,
+        githubAppSelected: true,
+        githubAppSyncedAt: now
+      })
+      .onConflictDoUpdate({
+        target: [repositories.organizationId, repositories.fullName],
+        set: {
+          githubRepoId: String(repository.id),
+          githubAppInstallationId: installationId,
+          owner,
+          name,
+          isPrivate: repository.private ?? false,
+          githubAppSelected: true,
+          githubAppSyncedAt: now
+        }
+      });
+  }
+
+  return {
+    status: "processed" as const,
+    organizationId: storedInstallation.organizationId,
+    result: "installation_repositories_updated"
+  };
+}
+
 export async function processGitHubWebhook(
   headers: GitHubWebhookHeaders,
   payload: unknown
@@ -208,6 +391,7 @@ export async function processGitHubWebhook(
   const repositoryOwner = getRepositoryOwner(typedPayload);
   const repositoryName = getRepositoryName(typedPayload);
   const prNumber = getPullRequestNumber(typedPayload);
+  const installationId = getInstallationId(typedPayload);
   const action = typedPayload.action ?? null;
 
   const [eventRow] = await db
@@ -216,6 +400,7 @@ export async function processGitHubWebhook(
       eventType: headers.eventName,
       deliveryId: headers.deliveryId,
       action,
+      installationId,
       repositoryOwner,
       repositoryName,
       prNumber,
@@ -250,6 +435,46 @@ export async function processGitHubWebhook(
         duplicate: false as const,
         status: "processed" as const,
         handled: "ping"
+      };
+    }
+
+    if (headers.eventName === "installation") {
+      const handled = await processInstallationEvent(typedPayload);
+      await updateWebhookEvent({
+        id: eventRow.id,
+        status: handled.status,
+        organizationId: handled.organizationId,
+        payloadSummary: buildPayloadSummary(typedPayload, {
+          handled: "installation",
+          action,
+          result: handled.result
+        })
+      });
+
+      return {
+        ok: true,
+        duplicate: false as const,
+        status: handled.status
+      };
+    }
+
+    if (headers.eventName === "installation_repositories") {
+      const handled = await processInstallationRepositoriesEvent(typedPayload);
+      await updateWebhookEvent({
+        id: eventRow.id,
+        status: handled.status,
+        organizationId: handled.organizationId,
+        payloadSummary: buildPayloadSummary(typedPayload, {
+          handled: "installation_repositories",
+          action,
+          result: handled.result
+        })
+      });
+
+      return {
+        ok: true,
+        duplicate: false as const,
+        status: handled.status
       };
     }
 

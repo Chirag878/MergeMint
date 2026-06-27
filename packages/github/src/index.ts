@@ -1,4 +1,12 @@
-export { getGitHubClient } from "./client";
+export {
+  createGitHubAppJwt,
+  fetchGitHubAppInstallation,
+  fetchInstallationRepositories,
+  getGitHubAppClient,
+  getGitHubAppInstallUrl,
+  getGitHubClient,
+  hasGitHubAppConfig
+} from "./client";
 export {
   fetchPullRequestCommits,
   fetchPullRequestDetails,

@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import {
   fetchPullRequestSnapshot,
+  hasGitHubAppConfig,
   parseGitHubPullRequestUrl,
   type GitHubPullRequestSnapshot
 } from "@veriflow/github";
@@ -11,6 +12,7 @@ import {
   featureRequests,
   githubWebhookEvents,
   prSnapshots,
+  projectGithubRepositories,
   projects,
   pullRequests,
   qaReviews,
@@ -151,6 +153,7 @@ function mapChecks(
 async function upsertRepository(input: {
   organizationId: string;
   snapshot: GitHubPullRequestSnapshot;
+  installationId?: number | null;
 }) {
   const metadata = input.snapshot.metadata;
   const [repository] = await db
@@ -158,6 +161,7 @@ async function upsertRepository(input: {
     .values({
       organizationId: input.organizationId,
       githubRepoId: String(metadata.githubRepoId),
+      githubAppInstallationId: input.installationId,
       owner: metadata.repositoryOwner,
       name: metadata.repositoryName,
       fullName: metadata.repositoryFullName,
@@ -168,10 +172,12 @@ async function upsertRepository(input: {
       target: [repositories.organizationId, repositories.fullName],
       set: {
         githubRepoId: String(metadata.githubRepoId),
+        githubAppInstallationId: input.installationId ?? undefined,
         owner: metadata.repositoryOwner,
         name: metadata.repositoryName,
         defaultBranch: metadata.repositoryDefaultBranch,
-        isPrivate: metadata.repositoryPrivate
+        isPrivate: metadata.repositoryPrivate,
+        githubAppSyncedAt: input.installationId ? new Date() : undefined
       }
     })
     .returning();
@@ -307,11 +313,63 @@ export async function linkPullRequestToFeatureRequest(
     workspace.activeOrganization.id
   );
   const parsed = parseGitHubPullRequestUrl(input.prUrl);
-  const snapshot = await fetchPullRequestSnapshot(parsed);
+  const [installedRepository] = await db
+    .select()
+    .from(repositories)
+    .where(
+      and(
+        eq(repositories.organizationId, workspace.activeOrganization.id),
+        eq(repositories.owner, parsed.owner),
+        eq(repositories.name, parsed.repo)
+      )
+    )
+    .limit(1);
+
+  const [selectedProjectRepository] = await db
+    .select({
+      repository: repositories
+    })
+    .from(projectGithubRepositories)
+    .innerJoin(
+      repositories,
+      eq(projectGithubRepositories.repositoryId, repositories.id)
+    )
+    .where(
+      and(
+        eq(projectGithubRepositories.organizationId, workspace.activeOrganization.id),
+        eq(projectGithubRepositories.projectId, featureRequest.projectId)
+      )
+    )
+    .limit(1);
+
+  if (
+    selectedProjectRepository &&
+    selectedProjectRepository.repository.fullName.toLowerCase() !==
+      `${parsed.owner}/${parsed.repo}`.toLowerCase()
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `This project is connected to ${selectedProjectRepository.repository.fullName}. Link a PR from that repository or change the project GitHub repository.`
+    });
+  }
+
+  if (hasGitHubAppConfig() && !installedRepository?.githubAppInstallationId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Install the GitHub App on this repository before linking PRs."
+    });
+  }
+
+  const installationId = installedRepository?.githubAppInstallationId ?? null;
+  const snapshot = await fetchPullRequestSnapshot({
+    ...parsed,
+    installationId
+  });
 
   const repository = await upsertRepository({
     organizationId: workspace.activeOrganization.id,
-    snapshot
+    snapshot,
+    installationId
   });
   const pullRequest = await upsertPullRequest({
     organizationId: workspace.activeOrganization.id,
@@ -502,7 +560,8 @@ export async function syncLinkedPullRequestSnapshot(input: {
   const snapshot = await fetchPullRequestSnapshot({
     owner: row.repository.owner,
     repo: row.repository.name,
-    pullNumber: row.pullRequest.githubPrNumber
+    pullNumber: row.pullRequest.githubPrNumber,
+    installationId: row.repository.githubAppInstallationId
   });
 
   const pullRequest = await upsertPullRequest({

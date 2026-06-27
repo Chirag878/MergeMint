@@ -3,6 +3,7 @@ import { approvalRouter } from "./routers/approval.router";
 import { clientRouter } from "./routers/client.router";
 import { dashboardRouter } from "./routers/dashboard.router";
 import { featureRequestsRouter } from "./routers/feature-requests.router";
+import { githubAppRouter } from "./routers/github-app.router";
 import { githubRouter } from "./routers/github.router";
 import { healthRouter } from "./routers/health.router";
 import { projectsRouter } from "./routers/projects.router";
@@ -19,6 +20,7 @@ export const appRouter = router({
   workspace: workspaceRouter,
   projects: projectsRouter,
   featureRequests: featureRequestsRouter,
+  githubApp: githubAppRouter,
   github: githubRouter,
   qaReview: qaReviewRouter,
   releaseReport: releaseReportRouter,

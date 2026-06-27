@@ -1,39 +1,19 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is the MergeMint Next.js web app.
 
 ## Getting Started
 
-First, run the development server:
+Run the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:3000](http://localhost:3000).
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Deploy the web app on Vercel and set the server/client environment variables
+from the workspace `.env.example`.
 
 ## GitHub Webhook Setup
 
@@ -47,7 +27,7 @@ Configure the webhook in GitHub with:
 
 - Content type: `application/json`
 - Secret: the same value as `GITHUB_WEBHOOK_SECRET`
-- Events: `Ping` and `Pull requests`
+- Events: `Ping`, `Pull requests`, `Installation`, and `Installation repositories`
 
 Handled pull request actions:
 
@@ -62,16 +42,76 @@ Handled pull request actions:
 rejects signed delivery attempts until the secret is configured.
 
 PR metadata, files, commits, and status checks are fetched through the existing
-GitHub snapshot service. Set `GITHUB_TOKEN` for private repositories or higher
-rate limits. The token needs read access to repository pull requests, contents,
-commits, and commit statuses for the repositories you link.
+GitHub snapshot service. In production SaaS, install the GitHub App on selected
+repositories and connect a repository to each project. `GITHUB_TOKEN` remains a
+fallback for local development only.
 
 To test:
 
 1. Set `GITHUB_WEBHOOK_SECRET` in the app environment and deploy.
-2. Add the webhook URL in GitHub and click **Send ping**. The endpoint should
-   return `{ "ok": true }`.
+2. Add the webhook URL in GitHub and click **Send ping**.
 3. Link a PR to a MergeMint feature request.
 4. Push a new commit to that linked PR. GitHub sends a `pull_request`
    `synchronize` event, MergeMint refreshes the PR snapshot, and the feature
-   shows “Re-review required” without automatically running AI QA.
+   shows `Re-review required` without automatically running AI QA.
+
+## GitHub App Setup
+
+Create a GitHub App for MergeMint with:
+
+- Homepage URL: `https://your-domain.com`
+- Setup URL: `https://your-domain.com/api/github/installations/callback`
+- Webhook URL: `https://your-domain.com/api/webhooks/github`
+- Webhook secret: same value as `GITHUB_WEBHOOK_SECRET`
+
+Required permissions:
+
+- Metadata: Read
+- Contents: Read
+- Pull requests: Read
+- Checks: Read
+- Commit statuses: Read
+
+Subscribe to these events:
+
+- Pull request
+- Installation
+- Installation repositories
+
+Generate a private key in the GitHub App settings and store it base64 encoded:
+
+```bash
+base64 -w 0 mergemint.private-key.pem
+```
+
+On macOS, use:
+
+```bash
+base64 -i mergemint.private-key.pem
+```
+
+Required server environment variables:
+
+```text
+GITHUB_APP_ID=""
+GITHUB_APP_SLUG=""
+GITHUB_APP_PRIVATE_KEY_BASE64=""
+GITHUB_WEBHOOK_SECRET=""
+```
+
+Optional OAuth fields, only if you later add GitHub App OAuth flows:
+
+```text
+GITHUB_APP_CLIENT_ID=""
+GITHUB_APP_CLIENT_SECRET=""
+```
+
+Repository connection flow:
+
+1. Open **Projects** in MergeMint.
+2. Click **Install GitHub App** and choose selected repositories in GitHub.
+3. After callback, click **Sync repositories** in the GitHub Integration panel.
+4. Select a project and repository, then click **Connect repo**.
+5. Link PRs from that connected repository. MergeMint uses the installation
+   access token first and falls back to `GITHUB_TOKEN` only when the GitHub App
+   is not configured.

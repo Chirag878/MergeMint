@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/react";
@@ -57,10 +57,11 @@ export function ProjectsClient() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-      <form
-        onSubmit={onSubmit}
-        className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
-      >
+      <div className="space-y-6">
+        <form
+          onSubmit={onSubmit}
+          className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+        >
         <div>
           <h2 className="text-lg font-medium">Create Project</h2>
           <p className="mt-1 text-sm text-neutral-500">
@@ -132,7 +133,10 @@ export function ProjectsClient() {
         >
           {createProject.isPending ? "Creating..." : "Create Project"}
         </button>
-      </form>
+        </form>
+
+        <GitHubIntegrationPanel projects={projects.data ?? []} />
+      </div>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
         <div className="flex items-center justify-between gap-4">
@@ -198,5 +202,263 @@ export function ProjectsClient() {
         </div>
       </section>
     </div>
+  );
+}
+
+function GitHubIntegrationPanel({
+  projects
+}: {
+  projects: Array<{
+    id: string;
+    name: string;
+  }>;
+}) {
+  const utils = trpc.useUtils();
+  const installLink = trpc.githubApp.getInstallLink.useQuery();
+  const installations = trpc.githubApp.getInstallations.useQuery();
+  const [projectId, setProjectId] = useState("");
+  const [installationIdText, setInstallationIdText] = useState("");
+  const [repositoryId, setRepositoryId] = useState("");
+  const installationId = installationIdText ? Number(installationIdText) : null;
+  const repositories = trpc.githubApp.listInstallationRepositories.useQuery(
+    {
+      installationId: installationId ?? 0
+    },
+    {
+      enabled: Boolean(installationId)
+    }
+  );
+  const projectIntegration = trpc.githubApp.getProjectIntegration.useQuery(
+    {
+      projectId
+    },
+    {
+      enabled: Boolean(projectId)
+    }
+  );
+  const syncRepositories =
+    trpc.githubApp.syncInstallationRepositories.useMutation({
+      onSuccess: async (synced) => {
+        await utils.githubApp.listInstallationRepositories.invalidate();
+        if (synced[0]) {
+          setRepositoryId(synced[0].id);
+        }
+      }
+    });
+  const connectRepository =
+    trpc.githubApp.connectRepositoryToProject.useMutation({
+      onSuccess: async () => {
+        await utils.githubApp.getProjectIntegration.invalidate();
+        await utils.githubApp.listInstallationRepositories.invalidate();
+      }
+    });
+  const disconnectRepository =
+    trpc.githubApp.disconnectRepositoryFromProject.useMutation({
+      onSuccess: async () => {
+        setRepositoryId("");
+        await utils.githubApp.getProjectIntegration.invalidate();
+      }
+    });
+
+  const activeInstallation = useMemo(
+    () =>
+      installations.data?.find(
+        (installation) => installation.installationId === installationId
+      ) ?? null,
+    [installationId, installations.data]
+  );
+  const connectedRepository = projectIntegration.data?.repository ?? null;
+  const canConnect =
+    Boolean(projectId && repositoryId) && !connectRepository.isPending;
+
+  useEffect(() => {
+    if (!projectId && projects[0]) {
+      setProjectId(projects[0].id);
+    }
+  }, [projectId, projects]);
+
+  useEffect(() => {
+    if (!installationIdText && installations.data?.[0]) {
+      setInstallationIdText(String(installations.data[0].installationId));
+    }
+  }, [installationIdText, installations.data]);
+
+  useEffect(() => {
+    if (!repositoryId && connectedRepository) {
+      setRepositoryId(connectedRepository.id);
+    }
+  }, [connectedRepository, repositoryId]);
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div>
+        <h2 className="text-lg font-medium">GitHub Integration</h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          MergeMint only accesses repositories selected during GitHub App
+          installation.
+        </p>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {installLink.data?.installUrl ? (
+          <a
+            href={installLink.data.installUrl}
+            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+          >
+            Install GitHub App
+          </a>
+        ) : (
+          <span className="rounded-md border border-amber-800 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+            GitHub App env not configured
+          </span>
+        )}
+        {installationId ? (
+          <button
+            type="button"
+            onClick={() =>
+              syncRepositories.mutate({
+                installationId
+              })
+            }
+            disabled={syncRepositories.isPending}
+            className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {syncRepositories.isPending ? "Syncing..." : "Sync repositories"}
+          </button>
+        ) : null}
+      </div>
+
+      {installations.isLoading ? (
+        <p className="mt-4 text-sm text-neutral-500">Loading installations...</p>
+      ) : null}
+
+      {installations.data?.length === 0 ? (
+        <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
+          Not connected. Install the GitHub App, then return here to sync
+          repositories.
+        </p>
+      ) : null}
+
+      <div className="mt-4 space-y-3">
+        <label className="block text-sm">
+          <span className="text-neutral-300">Project</span>
+          <select
+            value={projectId}
+            onChange={(event) => {
+              setProjectId(event.target.value);
+              setRepositoryId("");
+            }}
+            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+          >
+            <option value="">Select a project</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block text-sm">
+          <span className="text-neutral-300">Installation</span>
+          <select
+            value={installationIdText}
+            onChange={(event) => {
+              setInstallationIdText(event.target.value);
+              setRepositoryId("");
+            }}
+            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+          >
+            <option value="">No installation</option>
+            {installations.data?.map((installation) => (
+              <option
+                key={installation.id}
+                value={String(installation.installationId)}
+              >
+                {installation.accountLogin}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {activeInstallation ? (
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
+            <p>Status: {activeInstallation.suspendedAt ? "Suspended" : "Installed"}</p>
+            <p>Repository access: {activeInstallation.repositorySelection ?? "selected"}</p>
+          </div>
+        ) : null}
+
+        <label className="block text-sm">
+          <span className="text-neutral-300">Repository</span>
+          <select
+            value={repositoryId}
+            onChange={(event) => setRepositoryId(event.target.value)}
+            disabled={!installationId || repositories.isLoading}
+            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <option value="">
+              {repositories.isLoading ? "Loading repositories..." : "Select repo"}
+            </option>
+            {repositories.data?.map((repository) => (
+              <option key={repository.id} value={repository.id}>
+                {repository.fullName}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {connectedRepository ? (
+          <p className="rounded-md border border-emerald-900/60 bg-emerald-950/25 p-3 text-sm text-emerald-200">
+            Repo selected: {connectedRepository.fullName}
+          </p>
+        ) : projectId ? (
+          <p className="rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
+            Installed, no repo selected for this project.
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              connectRepository.mutate({
+                projectId,
+                repositoryId
+              })
+            }
+            disabled={!canConnect}
+            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {connectRepository.isPending ? "Connecting..." : "Connect repo"}
+          </button>
+          {connectedRepository ? (
+            <button
+              type="button"
+              onClick={() =>
+                disconnectRepository.mutate({
+                  projectId
+                })
+              }
+              disabled={disconnectRepository.isPending}
+              className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {disconnectRepository.isPending ? "Disconnecting..." : "Disconnect"}
+            </button>
+          ) : null}
+        </div>
+
+        {syncRepositories.error ? (
+          <p className="text-sm text-red-300">{syncRepositories.error.message}</p>
+        ) : null}
+        {connectRepository.error ? (
+          <p className="text-sm text-red-300">{connectRepository.error.message}</p>
+        ) : null}
+        {disconnectRepository.error ? (
+          <p className="text-sm text-red-300">
+            {disconnectRepository.error.message}
+          </p>
+        ) : null}
+      </div>
+    </section>
   );
 }

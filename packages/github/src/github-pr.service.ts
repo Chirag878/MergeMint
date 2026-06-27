@@ -7,6 +7,7 @@ export type GitHubPullRequestInput = {
   owner: string;
   repo: string;
   pullNumber: number;
+  installationId?: number | null;
 };
 
 export type GitHubPullRequestDetails = {
@@ -67,7 +68,9 @@ export type GitHubPullRequestSnapshot = {
 export async function fetchPullRequestDetails(
   input: GitHubPullRequestInput
 ): Promise<GitHubPullRequestDetails> {
-  const octokit = getGitHubClient();
+  const octokit = await getGitHubClient({
+    installationId: input.installationId
+  });
 
   try {
     const { data } = await octokit.pulls.get({
@@ -104,7 +107,9 @@ export async function fetchPullRequestDetails(
 export async function fetchPullRequestFiles(
   input: GitHubPullRequestInput
 ): Promise<GitHubChangedFile[]> {
-  const octokit = getGitHubClient();
+  const octokit = await getGitHubClient({
+    installationId: input.installationId
+  });
 
   try {
     const files = await octokit.paginate(octokit.pulls.listFiles, {
@@ -131,7 +136,9 @@ export async function fetchPullRequestFiles(
 export async function fetchPullRequestCommits(
   input: GitHubPullRequestInput
 ): Promise<GitHubCommit[]> {
-  const octokit = getGitHubClient();
+  const octokit = await getGitHubClient({
+    installationId: input.installationId
+  });
 
   try {
     const commits = await octokit.paginate(octokit.pulls.listCommits, {
@@ -212,7 +219,9 @@ async function fetchChecks(
     };
   }
 
-  const octokit = getGitHubClient();
+  const octokit = await getGitHubClient({
+    installationId: input.installationId
+  });
 
   try {
     const { data } = await octokit.repos.getCombinedStatusForRef({
