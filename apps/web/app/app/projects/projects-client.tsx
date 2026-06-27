@@ -135,7 +135,7 @@ export function ProjectsClient() {
         </button>
         </form>
 
-        <GitHubIntegrationPanel projects={projects.data ?? []} />
+        <ProjectSetupPanel projects={projects.data ?? []} />
       </div>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
@@ -205,7 +205,7 @@ export function ProjectsClient() {
   );
 }
 
-function GitHubIntegrationPanel({
+function ProjectSetupPanel({
   projects
 }: {
   projects: Array<{
@@ -214,11 +214,18 @@ function GitHubIntegrationPanel({
   }>;
 }) {
   const utils = trpc.useUtils();
-  const installLink = trpc.githubApp.getInstallLink.useQuery();
   const installations = trpc.githubApp.getInstallations.useQuery();
   const [projectId, setProjectId] = useState("");
   const [installationIdText, setInstallationIdText] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
+  const projectSetup = trpc.guidedWorkflow.getProjectSetup.useQuery(
+    {
+      projectId: projectId || undefined
+    },
+    {
+      enabled: projects.length > 0
+    }
+  );
   const installationId = installationIdText ? Number(installationIdText) : null;
   const repositories = trpc.githubApp.listInstallationRepositories.useQuery(
     {
@@ -240,6 +247,7 @@ function GitHubIntegrationPanel({
     trpc.githubApp.syncInstallationRepositories.useMutation({
       onSuccess: async (synced) => {
         await utils.githubApp.listInstallationRepositories.invalidate();
+        await utils.guidedWorkflow.getProjectSetup.invalidate();
         if (synced[0]) {
           setRepositoryId(synced[0].id);
         }
@@ -250,6 +258,7 @@ function GitHubIntegrationPanel({
       onSuccess: async () => {
         await utils.githubApp.getProjectIntegration.invalidate();
         await utils.githubApp.listInstallationRepositories.invalidate();
+        await utils.guidedWorkflow.getProjectSetup.invalidate();
       }
     });
   const disconnectRepository =
@@ -257,6 +266,7 @@ function GitHubIntegrationPanel({
       onSuccess: async () => {
         setRepositoryId("");
         await utils.githubApp.getProjectIntegration.invalidate();
+        await utils.guidedWorkflow.getProjectSetup.invalidate();
       }
     });
 
@@ -292,26 +302,49 @@ function GitHubIntegrationPanel({
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <div>
-        <h2 className="text-lg font-medium">GitHub Integration</h2>
+        <h2 className="text-lg font-medium">Project setup</h2>
         <p className="mt-1 text-sm text-neutral-500">
-          MergeMint only accesses repositories selected during GitHub App
-          installation.
+          Connect the repository this project ships from before creating release
+          proof.
         </p>
       </div>
 
+      {projectSetup.data ? (
+        <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-medium text-neutral-100">
+                {projectSetup.data.title}
+              </p>
+              <p className="mt-1 text-sm text-neutral-500">
+                {projectSetup.data.description}
+              </p>
+            </div>
+            <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300">
+              {projectSetup.data.completionPercentage}%
+            </span>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {projectSetup.data.steps.map((step) => (
+              <div
+                key={step.id}
+                className="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm"
+              >
+                <span className="text-neutral-200">{step.label}</span>
+                <span className="text-xs text-neutral-500">{step.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap gap-2">
-        {installLink.data?.installUrl ? (
-          <a
-            href={installLink.data.installUrl}
-            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
-          >
-            Install GitHub App
-          </a>
-        ) : (
-          <span className="rounded-md border border-amber-800 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
-            GitHub App env not configured
-          </span>
-        )}
+        <Link
+          href="/app/settings/github"
+          className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+        >
+          Workspace GitHub settings
+        </Link>
         {installationId ? (
           <button
             type="button"

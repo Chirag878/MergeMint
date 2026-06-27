@@ -153,8 +153,9 @@ Avoid mismatched demos where the feature request and PR are unrelated. The stron
 12. Submit approval decision.
 13. Generate release report.
 14. Open public report.
-15. Return to Release Control Room and confirm status, next action, and Trust Timeline.
-16. Return to Client Delivery Ledger or Dashboard and confirm ledger, risks, approval, and report archive.
+15. Return to Release Control Room and confirm status, next action, guided feature stepper, and Trust Timeline.
+16. Return to Dashboard and confirm the next best action card points to the next incomplete release step.
+17. Return to Client Delivery Ledger and confirm ledger, risks, approval, and report archive.
 
 ## 8. Sample Report Setup
 
@@ -172,6 +173,7 @@ After generating a clean demo report:
 
 - GitHub App installation flow is available at `https://mergemint-eight.vercel.app/api/github/installations/callback`; production testing requires GitHub App env vars and setup URL configuration.
 - GitHub webhooks are available at `https://mergemint-eight.vercel.app/api/webhooks/github`; production testing requires `GITHUB_WEBHOOK_SECRET`.
+- Guided release workflow state is derived from existing GitHub App, project repository, feature, PR, QA, approval, and report records.
 - No team invites or full role-management UI yet.
 - No client portal permissions yet.
 - No billing system beyond external/payment-link CTA.

@@ -5,6 +5,7 @@ import { dashboardRouter } from "./routers/dashboard.router";
 import { featureRequestsRouter } from "./routers/feature-requests.router";
 import { githubAppRouter } from "./routers/github-app.router";
 import { githubRouter } from "./routers/github.router";
+import { guidedWorkflowRouter } from "./routers/guided-workflow.router";
 import { healthRouter } from "./routers/health.router";
 import { projectsRouter } from "./routers/projects.router";
 import { qaReviewRouter } from "./routers/qa-review.router";
@@ -22,6 +23,7 @@ export const appRouter = router({
   featureRequests: featureRequestsRouter,
   githubApp: githubAppRouter,
   github: githubRouter,
+  guidedWorkflow: guidedWorkflowRouter,
   qaReview: qaReviewRouter,
   releaseReport: releaseReportRouter,
   requirementEngine: requirementEngineRouter

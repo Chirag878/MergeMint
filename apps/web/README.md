@@ -126,10 +126,29 @@ GITHUB_APP_CLIENT_SECRET=""
 
 Repository connection flow:
 
-1. Open **Projects** in MergeMint.
+1. Open **Settings > GitHub** in MergeMint.
 2. Click **Install GitHub App** and choose selected repositories in GitHub.
-3. After callback, click **Sync repositories** in the GitHub Integration panel.
-4. Select a project and repository, then click **Connect repo**.
+3. After callback, click **Sync repositories** on the GitHub settings page.
+4. Open **Projects**, select a project and repository, then click **Connect repo**.
 5. Link PRs from that connected repository. MergeMint uses the installation
    access token first and falls back to `GITHUB_TOKEN` only when the GitHub App
    is not configured.
+
+## Guided Release Workflow
+
+MergeMint guides setup and delivery at three levels:
+
+1. **Dashboard** shows the next best workspace action: connect GitHub, sync
+   repositories, create a project, connect a project repository, link a PR, run
+   QA, approve, or share a report.
+2. **Settings > GitHub** is the workspace-level GitHub App control surface for
+   installation status, selected repository sync, and repository visibility.
+3. **Projects** maps a synced GitHub repository to a project before feature
+   work begins.
+4. **Feature detail** shows the release stepper for the selected feature:
+   request, PRD and tasks, pull request, QA review, approval, and report.
+
+Feature workflow states are derived from existing records rather than stored in
+new columns. Current states include `clarification_needed`, `draft_request`,
+`prd_ready`, `tasks_ready`, `pr_linked`, `qa_ready`, `qa_needs_changes`,
+`approved`, `rejected`, `report_ready`, and `shipped`.

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const installationId = installationIdText ? Number(installationIdText) : NaN;
 
   if (!Number.isInteger(installationId) || installationId <= 0) {
-    return redirectTo("/app/projects?githubInstallation=missing", request);
+    return redirectTo("/app/settings/github?githubInstallation=missing", request);
   }
 
   const authSession = await getSessionFromHeaders(request.headers);
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
       setupAction
     });
 
-    const redirectPath = new URL("/app/projects", request.url);
+    const redirectPath = new URL("/app/settings/github", request.url);
     redirectPath.searchParams.set("githubInstallation", "connected");
     redirectPath.searchParams.set(
       "repositoriesSynced",
@@ -58,6 +58,6 @@ export async function GET(request: Request) {
       installationId
     });
 
-    return redirectTo("/app/projects?githubInstallation=failed", request);
+    return redirectTo("/app/settings/github?githubInstallation=failed", request);
   }
 }

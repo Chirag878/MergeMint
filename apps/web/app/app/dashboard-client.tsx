@@ -58,6 +58,7 @@ export function DashboardClient({
 }) {
   const utils = trpc.useUtils();
   const summary = trpc.dashboard.getSummary.useQuery();
+  const workspaceSetup = trpc.guidedWorkflow.getWorkspaceSetup.useQuery();
   const setUseCase = trpc.workspace.setUseCase.useMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -145,6 +146,10 @@ export function DashboardClient({
           />
         ) : null}
 
+        {workspaceSetup.data ? (
+          <NextBestActionCard workflow={workspaceSetup.data} />
+        ) : null}
+
         <section className="grid gap-4 lg:grid-cols-2">
           <PathCard
             title={primarySecondary.primary.title}
@@ -191,6 +196,90 @@ export function DashboardClient({
         </section>
       </section>
     </main>
+  );
+}
+
+function NextBestActionCard({
+  workflow
+}: {
+  workflow: {
+    title: string;
+    description: string;
+    primaryActionLabel: string;
+    primaryActionHref?: string;
+    secondaryActionLabel?: string;
+    secondaryActionHref?: string;
+    blockedReason?: string;
+    completionPercentage: number;
+    steps: Array<{
+      id: string;
+      label: string;
+      status: "completed" | "current" | "blocked" | "upcoming";
+    }>;
+  };
+}) {
+  return (
+    <section className="rounded-lg border border-emerald-300/25 bg-emerald-300/[0.055] p-6">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-sm font-medium uppercase tracking-[0.24em] text-emerald-200">
+            Next best action
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold text-white">
+            {workflow.title}
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-300">
+            {workflow.description}
+          </p>
+          {workflow.blockedReason ? (
+            <p className="mt-3 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+              {workflow.blockedReason}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col gap-2">
+          {workflow.primaryActionHref ? (
+            <Link
+              href={workflow.primaryActionHref}
+              className="rounded-md bg-white px-4 py-2 text-center text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100"
+            >
+              {workflow.primaryActionLabel}
+            </Link>
+          ) : null}
+          {workflow.secondaryActionHref ? (
+            <Link
+              href={workflow.secondaryActionHref}
+              className="rounded-md border border-white/15 px-4 py-2 text-center text-sm font-semibold text-white transition hover:border-emerald-300/40"
+            >
+              {workflow.secondaryActionLabel}
+            </Link>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-5">
+        <div className="flex items-center justify-between text-xs text-neutral-400">
+          <span>Setup progress</span>
+          <span>{workflow.completionPercentage}%</span>
+        </div>
+        <div className="mt-2 h-2 rounded-full bg-black/40">
+          <div
+            className="h-2 rounded-full bg-emerald-300"
+            style={{ width: `${workflow.completionPercentage}%` }}
+          />
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-5">
+          {workflow.steps.map((step) => (
+            <div
+              key={step.id}
+              className="rounded-md border border-white/10 bg-black/25 p-3"
+            >
+              <p className="text-sm font-medium text-white">{step.label}</p>
+              <p className="mt-1 text-xs text-neutral-500">{step.status}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 

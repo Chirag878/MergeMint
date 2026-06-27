@@ -250,6 +250,9 @@ export function FeatureDetailClient({
   const controlRoom = trpc.featureRequests.getReleaseControlRoom.useQuery({
     featureRequestId
   });
+  const guidedWorkflow = trpc.guidedWorkflow.getFeatureWorkflow.useQuery({
+    featureRequestId
+  });
   const timelineControlRoom = trpc.featureRequests.getReleaseControlRoom.useQuery(
     {
       featureRequestId,
@@ -313,6 +316,9 @@ export function FeatureDetailClient({
       utils.featureRequests.getReleaseControlRoom.invalidate({
         featureRequestId,
         includeTimeline: true
+      }),
+      utils.guidedWorkflow.getFeatureWorkflow.invalidate({
+        featureRequestId
       })
     ]);
   };
@@ -549,6 +555,64 @@ export function FeatureDetailClient({
     });
   }
 
+  function runGuidedAction(actionKey?: string) {
+    if (!actionKey) {
+      return;
+    }
+
+    if (actionKey === "answer_clarifications") {
+      openTab("requirements", "clarifications-section");
+      return;
+    }
+
+    if (actionKey === "generate_prd") {
+      openTab("requirements", "requirement-engine-section");
+      generatePrd.mutate({ featureRequestId });
+      return;
+    }
+
+    if (actionKey === "generate_tasks") {
+      openTab("requirements", "engineering-tasks-section");
+      if (prd) {
+        generateTasks.mutate({ prdId: prd.id });
+      }
+      return;
+    }
+
+    if (actionKey === "link_pr") {
+      openTab("pr", "github-pr-section");
+      return;
+    }
+
+    if (actionKey === "run_qa") {
+      openTab("qa", "ai-qa-review");
+      if (!prdMayBeOutdated) {
+        runQaReview.mutate({ featureRequestId });
+      }
+      return;
+    }
+
+    if (
+      actionKey === "approve_release" ||
+      actionKey === "review_approval" ||
+      actionKey === "review_risks"
+    ) {
+      openTab("approval", "human-approval");
+      return;
+    }
+
+    if (actionKey === "generate_report") {
+      openTab("report", "release-report");
+      if (!prdMayBeOutdated) {
+        if (projectHasClient) {
+          generateReleaseReport.mutate({ featureRequestId });
+        } else {
+          generateInternalReleaseReport.mutate({ featureRequestId });
+        }
+      }
+    }
+  }
+
   if (featureQuery.isLoading) {
     return (
       <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-5 text-sm text-neutral-400">
@@ -635,6 +699,20 @@ export function FeatureDetailClient({
           }}
           isGeneratingReport={
             generateReleaseReport.isPending || generateInternalReleaseReport.isPending
+          }
+        />
+      ) : null}
+
+      {guidedWorkflow.data ? (
+        <FeatureWorkflowGuide
+          workflow={guidedWorkflow.data}
+          onAction={runGuidedAction}
+          isBusy={
+            generatePrd.isPending ||
+            generateTasks.isPending ||
+            runQaReview.isPending ||
+            generateReleaseReport.isPending ||
+            generateInternalReleaseReport.isPending
           }
         />
       ) : null}
@@ -873,7 +951,10 @@ export function FeatureDetailClient({
         )}
       </section>
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <section
+        id="engineering-tasks-section"
+        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+      >
         <h2 className="text-lg font-medium">PRD</h2>
         {prd ? (
           <div className="mt-4 space-y-5">
@@ -1111,6 +1192,111 @@ function DetailBlock({
       <p className="mt-3 text-sm text-neutral-400">
         {value || "Not specified."}
       </p>
+    </section>
+  );
+}
+
+function FeatureWorkflowGuide({
+  workflow,
+  onAction,
+  isBusy
+}: {
+  workflow: {
+    status: string;
+    title: string;
+    description: string;
+    primaryActionLabel: string;
+    primaryActionHref?: string;
+    primaryActionKey?: string;
+    blockedReason?: string;
+    completionPercentage: number;
+    steps: Array<{
+      id: string;
+      label: string;
+      status: "completed" | "current" | "blocked" | "upcoming";
+    }>;
+  };
+  onAction: (actionKey?: string) => void;
+  isBusy: boolean;
+}) {
+  return (
+    <section className="rounded-lg border border-emerald-300/25 bg-emerald-300/[0.055] p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium uppercase tracking-[0.24em] text-emerald-200">
+              Guided release workflow
+            </p>
+            <span className="rounded-full border border-emerald-300/25 px-2.5 py-1 text-xs text-emerald-100">
+              {workflow.status.replaceAll("_", " ")}
+            </span>
+          </div>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-100">
+            {workflow.title}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-300">
+            {workflow.description}
+          </p>
+          {workflow.blockedReason ? (
+            <p className="mt-3 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+              {workflow.blockedReason}
+            </p>
+          ) : null}
+        </div>
+
+        {workflow.primaryActionHref ? (
+          <Link
+            href={workflow.primaryActionHref}
+            className="shrink-0 rounded-md bg-white px-4 py-2 text-center text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100"
+          >
+            {workflow.primaryActionLabel}
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onAction(workflow.primaryActionKey)}
+            disabled={isBusy}
+            className="shrink-0 rounded-md bg-white px-4 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isBusy ? "Working..." : workflow.primaryActionLabel}
+          </button>
+        )}
+      </div>
+
+      <div className="mt-5">
+        <div className="flex items-center justify-between text-xs text-neutral-400">
+          <span>Release progress</span>
+          <span>{workflow.completionPercentage}%</span>
+        </div>
+        <div className="mt-2 h-2 rounded-full bg-black/40">
+          <div
+            className="h-2 rounded-full bg-emerald-300"
+            style={{ width: `${workflow.completionPercentage}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+        {workflow.steps.map((step) => (
+          <div
+            key={step.id}
+            className={
+              step.status === "current"
+                ? "rounded-md border border-blue-400/35 bg-blue-400/10 p-3"
+                : step.status === "blocked"
+                  ? "rounded-md border border-amber-500/35 bg-amber-500/10 p-3"
+                  : step.status === "completed"
+                    ? "rounded-md border border-emerald-400/25 bg-emerald-400/10 p-3"
+                    : "rounded-md border border-neutral-800 bg-neutral-950/70 p-3"
+            }
+          >
+            <p className="text-sm font-medium text-neutral-100">{step.label}</p>
+            <p className="mt-1 text-xs capitalize text-neutral-500">
+              {step.status}
+            </p>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
