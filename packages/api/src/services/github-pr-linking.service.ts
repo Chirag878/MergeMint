@@ -387,6 +387,7 @@ export async function linkPullRequestToFeatureRequest(
     .update(featureRequests)
     .set({
       status: "pr_linked",
+      boardStage: "ongoing",
       updatedAt: new Date()
     })
     .where(eq(featureRequests.id, featureRequest.id));
@@ -421,6 +422,103 @@ export async function linkPullRequestToFeatureRequest(
   return {
     pullRequest,
     repository,
+    snapshot: mapSnapshotSummary(snapshotResult.snapshot)
+  };
+}
+
+export async function linkSelectedPullRequestToFeatureRequest(
+  ctx: ProtectedContext,
+  input: {
+    projectId: string;
+    featureRequestId: string;
+    prNumber: number;
+  }
+) {
+  const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+  assertRoleCan(workspace.membership.role, "create_feature_request");
+  const organizationId = workspace.activeOrganization.id;
+
+  const { featureRequest } = await getScopedFeatureRequestOrThrow(
+    input.featureRequestId,
+    organizationId
+  );
+
+  if (featureRequest.projectId !== input.projectId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Feature request does not belong to the selected project."
+    });
+  }
+
+  const [projectRepository] = await db
+    .select({
+      projectRepository: projectGithubRepositories,
+      repository: repositories
+    })
+    .from(projectGithubRepositories)
+    .innerJoin(
+      repositories,
+      eq(projectGithubRepositories.repositoryId, repositories.id)
+    )
+    .where(
+      and(
+        eq(projectGithubRepositories.organizationId, organizationId),
+        eq(projectGithubRepositories.projectId, input.projectId),
+        eq(repositories.organizationId, organizationId)
+      )
+    )
+    .limit(1);
+
+  if (!projectRepository) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Connect a GitHub repository to this project before selecting PRs."
+    });
+  }
+
+  const snapshot = await fetchPullRequestSnapshot({
+    owner: projectRepository.repository.owner,
+    repo: projectRepository.repository.name,
+    pullNumber: input.prNumber,
+    installationId: projectRepository.repository.githubAppInstallationId
+  });
+  const pullRequest = await upsertPullRequest({
+    organizationId,
+    projectId: input.projectId,
+    featureRequestId: input.featureRequestId,
+    repositoryId: projectRepository.repository.id,
+    snapshot
+  });
+  const snapshotResult = await createSnapshotIfNeeded({
+    pullRequestId: pullRequest.id,
+    snapshot
+  });
+
+  await db
+    .update(featureRequests)
+    .set({
+      status: "pr_linked",
+      boardStage: "ongoing",
+      updatedAt: new Date()
+    })
+    .where(eq(featureRequests.id, featureRequest.id));
+
+  await writeAuditLog({
+    organizationId,
+    actorId: workspace.appUser.id,
+    action: "github_pr_selected",
+    entityType: "feature_request",
+    entityId: featureRequest.id,
+    metadata: toJsonObject({
+      pullRequestId: pullRequest.id,
+      repositoryId: projectRepository.repository.id,
+      prNumber: input.prNumber
+    })
+  });
+
+  return {
+    pullRequest,
+    repository: projectRepository.repository,
     snapshot: mapSnapshotSummary(snapshotResult.snapshot)
   };
 }

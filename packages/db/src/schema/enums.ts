@@ -39,7 +39,16 @@ export const paymentStatusEnum = pgEnum("payment_status", [
 export const projectStatusEnum = pgEnum("project_status", [
   "active",
   "paused",
+  "on_hold",
+  "completed",
   "archived"
+]);
+
+export const releaseBoardStageEnum = pgEnum("release_board_stage", [
+  "pending",
+  "ongoing",
+  "completing",
+  "shipped"
 ]);
 
 export const featurePriorityEnum = pgEnum("feature_priority", [

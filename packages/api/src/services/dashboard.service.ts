@@ -140,6 +140,13 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
 
   const projectById = new Map(projectRows.map((project) => [project.id, project]));
   const clientById = new Map(clientRows.map((client) => [client.id, client]));
+  const activeProjectIds = new Set(
+    projectRows
+      .filter(
+        (project) => project.status !== "completed" && project.status !== "archived"
+      )
+      .map((project) => project.id)
+  );
   const latestPrd = latestByFeature(scopedPrds);
   const latestPullRequest = latestByFeature(pullRequestRows);
   const latestQaReview = latestByFeature(qaReviewRows);
@@ -166,6 +173,9 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
   const needsAttention = featureRows
     .map((feature) => {
       const project = projectById.get(feature.projectId);
+      if (!project || !activeProjectIds.has(project.id)) {
+        return null;
+      }
       const client = project?.clientId ? clientById.get(project.clientId) : null;
       const prd = latestPrd.get(feature.id);
       const pullRequest = latestPullRequest.get(feature.id);
@@ -308,7 +318,10 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
     };
   });
 
-  const recentProjects = projectRows.slice(0, 5).map((project) => {
+  const recentProjects = projectRows
+    .filter((project) => activeProjectIds.has(project.id))
+    .slice(0, 5)
+    .map((project) => {
     const projectFeatures = featuresByProjectId.get(project.id) ?? [];
     const client = project.clientId ? clientById.get(project.clientId) : null;
 
@@ -319,6 +332,15 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
       featureCount: projectFeatures.length
     };
   });
+  const boardFeatures = featureRows.filter((feature) =>
+    activeProjectIds.has(feature.projectId)
+  );
+  const shippedThisMonth = boardFeatures.filter(
+    (feature) =>
+      feature.boardStage === "shipped" &&
+      feature.shippedAt &&
+      feature.shippedAt >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  ).length;
 
   return {
     workspace: {
@@ -329,12 +351,22 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
     },
     stats: {
       clients: clientRows.length,
-      projects: projectRows.length,
+      projects: projectRows.filter((project) => activeProjectIds.has(project.id)).length,
       featureRequests: featureRows.length,
       linkedPullRequests: pullRequestRows.length,
       qaReviews: qaReviewRows.length,
       releaseReports: releaseReportRows.length,
       openFindings: findingRows.filter(isOpenFinding).length
+    },
+    boardSummary: {
+      pending: boardFeatures.filter((feature) => feature.boardStage === "pending")
+        .length,
+      ongoing: boardFeatures.filter((feature) => feature.boardStage === "ongoing")
+        .length,
+      completing: boardFeatures.filter(
+        (feature) => feature.boardStage === "completing"
+      ).length,
+      shippedThisMonth
     },
     isEmpty:
       clientRows.length === 0 && projectRows.length === 0 && featureRows.length === 0,

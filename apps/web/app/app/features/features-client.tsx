@@ -56,6 +56,7 @@ export function FeaturesClient({
       void utils.dashboard.getSummary.invalidate();
       void utils.featureRequests.list.invalidate();
       void utils.projects.list.invalidate();
+      void utils.releaseBoard.getBoard.invalidate();
     }
   });
 

@@ -29,7 +29,8 @@ export function GitHubSettingsClient() {
           utils.githubApp.listInstallationRepositories.invalidate(),
           utils.guidedWorkflow.getWorkspaceSetup.invalidate(),
           utils.projects.list.invalidate(),
-          utils.dashboard.getSummary.invalidate()
+          utils.dashboard.getSummary.invalidate(),
+          utils.releaseBoard.getBoard.invalidate()
         ]);
       }
     });

@@ -8,6 +8,7 @@ const navItems = [
   ["Clients", "/app/clients"],
   ["Projects", "/app/projects"],
   ["Features", "/app/features"],
+  ["Release Board", "/app/board"],
   ["GitHub", "/app/settings/github"]
 ] as const;
 

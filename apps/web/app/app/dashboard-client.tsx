@@ -153,6 +153,7 @@ export function DashboardClient({
         <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <NeedsAttention items={data.needsAttention} />
           <div className="space-y-5">
+            <ReleaseBoardSummary summary={data.boardSummary} />
             <RecentClients clients={data.recentClients} />
             <RecentProjects projects={data.recentProjects} />
           </div>
@@ -526,6 +527,51 @@ function NeedsAttention({
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function ReleaseBoardSummary({
+  summary
+}: {
+  summary: {
+    pending: number;
+    ongoing: number;
+    completing: number;
+    shippedThisMonth: number;
+  };
+}) {
+  const items = [
+    ["Pending", summary.pending],
+    ["Ongoing", summary.ongoing],
+    ["Completing", summary.completing],
+    ["Shipped 30d", summary.shippedThisMonth]
+  ] as const;
+
+  return (
+    <section className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Release Board</h2>
+          <p className="mt-2 text-sm text-neutral-500">
+            Feature releases grouped by current delivery stage.
+          </p>
+        </div>
+        <Link
+          href="/app/board"
+          className="rounded-md border border-white/15 px-3 py-2 text-sm font-semibold text-white transition hover:border-emerald-300/40"
+        >
+          Open board
+        </Link>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        {items.map(([label, value]) => (
+          <div key={label} className="rounded-md border border-white/10 bg-black/25 p-3">
+            <p className="text-xs text-neutral-500">{label}</p>
+            <p className="mt-1 text-lg font-semibold text-white">{value}</p>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

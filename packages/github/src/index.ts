@@ -12,11 +12,13 @@ export {
   fetchPullRequestCommits,
   fetchPullRequestDetails,
   fetchPullRequestFiles,
-  fetchPullRequestSnapshot
+  fetchPullRequestSnapshot,
+  listPullRequestsForRepository
 } from "./github-pr.service";
 export type {
   GitHubChangedFile,
   GitHubCommit,
+  GitHubPullRequestListItem,
   GitHubPullRequestDetails,
   GitHubPullRequestInput,
   GitHubPullRequestSnapshot

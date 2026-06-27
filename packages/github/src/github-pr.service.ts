@@ -65,6 +65,71 @@ export type GitHubPullRequestSnapshot = {
   ciStatus: "pending" | "success" | "failure" | "skipped" | "cancelled" | "unknown";
 };
 
+export type GitHubPullRequestListItem = {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  draft: boolean;
+  authorLogin: string | null;
+  headBranch: string;
+  baseBranch: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  htmlUrl: string;
+  changedFiles: number | null;
+  additions: number | null;
+  deletions: number | null;
+};
+
+export async function listPullRequestsForRepository(input: {
+  owner: string;
+  repo: string;
+  installationId?: number | null;
+  state?: "open" | "closed" | "all";
+  limit?: number;
+}): Promise<GitHubPullRequestListItem[]> {
+  const octokit = await getGitHubClient({
+    installationId: input.installationId
+  });
+
+  try {
+    const { data } = await octokit.pulls.list({
+      owner: input.owner,
+      repo: input.repo,
+      state: input.state ?? "open",
+      sort: "updated",
+      direction: "desc",
+      per_page: Math.min(Math.max(input.limit ?? 30, 1), 100)
+    });
+
+    return data.map((pullRequest) => {
+      const metrics = pullRequest as typeof pullRequest & {
+        changed_files?: number;
+        additions?: number;
+        deletions?: number;
+      };
+
+      return {
+        number: pullRequest.number,
+        title: pullRequest.title,
+        state: pullRequest.state === "closed" ? "closed" : "open",
+        draft: Boolean(pullRequest.draft),
+        authorLogin: pullRequest.user?.login ?? null,
+        headBranch: pullRequest.head.ref,
+        baseBranch: pullRequest.base.ref,
+        createdAt: pullRequest.created_at ?? null,
+        updatedAt: pullRequest.updated_at ?? null,
+        htmlUrl: pullRequest.html_url,
+        changedFiles: metrics.changed_files ?? null,
+        additions: metrics.additions ?? null,
+        deletions: metrics.deletions ?? null
+      };
+    });
+  } catch (error) {
+    throw toGitHubError(error);
+  }
+}
+
 export async function fetchPullRequestDetails(
   input: GitHubPullRequestInput
 ): Promise<GitHubPullRequestDetails> {

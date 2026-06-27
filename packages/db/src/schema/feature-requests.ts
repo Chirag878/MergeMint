@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -8,7 +9,11 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { appUsers } from "./auth";
-import { featurePriorityEnum, featureStatusEnum } from "./enums";
+import {
+  featurePriorityEnum,
+  featureStatusEnum,
+  releaseBoardStageEnum
+} from "./enums";
 import { organizations } from "./organizations";
 import { projects } from "./projects";
 import type { StringList } from "./types";
@@ -31,6 +36,11 @@ export const featureRequests = pgTable(
       jsonb("acceptance_criteria").$type<StringList>().default([]).notNull(),
     priority: featurePriorityEnum("priority").notNull().default("medium"),
     status: featureStatusEnum("status").notNull().default("draft"),
+    boardStage: releaseBoardStageEnum("board_stage")
+      .notNull()
+      .default("pending"),
+    boardOrder: integer("board_order").notNull().default(0),
+    shippedAt: timestamp("shipped_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => appUsers.id, {
       onDelete: "set null"
     }),
@@ -46,6 +56,8 @@ export const featureRequests = pgTable(
     index("feature_requests_project_id_idx").on(table.projectId),
     index("feature_requests_created_by_idx").on(table.createdBy),
     index("feature_requests_status_idx").on(table.status),
+    index("feature_requests_board_stage_idx").on(table.boardStage),
+    index("feature_requests_board_order_idx").on(table.boardOrder),
     index("feature_requests_priority_idx").on(table.priority),
     index("feature_requests_created_at_idx").on(table.createdAt)
   ]

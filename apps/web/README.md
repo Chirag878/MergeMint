@@ -129,10 +129,29 @@ Repository connection flow:
 1. Open **Settings > GitHub** in MergeMint.
 2. Click **Install GitHub App** and choose selected repositories in GitHub.
 3. After callback, click **Sync repositories** on the GitHub settings page.
-4. Open **Projects**, select a project and repository, then click **Connect repo**.
-5. Link PRs from that connected repository. MergeMint uses the installation
-   access token first and falls back to `GITHUB_TOKEN` only when the GitHub App
-   is not configured.
+4. Create a project from a synced GitHub repository, or create a project
+   manually and connect a repository later.
+5. On feature detail, select a PR from the connected project repository.
+   MergeMint uses the installation access token first and falls back to
+   `GITHUB_TOKEN` only when the GitHub App is not configured.
+
+## Project Creation and PR Selection
+
+Projects can start in two ways:
+
+- **Create from GitHub repo**: select a synced repository, add a project name,
+  brief, and optional client ledger. The repository is connected immediately.
+- **Create manually**: add project details first, then connect a repository from
+  the project setup panel later.
+
+After a GitHub-backed project is created, the normal next actions are analyze
+repository, create a feature request, or verify an existing PR. Features remain
+scoped to their selected project and must not appear under unrelated projects.
+
+The PR Evidence tab uses a GitHub PR picker for the project-connected
+repository. Manual PR URL paste remains available only under
+**Advanced: paste PR URL manually** for fallback cases where the PR is outside
+the connected repository or GitHub App access is unavailable.
 
 ## Guided Release Workflow
 
@@ -148,10 +167,22 @@ MergeMint guides setup and delivery at three levels:
 4. **Feature detail** shows the release stepper for the selected feature:
    request, PRD and tasks, pull request, QA review, approval, and report.
 
-Feature workflow states are derived from existing records rather than stored in
-new columns. Current states include `clarification_needed`, `draft_request`,
-`prd_ready`, `tasks_ready`, `pr_linked`, `qa_ready`, `qa_needs_changes`,
-`approved`, `rejected`, `report_ready`, and `shipped`.
+Feature workflow states are derived from existing records and persisted board
+stage fields. Current release board stages are:
+
+- `pending`: no PRD yet, clarification needed, or waiting to start.
+- `ongoing`: PRD/tasks ready, in development, awaiting PR, or PR linked.
+- `completing`: QA pending, QA needs changes, approval pending, or report work.
+- `shipped`: approved and reported releases.
+
+Open **Release Board** at `/app/board` to filter by project or client and move
+features between safe stages. Marking a feature shipped warns if approval/report
+evidence is missing.
+
+Projects can be marked completed and reopened. Completion is non-destructive:
+reports and features remain accessible, while completed projects are omitted
+from active dashboard attention by default. If unresolved release items remain,
+MergeMint asks for confirmation before completing the project.
 
 ## Repo Intelligence
 

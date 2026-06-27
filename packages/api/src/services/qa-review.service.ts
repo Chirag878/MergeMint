@@ -538,6 +538,7 @@ export async function runQaReviewForFeatureRequest(
         .update(featureRequests)
         .set({
           status: "qa_reviewed",
+          boardStage: "completing",
           updatedAt: new Date()
         })
         .where(eq(featureRequests.id, featureRequest.id));

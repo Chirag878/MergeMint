@@ -932,6 +932,16 @@ export async function generateReleaseReport(
     throw new Error("Unable to generate release report.");
   }
 
+  await db
+    .update(featureRequests)
+    .set({
+      boardStage: "shipped",
+      status: "released",
+      shippedAt: generatedAt,
+      updatedAt: new Date()
+    })
+    .where(eq(featureRequests.id, featureRequest.id));
+
   await writeAuditLog({
     organizationId,
     actorId: workspace.appUser.id,
@@ -1105,6 +1115,16 @@ export async function generateInternalReleaseReport(
   if (!report) {
     throw new Error("Unable to generate internal release report.");
   }
+
+  await db
+    .update(featureRequests)
+    .set({
+      boardStage: "shipped",
+      status: "released",
+      shippedAt: generatedAt,
+      updatedAt: new Date()
+    })
+    .where(eq(featureRequests.id, featureRequest.id));
 
   await writeAuditLog({
     organizationId,
@@ -1288,6 +1308,14 @@ export async function generateDeveloperFixReport(
   if (!report) {
     throw new Error("Unable to generate developer fix report.");
   }
+
+  await db
+    .update(featureRequests)
+    .set({
+      boardStage: "completing",
+      updatedAt: new Date()
+    })
+    .where(eq(featureRequests.id, featureRequest.id));
 
   await writeAuditLog({
     organizationId,

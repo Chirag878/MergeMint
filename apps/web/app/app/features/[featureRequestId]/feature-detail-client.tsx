@@ -235,6 +235,10 @@ export function FeatureDetailClient({
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [prUrl, setPrUrl] = useState("");
+  const [prSearch, setPrSearch] = useState("");
+  const [prStateFilter, setPrStateFilter] = useState<"open" | "closed" | "all">(
+    "open"
+  );
   const [approvalDecision, setApprovalDecision] =
     useState<ApprovalDecision>("approved");
   const [approvalNote, setApprovalNote] = useState("");
@@ -291,6 +295,20 @@ export function FeatureDetailClient({
   }, {
     enabled: activeTab === "pr" || activeTab === "qa"
   });
+  const pullRequestPicker = trpc.pullRequests.listForProjectRepository.useQuery(
+    {
+      projectId: featureQuery.data?.projectId ?? "",
+      state: prStateFilter,
+      search: prSearch.trim() || undefined,
+      limit: 50
+    },
+    {
+      enabled:
+        activeTab === "pr" &&
+        Boolean(featureQuery.data?.projectId) &&
+        !linkedPullRequest.data
+    }
+  );
   const latestQaReview = trpc.qaReview.getLatest.useQuery({
     featureRequestId
   }, {
@@ -338,7 +356,8 @@ export function FeatureDetailClient({
         featureRequestId
       }),
       utils.dashboard.getSummary.invalidate(),
-      utils.projects.list.invalidate()
+      utils.projects.list.invalidate(),
+      utils.releaseBoard.getBoard.invalidate()
     ]);
   };
   const generateClarifications =
@@ -399,6 +418,15 @@ export function FeatureDetailClient({
       await invalidateReleaseControlRoom();
     }
   });
+  const linkSelectedPullRequest =
+    trpc.pullRequests.linkSelectedPullRequest.useMutation({
+      onSuccess: async () => {
+        await utils.github.getFeaturePullRequest.invalidate({ featureRequestId });
+        await utils.pullRequests.listForProjectRepository.invalidate();
+        await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
+        await invalidateReleaseControlRoom();
+      }
+    });
   const refreshSnapshot = trpc.github.refreshSnapshot.useMutation({
     onSuccess: async () => {
       await utils.github.getFeaturePullRequest.invalidate({ featureRequestId });
@@ -1136,6 +1164,26 @@ export function FeatureDetailClient({
         data={linkedPullRequest.data}
         isLoading={linkedPullRequest.isLoading}
         error={linkedPullRequest.error?.message}
+        projectId={feature.projectId}
+        projectName={controlRoom.data?.project.name ?? "Project"}
+        featureTitle={feature.title}
+        pickerData={pullRequestPicker.data}
+        pickerLoading={pullRequestPicker.isLoading}
+        pickerError={pullRequestPicker.error?.message}
+        prSearch={prSearch}
+        setPrSearch={setPrSearch}
+        prStateFilter={prStateFilter}
+        setPrStateFilter={setPrStateFilter}
+        onRefreshPicker={() => pullRequestPicker.refetch()}
+        onSelectPullRequest={(prNumber) =>
+          linkSelectedPullRequest.mutate({
+            projectId: feature.projectId,
+            featureRequestId,
+            prNumber
+          })
+        }
+        isSelecting={linkSelectedPullRequest.isPending}
+        selectError={linkSelectedPullRequest.error?.message}
         prUrl={prUrl}
         setPrUrl={setPrUrl}
         onLink={() =>
@@ -2745,6 +2793,20 @@ function GitHubPullRequestSection({
   data,
   isLoading,
   error,
+  projectId,
+  projectName,
+  featureTitle,
+  pickerData,
+  pickerLoading,
+  pickerError,
+  prSearch,
+  setPrSearch,
+  prStateFilter,
+  setPrStateFilter,
+  onRefreshPicker,
+  onSelectPullRequest,
+  isSelecting,
+  selectError,
   prUrl,
   setPrUrl,
   onLink,
@@ -2800,6 +2862,42 @@ function GitHubPullRequestSection({
     | undefined;
   isLoading: boolean;
   error?: string;
+  projectId: string;
+  projectName: string;
+  featureTitle: string;
+  pickerData:
+    | {
+        repository: {
+          fullName: string;
+          defaultBranch: string;
+        };
+        pullRequests: Array<{
+          number: number;
+          title: string;
+          state: string;
+          draft: boolean;
+          authorLogin: string | null;
+          headBranch: string;
+          baseBranch: string;
+          createdAt: string | null;
+          updatedAt: string | null;
+          htmlUrl: string;
+          changedFiles: number | null;
+          additions: number | null;
+          deletions: number | null;
+        }>;
+      }
+    | undefined;
+  pickerLoading: boolean;
+  pickerError?: string;
+  prSearch: string;
+  setPrSearch: (value: string) => void;
+  prStateFilter: "open" | "closed" | "all";
+  setPrStateFilter: (value: "open" | "closed" | "all") => void;
+  onRefreshPicker: () => void;
+  onSelectPullRequest: (prNumber: number) => void;
+  isSelecting: boolean;
+  selectError?: string;
   prUrl: string;
   setPrUrl: (value: string) => void;
   onLink: () => void;
@@ -2823,27 +2921,138 @@ function GitHubPullRequestSection({
 
       {!isLoading && !data ? (
         <div className="mt-4 space-y-4">
-          <p className="text-sm text-neutral-500">
-            Paste a GitHub PR URL to capture the code snapshot for verification.
-          </p>
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div>
+            <h3 className="font-medium text-neutral-100">Select pull request</h3>
+            <p className="mt-1 text-sm text-neutral-500">
+              Choose the PR from this project&apos;s connected repository.
+            </p>
+          </div>
+          <div className="grid gap-3 rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400 md:grid-cols-2">
+            <p>Project: {projectName}</p>
+            <p>Feature: {featureTitle}</p>
+            <p>
+              Repository: {pickerData?.repository.fullName ?? "Connect a repo first"}
+            </p>
+            <p>
+              Default branch: {pickerData?.repository.defaultBranch ?? "unknown"}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row">
             <input
-              value={prUrl}
-              onChange={(event) => setPrUrl(event.target.value)}
+              value={prSearch}
+              onChange={(event) => setPrSearch(event.target.value)}
               className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
-              placeholder="https://github.com/owner/repo/pull/123"
-              type="url"
+              placeholder="Search PR title, number, branch, or author"
             />
+            <select
+              value={prStateFilter}
+              onChange={(event) =>
+                setPrStateFilter(event.target.value as "open" | "closed" | "all")
+              }
+              className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
+            >
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+              <option value="all">All</option>
+            </select>
             <button
               type="button"
-              disabled={!canLink}
-              onClick={onLink}
-              className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={onRefreshPicker}
+              disabled={pickerLoading}
+              className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLinking ? "Linking..." : "Link Pull Request"}
+              {pickerLoading ? "Refreshing..." : "Refresh PRs"}
             </button>
           </div>
-          {linkError ? <p className="text-sm text-red-300">{linkError}</p> : null}
+
+          {pickerLoading ? <EmptyText>Loading pull requests...</EmptyText> : null}
+          {pickerError ? <p className="text-sm text-red-300">{pickerError}</p> : null}
+          {selectError ? <p className="text-sm text-red-300">{selectError}</p> : null}
+
+          {!pickerLoading && pickerData?.pullRequests.length === 0 ? (
+            <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
+              No pull requests matched. Try another filter or use the advanced URL
+              fallback if GitHub App access is unavailable.
+            </div>
+          ) : null}
+
+          <div className="space-y-3">
+            {pickerData?.pullRequests.map((pullRequest) => (
+              <article
+                key={pullRequest.number}
+                className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium text-neutral-100">
+                      #{pullRequest.number} {pullRequest.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-neutral-500">
+                      {pullRequest.headBranch} {"->"} {pullRequest.baseBranch}
+                      {pullRequest.authorLogin ? ` by ${pullRequest.authorLogin}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Updated{" "}
+                      {pullRequest.updatedAt
+                        ? formatDate(pullRequest.updatedAt)
+                        : "unknown"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge>{pullRequest.state}</Badge>
+                    {pullRequest.draft ? <Badge>draft</Badge> : null}
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onSelectPullRequest(pullRequest.number)}
+                    disabled={isSelecting}
+                    className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSelecting ? "Linking..." : "Link PR"}
+                  </button>
+                  <a
+                    href={pullRequest.htmlUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+                  >
+                    Open on GitHub
+                  </a>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <details className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-neutral-300">
+              Advanced: paste PR URL manually
+            </summary>
+            <p className="mt-3 text-sm text-neutral-500">
+              Use this only if the PR is outside the connected repository or
+              GitHub App access is unavailable.
+            </p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+              <input
+                value={prUrl}
+                onChange={(event) => setPrUrl(event.target.value)}
+                className="min-w-0 flex-1 rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
+                placeholder="https://github.com/owner/repo/pull/123"
+                type="url"
+              />
+              <button
+                type="button"
+                disabled={!canLink}
+                onClick={onLink}
+                className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLinking ? "Linking..." : "Link manually"}
+              </button>
+            </div>
+            {linkError ? <p className="mt-3 text-sm text-red-300">{linkError}</p> : null}
+          </details>
         </div>
       ) : null}
 

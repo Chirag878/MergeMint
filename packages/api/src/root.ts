@@ -9,8 +9,10 @@ import { githubRouter } from "./routers/github.router";
 import { guidedWorkflowRouter } from "./routers/guided-workflow.router";
 import { healthRouter } from "./routers/health.router";
 import { projectsRouter } from "./routers/projects.router";
+import { pullRequestsRouter } from "./routers/pull-requests.router";
 import { qaReviewRouter } from "./routers/qa-review.router";
 import { releaseReportRouter } from "./routers/release-report.router";
+import { releaseBoardRouter } from "./routers/release-board.router";
 import { repositoryIntelligenceRouter } from "./routers/repository-intelligence.router";
 import { requirementEngineRouter } from "./routers/requirement-engine.router";
 import { workspaceRouter } from "./routers/workspace.router";
@@ -23,12 +25,14 @@ export const appRouter = router({
   engineeringTasks: engineeringTasksRouter,
   workspace: workspaceRouter,
   projects: projectsRouter,
+  pullRequests: pullRequestsRouter,
   featureRequests: featureRequestsRouter,
   githubApp: githubAppRouter,
   github: githubRouter,
   guidedWorkflow: guidedWorkflowRouter,
   repositoryIntelligence: repositoryIntelligenceRouter,
   qaReview: qaReviewRouter,
+  releaseBoard: releaseBoardRouter,
   releaseReport: releaseReportRouter,
   requirementEngine: requirementEngineRouter
 });

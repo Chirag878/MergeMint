@@ -57,6 +57,13 @@
       "when": 1782538200000,
       "tag": "0007_engineering_tasks_command_center",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782633600000,
+      "tag": "0008_release_board_project_flow",
+      "breakpoints": true
     }
   ]
 }

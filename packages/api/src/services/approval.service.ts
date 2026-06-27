@@ -336,6 +336,7 @@ export async function createApprovalDecision(
     .update(featureRequests)
     .set({
       status: mapFeatureStatus(input.decision),
+      boardStage: "completing",
       updatedAt: new Date()
     })
     .where(eq(featureRequests.id, featureRequest.id));

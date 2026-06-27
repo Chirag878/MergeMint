@@ -325,6 +325,7 @@ export async function generateClarificationsForFeatureRequest(
       .update(featureRequests)
       .set({
         status: "clarifying",
+        boardStage: "pending",
         updatedAt: new Date()
       })
       .where(eq(featureRequests.id, featureRequest.id));
@@ -524,6 +525,7 @@ export async function generatePrdForFeatureRequest(
       .update(featureRequests)
       .set({
         status: "prd_ready",
+        boardStage: "ongoing",
         updatedAt: new Date()
       })
       .where(eq(featureRequests.id, featureRequest.id));
@@ -660,6 +662,7 @@ export async function generateEngineeringTasksForPrd(
       .update(featureRequests)
       .set({
         status: "tasks_ready",
+        boardStage: "ongoing",
         updatedAt: new Date()
       })
       .where(eq(featureRequests.id, featureRequest.id));

@@ -24,6 +24,7 @@ export const projects = pgTable(
       onDelete: "set null"
     }),
     status: projectStatusEnum("status").notNull().default("active"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

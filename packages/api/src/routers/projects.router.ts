@@ -42,7 +42,8 @@ export const projectsRouter = router({
         name: z.string().min(2).max(100),
         description: z.string().max(2_000).optional(),
         clientName: z.string().max(120).optional(),
-        clientId: z.string().uuid().optional()
+        clientId: z.string().uuid().optional(),
+        repositoryId: z.string().uuid().optional()
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -70,6 +71,27 @@ export const projectsRouter = router({
         });
       }
 
+      const [repository] = input.repositoryId
+        ? await db
+            .select()
+            .from(repositories)
+            .where(
+              and(
+                eq(repositories.id, input.repositoryId),
+                eq(repositories.organizationId, workspace.activeOrganization.id),
+                eq(repositories.githubAppSelected, true)
+              )
+            )
+            .limit(1)
+        : [];
+
+      if (input.repositoryId && !repository?.githubAppInstallationId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Choose a repository from a synced GitHub App installation."
+        });
+      }
+
       const [project] = await db
         .insert(projects)
         .values({
@@ -86,6 +108,15 @@ export const projectsRouter = router({
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Unable to create project."
+        });
+      }
+
+      if (repository) {
+        await db.insert(projectGithubRepositories).values({
+          organizationId: workspace.activeOrganization.id,
+          projectId: project.id,
+          repositoryId: repository.id,
+          updatedAt: new Date()
         });
       }
 
@@ -291,5 +322,125 @@ export const projectsRouter = router({
       }
 
       return project;
+    }),
+
+  updateStatus: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid(),
+        status: z.enum(["active", "on_hold", "completed", "archived"]),
+        overrideUnresolved: z.boolean().optional()
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+
+      assertRoleCan(workspace.membership.role, "project:write");
+      const organizationId = workspace.activeOrganization.id;
+      const [project] = await db
+        .select()
+        .from(projects)
+        .where(
+          and(
+            eq(projects.id, input.projectId),
+            eq(projects.organizationId, organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!project) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project not found."
+        });
+      }
+
+      if (input.status === "completed" && !input.overrideUnresolved) {
+        const unresolved = await getProjectUnresolvedReleaseCount({
+          organizationId,
+          projectId: input.projectId
+        });
+
+        if (unresolved > 0) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "This project still has unresolved release items. Mark complete anyway?",
+            cause: { unresolved }
+          });
+        }
+      }
+
+      const [updated] = await db
+        .update(projects)
+        .set({
+          status: input.status,
+          completedAt: input.status === "completed" ? new Date() : null,
+          updatedAt: new Date()
+        })
+        .where(eq(projects.id, project.id))
+        .returning();
+
+      return updated ?? project;
     })
 });
+
+async function getProjectUnresolvedReleaseCount(input: {
+  organizationId: string;
+  projectId: string;
+}) {
+  const projectFeatures = await db
+    .select()
+    .from(featureRequests)
+    .where(
+      and(
+        eq(featureRequests.organizationId, input.organizationId),
+        eq(featureRequests.projectId, input.projectId)
+      )
+    );
+  const featureIds = projectFeatures.map((feature) => feature.id);
+
+  if (featureIds.length === 0) {
+    return 0;
+  }
+
+  const [approvalRows, reportRows] = await Promise.all([
+    db
+      .select()
+      .from(approvals)
+      .where(
+        and(
+          eq(approvals.organizationId, input.organizationId),
+          inArray(approvals.featureRequestId, featureIds)
+        )
+      ),
+    db
+      .select()
+      .from(releaseReports)
+      .where(
+        and(
+          eq(releaseReports.organizationId, input.organizationId),
+          inArray(releaseReports.featureRequestId, featureIds)
+        )
+      )
+  ]);
+  const approvedFeatureIds = new Set(
+    approvalRows
+      .filter(
+        (approval) =>
+          approval.decision === "approved" ||
+          approval.decision === "approved_with_risk"
+      )
+      .map((approval) => approval.featureRequestId)
+  );
+  const reportedFeatureIds = new Set(
+    reportRows.map((report) => report.featureRequestId)
+  );
+
+  return projectFeatures.filter(
+    (feature) =>
+      feature.status !== "released" &&
+      feature.boardStage !== "shipped" &&
+      (!approvedFeatureIds.has(feature.id) || !reportedFeatureIds.has(feature.id))
+  ).length;
+}

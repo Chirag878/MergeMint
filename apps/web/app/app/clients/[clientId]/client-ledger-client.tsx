@@ -260,6 +260,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
       void utils.clients.list.invalidate();
       void utils.dashboard.getSummary.invalidate();
       void utils.projects.list.invalidate();
+      void utils.releaseBoard.getBoard.invalidate();
     }
   });
 
@@ -286,6 +287,7 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
         projectId: featureRequest.projectId
       });
       void utils.featureRequests.list.invalidate();
+      void utils.releaseBoard.getBoard.invalidate();
     }
   });
 
