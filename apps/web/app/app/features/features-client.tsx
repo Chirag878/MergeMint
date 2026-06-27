@@ -56,6 +56,9 @@ export function FeaturesClient({
       void utils.dashboard.getSummary.invalidate();
       void utils.featureRequests.list.invalidate();
       void utils.projects.list.invalidate();
+      void utils.projects.getControlRoom.invalidate({
+        projectId: featureRequest.projectId
+      });
       void utils.releaseBoard.getBoard.invalidate();
     }
   });

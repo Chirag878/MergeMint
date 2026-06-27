@@ -209,7 +209,7 @@ function NextBestActionCard({
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-sm font-medium uppercase tracking-[0.24em] text-emerald-200">
-            Next best action
+            Your Release Focus
           </p>
           <h2 className="mt-3 text-2xl font-semibold text-white">
             {workflow.title}

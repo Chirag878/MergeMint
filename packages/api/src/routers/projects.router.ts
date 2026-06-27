@@ -324,6 +324,167 @@ export const projectsRouter = router({
       return project;
     }),
 
+  getControlRoom: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.string().uuid()
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+
+      assertRoleCan(workspace.membership.role, "project:read");
+      const organizationId = workspace.activeOrganization.id;
+      const [project] = await db
+        .select()
+        .from(projects)
+        .where(
+          and(
+            eq(projects.id, input.projectId),
+            eq(projects.organizationId, organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!project) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project not found."
+        });
+      }
+
+      const [
+        connectedRows,
+        analysisRows,
+        featureRows,
+        pullRequestRows,
+        qaReviewRows,
+        approvalRows,
+        reportRows
+      ] = await Promise.all([
+        db
+          .select({
+            projectRepository: projectGithubRepositories,
+            repository: repositories
+          })
+          .from(projectGithubRepositories)
+          .innerJoin(
+            repositories,
+            eq(projectGithubRepositories.repositoryId, repositories.id)
+          )
+          .where(
+            and(
+              eq(projectGithubRepositories.organizationId, organizationId),
+              eq(projectGithubRepositories.projectId, project.id),
+              eq(repositories.organizationId, organizationId)
+            )
+          )
+          .limit(1),
+        db
+          .select()
+          .from(repositoryAnalyses)
+          .where(
+            and(
+              eq(repositoryAnalyses.organizationId, organizationId),
+              eq(repositoryAnalyses.projectId, project.id)
+            )
+          )
+          .orderBy(desc(repositoryAnalyses.createdAt))
+          .limit(10),
+        db
+          .select()
+          .from(featureRequests)
+          .where(
+            and(
+              eq(featureRequests.organizationId, organizationId),
+              eq(featureRequests.projectId, project.id)
+            )
+          )
+          .orderBy(desc(featureRequests.createdAt))
+          .limit(100),
+        db
+          .select()
+          .from(pullRequests)
+          .where(
+            and(
+              eq(pullRequests.organizationId, organizationId),
+              eq(pullRequests.projectId, project.id)
+            )
+          )
+          .orderBy(desc(pullRequests.updatedAt)),
+        db
+          .select()
+          .from(qaReviews)
+          .where(eq(qaReviews.organizationId, organizationId))
+          .orderBy(desc(qaReviews.createdAt)),
+        db
+          .select()
+          .from(approvals)
+          .where(eq(approvals.organizationId, organizationId))
+          .orderBy(desc(approvals.createdAt)),
+        db
+          .select()
+          .from(releaseReports)
+          .where(
+            and(
+              eq(releaseReports.organizationId, organizationId),
+              eq(releaseReports.projectId, project.id)
+            )
+          )
+          .orderBy(desc(releaseReports.createdAt))
+          .limit(100)
+      ]);
+
+      const featureIds = new Set(featureRows.map((feature) => feature.id));
+      const scopedQaReviews = qaReviewRows.filter((review) =>
+        featureIds.has(review.featureRequestId)
+      );
+      const scopedApprovals = approvalRows.filter((approval) =>
+        featureIds.has(approval.featureRequestId)
+      );
+
+      return {
+        project,
+        connectedRepository: connectedRows[0]?.repository ?? null,
+        latestAnalysis: analysisRows[0] ?? null,
+        features: featureRows.map((feature) => {
+          const pullRequest =
+            pullRequestRows.find(
+              (row) => row.featureRequestId === feature.id
+            ) ?? null;
+          const qaReview =
+            scopedQaReviews.find(
+              (row) => row.featureRequestId === feature.id
+            ) ?? null;
+          const approval =
+            scopedApprovals.find(
+              (row) => row.featureRequestId === feature.id
+            ) ?? null;
+          const report =
+            reportRows.find((row) => row.featureRequestId === feature.id) ??
+            null;
+
+          return {
+            feature,
+            pullRequest,
+            qaReview,
+            approval,
+            report
+          };
+        }),
+        reports: reportRows,
+        metrics: {
+          activeFeatures: featureRows.filter(
+            (feature) => feature.status !== "archived"
+          ).length,
+          needsReview: scopedQaReviews.filter(
+            (review) => review.overallStatus !== "passed"
+          ).length,
+          reportsReady: reportRows.length
+        }
+      };
+    }),
+
   updateStatus: protectedProcedure
     .input(
       z.object({

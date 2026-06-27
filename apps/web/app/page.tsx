@@ -616,7 +616,7 @@ function ControlRoomPreview() {
           <Metric label="Risk" value="2" />
         </div>
         <div className="rounded-md border border-amber-300/20 bg-amber-300/5 p-3">
-          <p className="text-sm font-medium text-amber-100">Next Best Action</p>
+          <p className="text-sm font-medium text-amber-100">Release Focus</p>
           <p className="mt-2 text-xs text-neutral-400">
             Review missing export permission requirement before approval.
           </p>

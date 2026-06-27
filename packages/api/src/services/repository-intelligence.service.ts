@@ -120,7 +120,10 @@ async function getScopedProjectRepository(input: {
     )
     .leftJoin(
       githubAppInstallations,
-      eq(repositories.githubAppInstallationId, githubAppInstallations.installationId)
+      and(
+        eq(repositories.githubAppInstallationId, githubAppInstallations.installationId),
+        eq(githubAppInstallations.organizationId, input.organizationId)
+      )
     )
     .where(
       and(
@@ -133,14 +136,14 @@ async function getScopedProjectRepository(input: {
   if (!connected) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Connect a GitHub repository before analyzing repository intelligence."
+      message: "Repository not connected. Connect a synced GitHub repository before analyzing."
     });
   }
 
   if (!connected.repository.githubAppSelected) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Repositories are not synced or this repository is no longer selected in GitHub."
+      message: "Repository access denied. Sync repositories or select this repository in the GitHub App installation."
     });
   }
 
@@ -234,6 +237,13 @@ export async function analyzeProjectRepository(
   });
   const repository = connected.repository;
   const installationId = repository.githubAppInstallationId ?? null;
+
+  if (installationId && !connected.installation) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "GitHub App not installed for this workspace. Reconnect GitHub in workspace settings."
+    });
+  }
 
   if (!installationId && !hasFallbackGitHubToken()) {
     throw new TRPCError({
@@ -343,12 +353,8 @@ export async function analyzeProjectRepository(
       .where(eq(repositoryAnalyses.id, analysis.id))
       .returning();
 
-    if (error instanceof TRPCError) {
-      throw error;
-    }
-
     throw new TRPCError({
-      code: "BAD_REQUEST",
+      code: error instanceof TRPCError ? error.code : "BAD_REQUEST",
       message,
       cause: failed
     });
@@ -511,8 +517,7 @@ async function buildRepositorySnapshot(input: {
   if (files.length > MAX_TREE_FILES || tree.data.truncated) {
     throw new TRPCError({
       code: "PAYLOAD_TOO_LARGE",
-      message:
-        "Repository is too large to analyze safely. Narrow GitHub App access or contact support for a larger scan limit."
+      message: "Repo too large. Narrow GitHub App access or contact support for a larger scan limit."
     });
   }
 
@@ -692,16 +697,14 @@ function toGitHubTRPCError(error: unknown) {
   if (status === 401 || status === 403) {
     return new TRPCError({
       code: "FORBIDDEN",
-      message:
-        "GitHub repo access denied. Confirm the GitHub App can read this selected repository."
+      message: "Repository access denied. Confirm the GitHub App can read this selected repository."
     });
   }
 
   if (status === 404) {
     return new TRPCError({
       code: "NOT_FOUND",
-      message:
-        "GitHub repository not found or not accessible with the current installation."
+      message: "Repository access denied. The repository was not found for the current GitHub installation."
     });
   }
 
@@ -717,10 +720,19 @@ function toSafeErrorMessage(error: unknown) {
     return error.message;
   }
 
-  if (error instanceof Error) {
-    return error.message;
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+  if (message.includes("bad credentials") || message.includes("requires authentication")) {
+    return "GitHub token missing. Install the GitHub App or configure GITHUB_TOKEN.";
   }
 
-  return "Repository analysis failed.";
-}
+  if (message.includes("private key") || message.includes("jwt") || message.includes("pem")) {
+    return "GitHub App not installed. Check the GitHub App credentials in workspace settings.";
+  }
 
+  if (message.includes("rate limit")) {
+    return "Analysis failed. GitHub rate limit reached; try again later.";
+  }
+
+  return "Analysis failed. Try again after confirming repository access.";
+}

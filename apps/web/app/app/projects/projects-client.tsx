@@ -5,6 +5,29 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/react";
 
+type CreationMode = "github" | "manual";
+
+type ProjectListItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  clientName: string | null;
+  clientId: string | null;
+  status: string;
+  createdAt: Date | string;
+  connectedRepository: {
+    id: string;
+    fullName: string;
+    owner: string;
+    name: string;
+    defaultBranch: string;
+  } | null;
+  repositoryAnalyzed: boolean;
+  activeFeatureCount: number;
+  featuresNeedingAction: number;
+  latestReleaseState: string;
+};
+
 export function ProjectsClient({
   initialProjectId
 }: {
@@ -15,176 +38,538 @@ export function ProjectsClient({
   const projects = trpc.projects.list.useQuery();
   const clients = trpc.clients.listBasic.useQuery();
   const githubInstallations = trpc.githubApp.getInstallations.useQuery();
-  const [creationMode, setCreationMode] = useState<"github" | "manual">("github");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [mode, setMode] = useState<CreationMode>("github");
   const [installationIdText, setInstallationIdText] = useState("");
-  const selectedInstallationId = installationIdText
-    ? Number(installationIdText)
-    : (githubInstallations.data?.[0]?.installationId ?? null);
-  const syncedRepositories = trpc.githubApp.listInstallationRepositories.useQuery(
-    {
-      installationId: selectedInstallationId ?? 0
-    },
-    {
-      enabled: Boolean(selectedInstallationId)
-    }
-  );
-  const createProject = trpc.projects.create.useMutation({
-    onSuccess: (project) => {
-      const connectedRepository =
-        creationMode === "github"
-          ? syncedRepositories.data?.find((repository) => repository.id === repositoryId) ??
-            null
-          : null;
-      const projectListItem = {
-        ...project,
-        connectedRepository,
-        repositoryAnalyzed: false,
-        activeFeatureCount: 0,
-        featuresNeedingAction: 0,
-        latestReleaseState: connectedRepository ? "repo_connected" : "setup"
-      };
-      utils.projects.list.setData(undefined, (current) =>
-        current ? [projectListItem, ...current] : [projectListItem]
-      );
-      setName("");
-      setDescription("");
-      setClientName("");
-      setClientId("");
-      setRepositoryId("");
-      setSuccess("Project created.");
-      router.push(`/app/projects?projectId=${project.id}`);
-      if (project.clientId) {
-        void utils.clients.getDeliveryLedger.invalidate({
-          clientId: project.clientId
-        });
-        void utils.clients.list.invalidate();
-      }
-      void utils.dashboard.getSummary.invalidate();
-      void utils.projects.list.invalidate();
-      void utils.releaseBoard.getBoard.invalidate();
-    }
-  });
-
+  const [repositoryId, setRepositoryId] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [clientName, setClientName] = useState("");
   const [clientId, setClientId] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
-  const [success, setSuccess] = useState<string | null>(null);
-  const updateProjectStatus = trpc.projects.updateStatus.useMutation({
-    onSuccess: async () => {
-      await utils.projects.list.invalidate();
-      await utils.dashboard.getSummary.invalidate();
-      await utils.releaseBoard.getBoard.invalidate();
-    },
-    onError: (error, variables) => {
-      if (
-        variables.status === "completed" &&
-        error.data?.code === "PRECONDITION_FAILED" &&
-        window.confirm(
-          "This project still has unresolved release items. Mark complete anyway?"
-        )
-      ) {
-        updateProjectStatus.mutate({
-          ...variables,
-          overrideUnresolved: true
-        });
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const selectedInstallationId = installationIdText
+    ? Number(installationIdText)
+    : (githubInstallations.data?.[0]?.installationId ?? null);
+  const syncedRepositories = trpc.githubApp.listInstallationRepositories.useQuery(
+    { installationId: selectedInstallationId ?? 0 },
+    { enabled: Boolean(selectedInstallationId) }
+  );
+  const analyzeRepository =
+    trpc.repositoryIntelligence.analyzeProjectRepository.useMutation({
+      onSuccess: async (_analysis, variables) => {
+        setStatusMessage("Repository analysis completed.");
+        await Promise.all([
+          utils.repositoryIntelligence.getLatestByProject.invalidate({
+            projectId: variables.projectId
+          }),
+          utils.projects.list.invalidate(),
+          utils.projects.getControlRoom.invalidate({
+            projectId: variables.projectId
+          }),
+          utils.guidedWorkflow.getProjectSetup.invalidate({
+            projectId: variables.projectId
+          }),
+          utils.dashboard.getSummary.invalidate(),
+          utils.releaseBoard.getBoard.invalidate()
+        ]);
       }
+    });
+  const createProject = trpc.projects.create.useMutation({
+    onSuccess: async (project) => {
+      setStatusMessage("Project created.");
+      setCreateOpen(false);
+      resetCreateForm();
+      await Promise.all([
+        utils.projects.list.invalidate(),
+        utils.dashboard.getSummary.invalidate(),
+        utils.releaseBoard.getBoard.invalidate(),
+        utils.guidedWorkflow.getWorkspaceSetup.invalidate()
+      ]);
+      if (project.clientId) {
+        await Promise.all([
+          utils.clients.getDeliveryLedger.invalidate({
+            clientId: project.clientId
+          }),
+          utils.clients.list.invalidate()
+        ]);
+      }
+      router.push(`/app/projects/${project.id}`);
     }
   });
 
+  useEffect(() => {
+    if (initialProjectId) {
+      router.replace(`/app/projects/${initialProjectId}`);
+    }
+  }, [initialProjectId, router]);
+
+  useEffect(() => {
+    if (!installationIdText && githubInstallations.data?.[0]) {
+      setInstallationIdText(String(githubInstallations.data[0].installationId));
+    }
+  }, [githubInstallations.data, installationIdText]);
+
   const githubInstalled = (githubInstallations.data?.length ?? 0) > 0;
+  const repoCount = syncedRepositories.data?.length ?? 0;
+  const hasRepos = repoCount > 0;
   const canSubmit =
     name.trim().length >= 2 &&
     !createProject.isPending &&
-    (creationMode === "manual" || Boolean(repositoryId));
+    (mode === "manual" || Boolean(repositoryId));
+
+  function resetCreateForm() {
+    setMode("github");
+    setRepositoryId("");
+    setName("");
+    setDescription("");
+    setClientName("");
+    setClientId("");
+  }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canSubmit) {
-      return;
-    }
+    if (!canSubmit) return;
 
-    setSuccess(null);
+    setStatusMessage(null);
     createProject.mutate({
       name: name.trim(),
       description: description.trim() || undefined,
       clientName: clientName.trim() || undefined,
       clientId: clientId || undefined,
-      repositoryId: creationMode === "github" ? repositoryId : undefined
+      repositoryId: mode === "github" ? repositoryId : undefined
     });
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-      <div className="space-y-6">
-        <form
-          onSubmit={onSubmit}
-          className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
-        >
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg font-medium">Create Project</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Start from a synced GitHub repository, or create manually and connect
-            the repo later.
+          <h1 className="text-3xl font-semibold tracking-tight text-white">
+            Projects
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-neutral-400">
+            Group client or product work before verifying releases.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="inline-flex rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+        >
+          Create Project
+        </button>
+      </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-md border border-neutral-800 bg-neutral-950 p-1">
+      <GitHubStatusCard
+        installed={githubInstalled}
+        repoCount={repoCount}
+        loading={githubInstallations.isLoading || syncedRepositories.isLoading}
+      />
+
+      {statusMessage ? (
+        <p className="rounded-md border border-emerald-900/60 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-200">
+          {statusMessage}
+        </p>
+      ) : null}
+      {analyzeRepository.error ? (
+        <p className="rounded-md border border-red-900/60 bg-red-950/25 px-4 py-3 text-sm text-red-200">
+          {analyzeRepository.error.message}
+        </p>
+      ) : null}
+
+      <section className="space-y-4">
+        {projects.isLoading ? (
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-6 text-sm text-neutral-400">
+            Loading projects...
+          </div>
+        ) : null}
+
+        {projects.error ? (
+          <div className="rounded-lg border border-red-900/60 bg-red-950/25 p-6 text-sm text-red-200">
+            {projects.error.message}
+          </div>
+        ) : null}
+
+        {!projects.isLoading && !projects.error && projects.data?.length === 0 ? (
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-8">
+            <h2 className="text-lg font-medium text-neutral-100">
+              No projects yet
+            </h2>
+            <p className="mt-2 max-w-xl text-sm text-neutral-400">
+              Create a project from a synced repository or start manually and
+              connect the repository later.
+            </p>
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="mt-5 rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+            >
+              Create Project
+            </button>
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          {projects.data?.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              githubInstalled={githubInstalled}
+              analyzingProjectId={
+                analyzeRepository.isPending
+                  ? analyzeRepository.variables?.projectId
+                  : null
+              }
+              onAnalyze={() =>
+                analyzeRepository.mutate({
+                  projectId: project.id
+                })
+              }
+            />
+          ))}
+        </div>
+      </section>
+
+      {createOpen ? (
+        <CreateProjectModal
+          mode={mode}
+          setMode={setMode}
+          githubInstalled={githubInstalled}
+          hasRepos={hasRepos}
+          selectedInstallationId={selectedInstallationId}
+          installationIdText={installationIdText}
+          setInstallationIdText={setInstallationIdText}
+          installations={githubInstallations.data ?? []}
+          repositories={syncedRepositories.data ?? []}
+          repositoriesLoading={syncedRepositories.isLoading}
+          clients={clients.data ?? []}
+          name={name}
+          setName={setName}
+          description={description}
+          setDescription={setDescription}
+          clientId={clientId}
+          setClientId={setClientId}
+          clientName={clientName}
+          setClientName={setClientName}
+          repositoryId={repositoryId}
+          setRepositoryId={setRepositoryId}
+          canSubmit={canSubmit}
+          isCreating={createProject.isPending}
+          error={createProject.error?.message}
+          onClose={() => {
+            setCreateOpen(false);
+            resetCreateForm();
+          }}
+          onSubmit={onSubmit}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function GitHubStatusCard({
+  installed,
+  repoCount,
+  loading
+}: {
+  installed: boolean;
+  repoCount: number;
+  loading: boolean;
+}) {
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-medium text-neutral-100">
+              {installed ? "GitHub connected" : "Connect GitHub"}
+            </h2>
+            {installed ? <StatusChip tone="good">{repoCount} synced</StatusChip> : null}
+          </div>
+          <p className="mt-2 text-sm text-neutral-400">
+            {installed
+              ? "Repositories are synced at workspace level."
+              : "Install the MergeMint GitHub App to create projects from selected repositories."}
+          </p>
+          {loading ? (
+            <p className="mt-2 text-xs text-neutral-500">Checking GitHub status...</p>
+          ) : null}
+        </div>
+        <Link
+          href="/app/settings/github"
+          className="inline-flex rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500"
+        >
+          {installed ? "Manage GitHub" : "Connect GitHub"}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function ProjectCard({
+  project,
+  githubInstalled,
+  analyzingProjectId,
+  onAnalyze
+}: {
+  project: ProjectListItem;
+  githubInstalled: boolean;
+  analyzingProjectId: string | null;
+  onAnalyze: () => void;
+}) {
+  const primary = getPrimaryAction(project, githubInstalled);
+  const analyzing = analyzingProjectId === project.id;
+  const reportsReady = Math.max(
+    0,
+    (project.activeFeatureCount ?? 0) - (project.featuresNeedingAction ?? 0)
+  );
+
+  return (
+    <article className="group rounded-lg border border-neutral-800 bg-neutral-900 p-5 transition hover:border-neutral-700 hover:bg-neutral-900/80">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-lg font-semibold text-neutral-100">
+              {project.name}
+            </h2>
+            <StatusChip>{formatStatus(project.status)}</StatusChip>
+          </div>
+          <p className="mt-2 text-sm text-neutral-400">
+            {[project.clientName, project.connectedRepository?.fullName ?? "No repository connected"]
+              .filter(Boolean)
+              .join(" - ")}
+          </p>
+        </div>
+        <details className="relative shrink-0">
+          <summary className="list-none rounded-md border border-neutral-800 px-2.5 py-1 text-sm text-neutral-400 transition hover:border-neutral-600 hover:text-neutral-100">
+            ...
+          </summary>
+          <div className="absolute right-0 z-10 mt-2 w-44 rounded-md border border-neutral-800 bg-neutral-950 p-2 shadow-xl">
+            <Link
+              href={`/app/projects/${project.id}`}
+              className="block rounded px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-900 hover:text-white"
+            >
+              Open project
+            </Link>
+            <Link
+              href={`/app/features?projectId=${project.id}`}
+              className="block rounded px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-900 hover:text-white"
+            >
+              Create feature
+            </Link>
+          </div>
+        </details>
+      </div>
+
+      <ProgressRail
+        repo={Boolean(project.connectedRepository)}
+        analysis={project.repositoryAnalyzed}
+        features={(project.activeFeatureCount ?? 0) > 0}
+        pr={!["setup", "repo_connected"].includes(project.latestReleaseState)}
+        qa={project.featuresNeedingAction === 0 && (project.activeFeatureCount ?? 0) > 0}
+        report={reportsReady > 0}
+      />
+
+      <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Metric label="Active features" value={project.activeFeatureCount ?? 0} />
+        <Metric label="Needs review" value={project.featuresNeedingAction ?? 0} />
+        <Metric label="Reports ready" value={reportsReady} />
+        <Metric
+          label="Repo intelligence"
+          value={project.repositoryAnalyzed ? "Analyzed" : "Missing"}
+        />
+      </div>
+
+      {project.description ? (
+        <p className="mt-4 line-clamp-2 text-sm leading-6 text-neutral-400">
+          {project.description}
+        </p>
+      ) : null}
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        {primary.kind === "analyze" ? (
           <button
             type="button"
-            onClick={() => setCreationMode("github")}
-            className={
-              creationMode === "github"
-                ? "rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950"
-                : "rounded-md px-3 py-2 text-sm font-medium text-neutral-400 transition hover:text-neutral-100"
-            }
+            onClick={onAnalyze}
+            disabled={analyzing}
+            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            From GitHub repo
+            {analyzing ? "Analyzing..." : primary.label}
           </button>
+        ) : (
+          <Link
+            href={primary.href}
+            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+          >
+            {primary.label}
+          </Link>
+        )}
+        <Link
+          href={`/app/projects/${project.id}`}
+          className="text-sm font-medium text-neutral-300 transition hover:text-white"
+        >
+          Open Project
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function CreateProjectModal({
+  mode,
+  setMode,
+  githubInstalled,
+  hasRepos,
+  installationIdText,
+  setInstallationIdText,
+  installations,
+  repositories,
+  repositoriesLoading,
+  clients,
+  name,
+  setName,
+  description,
+  setDescription,
+  clientId,
+  setClientId,
+  clientName,
+  setClientName,
+  repositoryId,
+  setRepositoryId,
+  canSubmit,
+  isCreating,
+  error,
+  onClose,
+  onSubmit
+}: {
+  mode: CreationMode;
+  setMode: (mode: CreationMode) => void;
+  githubInstalled: boolean;
+  hasRepos: boolean;
+  selectedInstallationId: number | null;
+  installationIdText: string;
+  setInstallationIdText: (value: string) => void;
+  installations: Array<{ id: string; installationId: number; accountLogin: string }>;
+  repositories: Array<{ id: string; name: string; fullName: string }>;
+  repositoriesLoading: boolean;
+  clients: Array<{ id: string; name: string }>;
+  name: string;
+  setName: (value: string) => void;
+  description: string;
+  setDescription: (value: string) => void;
+  clientId: string;
+  setClientId: (value: string) => void;
+  clientName: string;
+  setClientName: (value: string) => void;
+  repositoryId: string;
+  setRepositoryId: (value: string) => void;
+  canSubmit: boolean;
+  isCreating: boolean;
+  error?: string;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const selectedRepository = useMemo(
+    () => repositories.find((repository) => repository.id === repositoryId),
+    [repositories, repositoryId]
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-10">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-2xl rounded-lg border border-neutral-800 bg-neutral-950 p-5 shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-neutral-100">
+              Create Project
+            </h2>
+            <p className="mt-2 text-sm text-neutral-400">
+              Choose how this project should start.
+            </p>
+          </div>
           <button
             type="button"
-            onClick={() => setCreationMode("manual")}
-            className={
-              creationMode === "manual"
-                ? "rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950"
-                : "rounded-md px-3 py-2 text-sm font-medium text-neutral-400 transition hover:text-neutral-100"
-            }
+            onClick={onClose}
+            className="rounded-md border border-neutral-800 px-3 py-1.5 text-sm text-neutral-300 transition hover:border-neutral-600 hover:text-white"
           >
-            Manual
+            Close
           </button>
         </div>
 
-        {creationMode === "github" ? (
-          <div className="space-y-3 rounded-md border border-neutral-800 bg-neutral-950 p-4">
-            {!githubInstalled && !githubInstallations.isLoading ? (
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setMode("github")}
+            className={
+              mode === "github"
+                ? "rounded-lg border border-blue-700 bg-blue-950/30 p-4 text-left"
+                : "rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-left transition hover:border-neutral-700"
+            }
+          >
+            <p className="font-medium text-neutral-100">From GitHub repo</p>
+            <p className="mt-2 text-sm text-neutral-400">
+              Create a project from a synced repository and connect it immediately.
+            </p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("manual")}
+            className={
+              mode === "manual"
+                ? "rounded-lg border border-blue-700 bg-blue-950/30 p-4 text-left"
+                : "rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-left transition hover:border-neutral-700"
+            }
+          >
+            <p className="font-medium text-neutral-100">Manual project</p>
+            <p className="mt-2 text-sm text-neutral-400">
+              Start with a project brief and connect a repository later.
+            </p>
+          </button>
+        </div>
+
+        {mode === "github" ? (
+          <div className="mt-5 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            {!githubInstalled ? (
               <div>
                 <p className="text-sm text-neutral-400">
-                  Connect GitHub first so MergeMint can create a project from a
-                  selected repository.
+                  Install the GitHub App before creating a project from a repository.
+                </p>
+                <Link
+                  href="/app/settings/github"
+                  className="mt-3 inline-flex rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
+                >
+                  Connect GitHub
+                </Link>
+              </div>
+            ) : null}
+            {githubInstalled && !hasRepos && !repositoriesLoading ? (
+              <div>
+                <p className="text-sm text-neutral-400">
+                  Sync repositories in workspace GitHub settings before selecting one.
                 </p>
                 <Link
                   href="/app/settings/github"
                   className="mt-3 inline-flex rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
                 >
-                  Connect GitHub first
+                  Sync repositories
                 </Link>
               </div>
             ) : null}
-
             {githubInstalled ? (
-              <>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-sm">
-                  <span className="text-neutral-300">GitHub installation</span>
+                  <span className="text-neutral-300">GitHub account/org</span>
                   <select
-                    value={String(selectedInstallationId ?? "")}
+                    value={installationIdText}
                     onChange={(event) => {
                       setInstallationIdText(event.target.value);
                       setRepositoryId("");
                     }}
                     className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
                   >
-                    {githubInstallations.data?.map((installation) => (
+                    {installations.map((installation) => (
                       <option
                         key={installation.id}
                         value={String(installation.installationId)}
@@ -194,938 +579,232 @@ export function ProjectsClient({
                     ))}
                   </select>
                 </label>
-
                 <label className="block text-sm">
                   <span className="text-neutral-300">Synced repository</span>
                   <select
                     value={repositoryId}
                     onChange={(event) => {
-                      setRepositoryId(event.target.value);
-                      const repository = syncedRepositories.data?.find(
-                        (item) => item.id === event.target.value
+                      const nextRepositoryId = event.target.value;
+                      setRepositoryId(nextRepositoryId);
+                      const repository = repositories.find(
+                        (item) => item.id === nextRepositoryId
                       );
-                      if (repository && !name) {
-                        setName(repository.name);
-                      }
+                      if (repository && !name) setName(repository.name);
                     }}
-                    disabled={syncedRepositories.isLoading}
+                    disabled={repositoriesLoading || !hasRepos}
                     className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">
-                      {syncedRepositories.isLoading
-                        ? "Loading repositories..."
-                        : "Select repository"}
+                      {repositoriesLoading ? "Loading repositories..." : "Select repository"}
                     </option>
-                    {syncedRepositories.data?.map((repository) => (
+                    {repositories.map((repository) => (
                       <option key={repository.id} value={repository.id}>
                         {repository.fullName}
                       </option>
                     ))}
                   </select>
                 </label>
-
-                {!syncedRepositories.isLoading &&
-                syncedRepositories.data?.length === 0 ? (
-                  <div>
-                    <p className="text-sm text-neutral-400">
-                      Sync repositories first, then create a project from the
-                      repository this work ships from.
-                    </p>
-                    <Link
-                      href="/app/settings/github"
-                      className="mt-3 inline-flex rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
-                    >
-                      Sync repositories first
-                    </Link>
-                  </div>
-                ) : null}
-              </>
+              </div>
+            ) : null}
+            {selectedRepository ? (
+              <p className="mt-3 text-xs text-neutral-500">
+                This project will be connected to {selectedRepository.fullName}.
+              </p>
             ) : null}
           </div>
-        ) : null}
+        ) : (
+          <p className="mt-5 rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-400">
+            Repository can be connected later from the project control room.
+          </p>
+        )}
 
-        <label className="block text-sm">
-          <span className="text-neutral-300">Name</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
-            placeholder="Mobile checkout"
-            minLength={2}
-            required
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="text-neutral-300">Client ledger</span>
-          <select
-            value={clientId}
-            onChange={(event) => setClientId(event.target.value)}
-            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
-          >
-            <option value="">No client ledger</option>
-            {clients.data?.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block text-sm">
-          <span className="text-neutral-300">Legacy client label</span>
-          <input
-            value={clientName}
-            onChange={(event) => setClientName(event.target.value)}
-            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
-            placeholder="Optional display label"
-          />
-        </label>
-
-        {clients.error ? (
-          <p className="text-sm text-red-300">{clients.error.message}</p>
-        ) : null}
-
-        <label className="block text-sm">
-          <span className="text-neutral-300">Description</span>
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            className="mt-2 min-h-28 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
-            placeholder="Release workflow, scope, or notes"
-          />
-        </label>
-
-        {createProject.error ? (
-          <p className="text-sm text-red-300">{createProject.error.message}</p>
-        ) : null}
-        {success ? <p className="text-sm text-emerald-300">{success}</p> : null}
-
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {createProject.isPending ? "Creating..." : "Create Project"}
-        </button>
-        </form>
-
-        <ProjectSetupPanel
-          projects={projects.data ?? []}
-          initialProjectId={initialProjectId}
-        />
-      </div>
-
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-medium">Project list</h2>
-          <Link
-            href="/app/features"
-            className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
-          >
-            Create Feature Request
-          </Link>
-        </div>
-
-        {projects.isLoading ? (
-          <p className="mt-6 text-sm text-neutral-400">Loading...</p>
-        ) : null}
-
-        {projects.error ? (
-          <p className="mt-6 text-sm text-red-300">{projects.error.message}</p>
-        ) : null}
-
-        {!projects.isLoading && !projects.error && projects.data?.length === 0 ? (
-          <div className="mt-6 rounded-md border border-neutral-800 bg-neutral-950 p-5 text-sm text-neutral-400">
-            No projects yet. Create your first project to start verifying
-            releases.
-          </div>
-        ) : null}
-
-        <div className="mt-5 space-y-3">
-          {projects.data?.map((project) => {
-            const projectCta = getProjectPrimaryCta(project, {
-              githubInstalled: (githubInstallations.data?.length ?? 0) > 0
-            });
-
-            return (
-            <article
-              key={project.id}
-              className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm sm:col-span-2">
+            <span className="text-neutral-300">Project name</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+              placeholder="Mobile checkout"
+              minLength={2}
+              required
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-neutral-300">Client ledger</span>
+            <select
+              value={clientId}
+              onChange={(event) => setClientId(event.target.value)}
+              className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
             >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium text-neutral-100">{project.name}</h3>
-                  {project.clientName ? (
-                    <p className="mt-1 text-sm text-blue-300">
-                      {project.clientName}
-                    </p>
-                  ) : null}
-                  <p className="mt-2 text-sm text-neutral-500">
-                    Repo: {project.connectedRepository?.fullName ?? "Not connected"}
-                  </p>
-                </div>
-                <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300">
-                  {formatProjectState(project.latestReleaseState)}
-                </span>
-              </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                <ProjectMetric label="Active features" value={project.activeFeatureCount ?? 0} />
-                <ProjectMetric label="Needs action" value={project.featuresNeedingAction ?? 0} />
-                <ProjectMetric
-                  label="Repo analysis"
-                  value={project.repositoryAnalyzed ? "Ready" : "Missing"}
-                />
-              </div>
-              {project.description ? (
-                <p className="mt-3 text-sm text-neutral-400">
-                  {project.description}
-                </p>
-              ) : null}
-              <p className="mt-3 text-xs text-neutral-500">
-                Created {new Date(project.createdAt).toLocaleDateString()}
-              </p>
-              <Link
-                href={projectCta.href}
-                className="mt-4 inline-flex rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
-              >
-                {projectCta.label}
-              </Link>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {project.status === "completed" ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateProjectStatus.mutate({
-                        projectId: project.id,
-                        status: "active"
-                      })
-                    }
-                    disabled={updateProjectStatus.isPending}
-                    className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Reopen project
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateProjectStatus.mutate({
-                        projectId: project.id,
-                        status: "completed"
-                      })
-                    }
-                    disabled={updateProjectStatus.isPending}
-                    className="rounded-md border border-neutral-800 px-3 py-2 text-sm text-neutral-400 transition hover:border-neutral-600 hover:text-neutral-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Mark completed
-                  </button>
-                )}
-              </div>
-            </article>
-            );
-          })}
+              <option value="">No client ledger</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className="text-neutral-300">Client label</span>
+            <input
+              value={clientName}
+              onChange={(event) => setClientName(event.target.value)}
+              className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+              placeholder="Optional"
+            />
+          </label>
+          <label className="block text-sm sm:col-span-2">
+            <span className="text-neutral-300">Project brief</span>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              className="mt-2 min-h-28 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+              placeholder="Release workflow, scope, or notes"
+            />
+          </label>
         </div>
-      </section>
+
+        {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isCreating ? "Creating..." : "Create project"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
-function ProjectSetupPanel({
-  projects,
-  initialProjectId
-}: {
-  projects: Array<{
-    id: string;
-    name: string;
-  }>;
-  initialProjectId?: string;
-}) {
-  const utils = trpc.useUtils();
-  const installations = trpc.githubApp.getInstallations.useQuery();
-  const [projectId, setProjectId] = useState("");
-  const [installationIdText, setInstallationIdText] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
-  const [showAnalysisDetails, setShowAnalysisDetails] = useState(false);
-  const projectSetup = trpc.guidedWorkflow.getProjectSetup.useQuery(
-    {
-      projectId: projectId || undefined
-    },
-    {
-      enabled: projects.length > 0
-    }
-  );
-  const installationId = installationIdText ? Number(installationIdText) : null;
-  const repositories = trpc.githubApp.listInstallationRepositories.useQuery(
-    {
-      installationId: installationId ?? 0
-    },
-    {
-      enabled: Boolean(installationId)
-    }
-  );
-  const projectIntegration = trpc.githubApp.getProjectIntegration.useQuery(
-    {
-      projectId
-    },
-    {
-      enabled: Boolean(projectId)
-    }
-  );
-  const latestAnalysis = trpc.repositoryIntelligence.getLatestByProject.useQuery(
-    {
-      projectId
-    },
-    {
-      enabled: Boolean(projectId)
-    }
-  );
-  const taskSummary = trpc.engineeringTasks.getProjectSummary.useQuery(
-    {
-      projectId
-    },
-    {
-      enabled: Boolean(projectId)
-    }
-  );
-  const syncRepositories =
-    trpc.githubApp.syncInstallationRepositories.useMutation({
-      onSuccess: async (synced) => {
-        await utils.githubApp.listInstallationRepositories.invalidate();
-        await utils.guidedWorkflow.getProjectSetup.invalidate();
-        await utils.projects.list.invalidate();
-        await utils.dashboard.getSummary.invalidate();
-        await utils.releaseBoard.getBoard.invalidate();
-        if (synced[0]) {
-          setRepositoryId(synced[0].id);
-        }
-      }
-    });
-  const connectRepository =
-    trpc.githubApp.connectRepositoryToProject.useMutation({
-      onSuccess: async () => {
-        await utils.githubApp.getProjectIntegration.invalidate();
-        await utils.githubApp.listInstallationRepositories.invalidate();
-        await utils.guidedWorkflow.getProjectSetup.invalidate();
-        await utils.repositoryIntelligence.getLatestByProject.invalidate();
-        await utils.projects.list.invalidate();
-        await utils.dashboard.getSummary.invalidate();
-        await utils.releaseBoard.getBoard.invalidate();
-      }
-    });
-  const disconnectRepository =
-    trpc.githubApp.disconnectRepositoryFromProject.useMutation({
-      onSuccess: async () => {
-        setRepositoryId("");
-        setShowAnalysisDetails(false);
-        await utils.githubApp.getProjectIntegration.invalidate();
-        await utils.guidedWorkflow.getProjectSetup.invalidate();
-        await utils.repositoryIntelligence.getLatestByProject.invalidate();
-        await utils.projects.list.invalidate();
-        await utils.dashboard.getSummary.invalidate();
-        await utils.releaseBoard.getBoard.invalidate();
-      }
-    });
-  const analyzeRepository =
-    trpc.repositoryIntelligence.analyzeProjectRepository.useMutation({
-      onSuccess: async () => {
-        await utils.repositoryIntelligence.getLatestByProject.invalidate({
-          projectId
-        });
-        await utils.guidedWorkflow.getProjectSetup.invalidate();
-        await utils.projects.list.invalidate();
-        await utils.dashboard.getSummary.invalidate();
-        await utils.releaseBoard.getBoard.invalidate();
-        setShowAnalysisDetails(true);
-      }
-    });
-
-  const activeInstallation = useMemo(
-    () =>
-      installations.data?.find(
-        (installation) => installation.installationId === installationId
-      ) ?? null,
-    [installationId, installations.data]
-  );
-  const connectedRepository = projectIntegration.data?.repository ?? null;
-  const canConnect =
-    Boolean(projectId && repositoryId) && !connectRepository.isPending;
-
-  useEffect(() => {
-    if (!projectId) {
-      if (initialProjectId && projects.some((project) => project.id === initialProjectId)) {
-        setProjectId(initialProjectId);
-      } else if (projects[0]) {
-        setProjectId(projects[0].id);
-      }
-    }
-  }, [initialProjectId, projectId, projects]);
-
-  useEffect(() => {
-    if (!installationIdText && installations.data?.[0]) {
-      setInstallationIdText(String(installations.data[0].installationId));
-    }
-  }, [installationIdText, installations.data]);
-
-  useEffect(() => {
-    if (!repositoryId && connectedRepository) {
-      setRepositoryId(connectedRepository.id);
-    }
-  }, [connectedRepository, repositoryId]);
-
-  return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-      <div>
-        <h2 className="text-lg font-medium">Project setup</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          Connect the repository this project ships from before creating release
-          proof.
-        </p>
-      </div>
-
-      {projectSetup.data ? (
-        <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-medium text-neutral-100">
-                {projectSetup.data.title}
-              </p>
-              <p className="mt-1 text-sm text-neutral-500">
-                {projectSetup.data.description}
-              </p>
-            </div>
-            <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300">
-              {projectSetup.data.completionPercentage}%
-            </span>
-          </div>
-          <div className="mt-4 grid gap-2">
-            {projectSetup.data.steps.map((step) => (
-              <div
-                key={step.id}
-                className="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm"
-              >
-                <span className="text-neutral-200">{step.label}</span>
-                <span className="text-xs text-neutral-500">{step.status}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href="/app/settings/github"
-          className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
-        >
-          Connect GitHub
-        </Link>
-        {installationId ? (
-          <button
-            type="button"
-            onClick={() =>
-              syncRepositories.mutate({
-                installationId
-              })
-            }
-            disabled={syncRepositories.isPending}
-            className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {syncRepositories.isPending ? "Syncing..." : "Sync repositories"}
-          </button>
-        ) : null}
-      </div>
-
-      {installations.isLoading ? (
-        <p className="mt-4 text-sm text-neutral-500">Loading installations...</p>
-      ) : null}
-
-      {installations.data?.length === 0 ? (
-        <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
-          Connect GitHub so MergeMint can verify PRs against requirements.
-        </p>
-      ) : null}
-
-      <div className="mt-4 space-y-3">
-        <label className="block text-sm">
-          <span className="text-neutral-300">Project</span>
-          <select
-            value={projectId}
-            onChange={(event) => {
-              setProjectId(event.target.value);
-              setRepositoryId("");
-              setShowAnalysisDetails(false);
-            }}
-            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
-          >
-            <option value="">Select a project</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="block text-sm">
-          <span className="text-neutral-300">Installation</span>
-          <select
-            value={installationIdText}
-            onChange={(event) => {
-              setInstallationIdText(event.target.value);
-              setRepositoryId("");
-              setShowAnalysisDetails(false);
-            }}
-            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
-          >
-            <option value="">No installation</option>
-            {installations.data?.map((installation) => (
-              <option
-                key={installation.id}
-                value={String(installation.installationId)}
-              >
-                {installation.accountLogin}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {activeInstallation ? (
-          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
-            <p>Status: {activeInstallation.suspendedAt ? "Suspended" : "Installed"}</p>
-            <p>Repository access: {activeInstallation.repositorySelection ?? "selected"}</p>
-          </div>
-        ) : null}
-
-        {activeInstallation && !repositories.isLoading && repositories.data?.length === 0 ? (
-          <p className="rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
-            Sync selected repositories from your GitHub App installation.
-          </p>
-        ) : null}
-
-        <label className="block text-sm">
-          <span className="text-neutral-300">Repository</span>
-          <select
-            value={repositoryId}
-            onChange={(event) => setRepositoryId(event.target.value)}
-            disabled={!installationId || repositories.isLoading}
-            className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="">
-              {repositories.isLoading ? "Loading repositories..." : "Select repo"}
-            </option>
-            {repositories.data?.map((repository) => (
-              <option key={repository.id} value={repository.id}>
-                {repository.fullName}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {connectedRepository ? (
-          <p className="rounded-md border border-emerald-900/60 bg-emerald-950/25 p-3 text-sm text-emerald-200">
-            Repo selected: {connectedRepository.fullName}
-          </p>
-        ) : projectId ? (
-          <p className="rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
-            Installed, no repo selected for this project.
-          </p>
-        ) : null}
-
-        <RepoIntelligenceCard
-          projectId={projectId}
-          connectedRepository={connectedRepository}
-          analysis={latestAnalysis.data}
-          isLoading={latestAnalysis.isLoading}
-          isAnalyzing={analyzeRepository.isPending}
-          error={latestAnalysis.error?.message ?? analyzeRepository.error?.message}
-          showDetails={showAnalysisDetails}
-          onToggleDetails={() => setShowAnalysisDetails((current) => !current)}
-          onAnalyze={() => {
-            if (projectId) {
-              analyzeRepository.mutate({ projectId });
-            }
-          }}
-        />
-
-        {taskSummary.data ? (
-          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
-            <h3 className="font-medium text-neutral-100">Engineering tasks</h3>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <TaskSummaryMetric
-                label="Active"
-                value={taskSummary.data.activeTasks}
-              />
-              <TaskSummaryMetric
-                label="Blocked"
-                value={taskSummary.data.blockedTasks}
-              />
-              <TaskSummaryMetric
-                label="High risk"
-                value={taskSummary.data.highRiskTasks}
-              />
-              <TaskSummaryMetric
-                label="Ready for PR"
-                value={taskSummary.data.tasksReadyForPr}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              connectRepository.mutate({
-                projectId,
-                repositoryId
-              })
-            }
-            disabled={!canConnect}
-            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {connectRepository.isPending ? "Connecting..." : "Connect repo"}
-          </button>
-          {connectedRepository ? (
-            <button
-              type="button"
-              onClick={() =>
-                disconnectRepository.mutate({
-                  projectId
-                })
-              }
-              disabled={disconnectRepository.isPending}
-              className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {disconnectRepository.isPending ? "Disconnecting..." : "Disconnect"}
-            </button>
-          ) : null}
-        </div>
-
-        {syncRepositories.error ? (
-          <p className="text-sm text-red-300">{syncRepositories.error.message}</p>
-        ) : null}
-        {connectRepository.error ? (
-          <p className="text-sm text-red-300">{connectRepository.error.message}</p>
-        ) : null}
-        {disconnectRepository.error ? (
-          <p className="text-sm text-red-300">
-            {disconnectRepository.error.message}
-          </p>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
-function RepoIntelligenceCard({
-  projectId,
-  connectedRepository,
+function ProgressRail({
+  repo,
   analysis,
-  isLoading,
-  isAnalyzing,
-  error,
-  showDetails,
-  onToggleDetails,
-  onAnalyze
+  features,
+  pr,
+  qa,
+  report
 }: {
-  projectId: string;
-  connectedRepository: {
-    fullName: string;
-    defaultBranch: string;
-  } | null;
-  analysis:
-    | {
-        id: string;
-        status: string;
-        fullName: string;
-        defaultBranch: string | null;
-        analyzedCommitSha: string | null;
-        techStack: string[] | null;
-        appStructure: Record<string, unknown> | null;
-        importantFiles:
-          | Array<{
-              path: string;
-              summary?: string;
-              signals?: string[];
-            }>
-          | null;
-        routes: string[] | null;
-        apiEndpoints: string[] | null;
-        databaseModels: string[] | null;
-        authSummary: string | null;
-        testingSummary: string | null;
-        deploymentSummary: string | null;
-        riskAreas: string[] | null;
-        suggestedFeatureAreas: string[] | null;
-        summary: string | null;
-        errorMessage: string | null;
-        updatedAt: Date | string;
-      }
-    | null
-    | undefined;
-  isLoading: boolean;
-  isAnalyzing: boolean;
-  error?: string;
-  showDetails: boolean;
-  onToggleDetails: () => void;
-  onAnalyze: () => void;
+  repo: boolean;
+  analysis: boolean;
+  features: boolean;
+  pr: boolean;
+  qa: boolean;
+  report: boolean;
 }) {
-  if (!projectId || !connectedRepository) {
-    return (
-      <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
-        <h3 className="font-medium text-neutral-100">Repository intelligence</h3>
-        <p className="mt-2 text-sm text-neutral-400">
-          Connect a GitHub repository so MergeMint can understand the codebase
-          before reviewing PRs.
-        </p>
-        <p className="mt-3 text-xs text-neutral-500">
-          Use the repository selector above to connect a repository.
-        </p>
-      </div>
-    );
-  }
-
-  const complete = analysis?.status === "completed";
-  const failed = analysis?.status === "failed";
-  const running = isAnalyzing || analysis?.status === "running";
-  const techStack = analysis?.techStack ?? [];
-  const keyModules = [
-    ...(analysis?.routes ?? []),
-    ...(analysis?.apiEndpoints ?? []),
-    ...(analysis?.databaseModels ?? [])
-  ].slice(0, 6);
+  const steps = [
+    ["Repo", repo],
+    ["Analysis", analysis],
+    ["Features", features],
+    ["PR", pr],
+    ["QA", qa],
+    ["Report", report]
+  ] as const;
 
   return (
-    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-medium text-neutral-100">
-            {complete ? "Repository intelligence" : "Analyze repository"}
-          </h3>
-          <p className="mt-2 text-sm text-neutral-400">
-            {complete
-              ? "MergeMint has a reusable codebase snapshot for repo-aware PRDs, tasks, and QA reviews."
-              : "Build a codebase snapshot so PRDs, engineering tasks, and QA reviews can use real repo context."}
-          </p>
+    <div className="mt-5 grid grid-cols-6 gap-2">
+      {steps.map(([label, complete]) => (
+        <div key={label} className="min-w-0">
+          <div
+            className={
+              complete
+                ? "h-1.5 rounded-full bg-emerald-400"
+                : "h-1.5 rounded-full bg-neutral-800"
+            }
+          />
+          <p className="mt-2 truncate text-xs text-neutral-500">{label}</p>
         </div>
-        <button
-          type="button"
-          onClick={onAnalyze}
-          disabled={running}
-          className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {running ? "Analyzing..." : complete ? "Re-analyze" : "Analyze repository"}
-        </button>
-      </div>
-
-      {isLoading ? (
-        <p className="mt-3 text-sm text-neutral-500">Loading repository analysis...</p>
-      ) : null}
-
-      {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
-
-      {failed ? (
-        <div className="mt-4 rounded-md border border-red-900/60 bg-red-950/20 p-3 text-sm text-red-200">
-          {analysis.errorMessage ?? "Repository analysis failed."}
-        </div>
-      ) : null}
-
-      {!analysis && !isLoading ? (
-        <p className="mt-3 text-sm text-neutral-500">
-          No snapshot yet for {connectedRepository.fullName}.
-        </p>
-      ) : null}
-
-      {complete && analysis ? (
-        <div className="mt-4 space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {techStack.slice(0, 8).map((item) => (
-              <span
-                key={item}
-                className="rounded-full border border-blue-800 bg-blue-950/25 px-2.5 py-1 text-xs text-blue-200"
-              >
-                {item}
-              </span>
-            ))}
-          </div>
-          <div className="grid gap-2 text-sm text-neutral-400">
-            <p>Default branch: {analysis.defaultBranch ?? connectedRepository.defaultBranch}</p>
-            <p>
-              Commit:{" "}
-              {analysis.analyzedCommitSha
-                ? analysis.analyzedCommitSha.slice(0, 12)
-                : "unknown"}
-            </p>
-            <p>Last analyzed: {new Date(analysis.updatedAt).toLocaleString()}</p>
-            {analysis.summary ? <p>{analysis.summary}</p> : null}
-          </div>
-          {keyModules.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500">
-                Key modules
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {keyModules.map((module) => (
-                  <span
-                    key={module}
-                    className="rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-300"
-                  >
-                    {module}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            onClick={onToggleDetails}
-            className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
-          >
-            {showDetails ? "Hide details" : "View details"}
-          </button>
-          {showDetails ? <RepoAnalysisDetails analysis={analysis} /> : null}
-        </div>
-      ) : null}
+      ))}
     </div>
   );
 }
 
-function RepoAnalysisDetails({
-  analysis
-}: {
-  analysis: NonNullable<Parameters<typeof RepoIntelligenceCard>[0]["analysis"]>;
-}) {
+function Metric({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="grid gap-3 rounded-md border border-neutral-800 bg-neutral-900 p-4 text-sm">
-      <DetailList title="Important files" items={analysis.importantFiles?.map((file) => `${file.path}${file.summary ? ` - ${file.summary}` : ""}`) ?? []} />
-      <DetailList title="Routes" items={analysis.routes ?? []} />
-      <DetailList title="API endpoints" items={analysis.apiEndpoints ?? []} />
-      <DetailList title="Database layer" items={analysis.databaseModels ?? []} />
-      <DetailText title="Auth" value={analysis.authSummary} />
-      <DetailText title="Testing" value={analysis.testingSummary} />
-      <DetailText title="Deployment" value={analysis.deploymentSummary} />
-      <DetailList title="Risk areas" items={analysis.riskAreas ?? []} />
-      <DetailList
-        title="Suggested feature areas"
-        items={analysis.suggestedFeatureAreas ?? []}
-      />
-    </div>
-  );
-}
-
-function DetailList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <p className="font-medium text-neutral-200">{title}</p>
-      {items.length > 0 ? (
-        <ul className="mt-2 space-y-1 text-neutral-400">
-          {items.slice(0, 12).map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-1 text-neutral-500">Not detected.</p>
-      )}
-    </div>
-  );
-}
-
-function DetailText({ title, value }: { title: string; value?: string | null }) {
-  return (
-    <div>
-      <p className="font-medium text-neutral-200">{title}</p>
-      <p className="mt-1 text-neutral-400">{value ?? "Not detected."}</p>
-    </div>
-  );
-}
-
-function getProjectPrimaryCta(
-  project: {
-    id: string;
-    status?: string;
-    connectedRepository?: { fullName: string } | null;
-    repositoryAnalyzed?: boolean;
-    activeFeatureCount?: number;
-  },
-  options: {
-    githubInstalled: boolean;
-  }
-) {
-  if (project.status === "completed") {
-    return {
-      label: "Open completed project",
-      href: `/app/features?projectId=${project.id}`
-    };
-  }
-
-  if (!options.githubInstalled) {
-    return {
-      label: "Connect GitHub",
-      href: "/app/settings/github"
-    };
-  }
-
-  if (!project.connectedRepository) {
-    return {
-      label: "Connect repository",
-      href: `/app/projects?projectId=${project.id}`
-    };
-  }
-
-  if (!project.repositoryAnalyzed) {
-    return {
-      label: "Analyze repository",
-      href: `/app/projects?projectId=${project.id}`
-    };
-  }
-
-  if (!project.activeFeatureCount) {
-    return {
-      label: "Create feature request",
-      href: `/app/features?projectId=${project.id}`
-    };
-  }
-
-  return {
-    label: "Continue release",
-    href: `/app/features?projectId=${project.id}`
-  };
-}
-
-function formatProjectState(state?: string | null) {
-  if (!state) {
-    return "setup";
-  }
-
-  return state.replaceAll("_", " ");
-}
-
-function ProjectMetric({
-  label,
-  value
-}: {
-  label: string;
-  value: number | string;
-}) {
-  return (
-    <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2">
       <p className="text-xs text-neutral-500">{label}</p>
       <p className="mt-1 text-sm font-medium text-neutral-100">{value}</p>
     </div>
   );
 }
 
-function TaskSummaryMetric({
-  label,
-  value
+function StatusChip({
+  children,
+  tone = "neutral"
 }: {
-  label: string;
-  value: number;
+  children: React.ReactNode;
+  tone?: "neutral" | "good";
 }) {
   return (
-    <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
-      <p className="text-xs text-neutral-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-neutral-100">{value}</p>
-    </div>
+    <span
+      className={
+        tone === "good"
+          ? "rounded-full border border-emerald-800 bg-emerald-950/30 px-2.5 py-1 text-xs text-emerald-200"
+          : "rounded-full border border-neutral-700 bg-neutral-950 px-2.5 py-1 text-xs text-neutral-300"
+      }
+    >
+      {children}
+    </span>
   );
+}
+
+function getPrimaryAction(project: ProjectListItem, githubInstalled: boolean) {
+  if (project.status === "completed") {
+    return {
+      kind: "link",
+      label: "View project",
+      href: `/app/projects/${project.id}`
+    } as const;
+  }
+
+  if (!githubInstalled && !project.connectedRepository) {
+    return {
+      kind: "link",
+      label: "Connect GitHub",
+      href: "/app/settings/github"
+    } as const;
+  }
+
+  if (!project.connectedRepository) {
+    return {
+      kind: "link",
+      label: "Connect repository",
+      href: `/app/projects/${project.id}`
+    } as const;
+  }
+
+  if (!project.repositoryAnalyzed) {
+    return {
+      kind: "analyze",
+      label: "Analyze repository"
+    } as const;
+  }
+
+  if (!project.activeFeatureCount) {
+    return {
+      kind: "link",
+      label: "Create feature",
+      href: `/app/features?projectId=${project.id}`
+    } as const;
+  }
+
+  return {
+    kind: "link",
+    label: "Continue release",
+    href: `/app/projects/${project.id}`
+  } as const;
+}
+
+function formatStatus(status: string) {
+  return status.replaceAll("_", " ");
 }

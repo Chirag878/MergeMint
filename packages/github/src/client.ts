@@ -24,10 +24,10 @@ function getGitHubAppPrivateKey() {
   if (env.GITHUB_APP_PRIVATE_KEY_BASE64) {
     return Buffer.from(env.GITHUB_APP_PRIVATE_KEY_BASE64, "base64").toString(
       "utf8"
-    );
+    ).replace(/\\n/g, "\n");
   }
 
-  return env.GITHUB_APP_PRIVATE_KEY;
+  return env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, "\n");
 }
 
 export function hasGitHubAppConfig() {

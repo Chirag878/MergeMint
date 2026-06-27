@@ -341,6 +341,7 @@ export function FeatureDetailClient({
     enabled: activeTab === "report"
   });
   const invalidateReleaseControlRoom = async () => {
+    const projectId = featureQuery.data?.projectId;
     await Promise.all([
       utils.featureRequests.getReleaseControlRoom.invalidate({
         featureRequestId
@@ -355,6 +356,9 @@ export function FeatureDetailClient({
       utils.engineeringTasks.listByFeature.invalidate({
         featureRequestId
       }),
+      projectId
+        ? utils.projects.getControlRoom.invalidate({ projectId })
+        : Promise.resolve(),
       utils.dashboard.getSummary.invalidate(),
       utils.projects.list.invalidate(),
       utils.releaseBoard.getBoard.invalidate()
@@ -1784,7 +1788,7 @@ function FeatureHierarchyHeader({
 }) {
   const projectName = controlRoom?.project.name ?? "Project loading";
   const projectHref = controlRoom?.project.id
-    ? `/app/projects?projectId=${controlRoom.project.id}`
+    ? `/app/projects/${controlRoom.project.id}`
     : "/app/projects";
   const clientName =
     controlRoom?.client?.companyName ??
@@ -1990,7 +1994,7 @@ function ReleaseControlRoom({
         </section>
 
         <section className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-4">
-          <p className="text-sm text-blue-300">Next Best Action</p>
+          <p className="text-sm text-blue-300">Release Focus</p>
           <h3 className="mt-2 text-xl font-semibold text-neutral-100">
             {data.nextBestAction.title}
           </h3>

@@ -219,7 +219,7 @@ function getWorkspaceNextAction(input: Awaited<ReturnType<typeof getWorkspaceBas
       title: "Connect repository",
       description: "Choose the repository this project ships from.",
       primaryActionLabel: "Connect repository",
-      primaryActionHref: `/app/projects?projectId=${projectWithoutRepository.id}`
+      primaryActionHref: `/app/projects/${projectWithoutRepository.id}`
     };
   }
 

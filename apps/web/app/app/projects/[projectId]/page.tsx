@@ -1,14 +1,14 @@
 import { ensureUserWorkspace } from "@veriflow/api";
-import { ProjectsClient } from "./projects-client";
-import { requireWebSession } from "../../server-auth";
+import { requireWebSession } from "../../../server-auth";
+import { ProjectDetailClient } from "./project-detail-client";
 
-export default async function AppProjectsPage({
-  searchParams
+export default async function ProjectDetailPage({
+  params
 }: {
-  searchParams: Promise<{ projectId?: string }>;
+  params: Promise<{ projectId: string }>;
 }) {
   const session = await requireWebSession();
-  const { projectId } = await searchParams;
+  const { projectId } = await params;
   const workspace = await ensureUserWorkspace({
     user: session.user,
     session: session.session
@@ -16,11 +16,11 @@ export default async function AppProjectsPage({
 
   return (
     <main className="min-h-screen bg-neutral-950 px-6 py-10 text-neutral-100">
-      <section className="mx-auto max-w-5xl space-y-8">
+      <section className="mx-auto max-w-6xl space-y-8">
         <p className="text-sm font-medium uppercase tracking-[0.28em] text-blue-400">
           {workspace.activeOrganization.name}
         </p>
-        <ProjectsClient initialProjectId={projectId} />
+        <ProjectDetailClient projectId={projectId} />
       </section>
     </main>
   );

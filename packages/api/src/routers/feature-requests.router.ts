@@ -160,25 +160,29 @@ export const featureRequestsRouter = router({
 
       assertRoleCan(workspace.membership.role, "project:read");
 
-      const [featureRequest] = await db
-        .select()
+      const [row] = await db
+        .select({
+          featureRequest: featureRequests
+        })
         .from(featureRequests)
+        .innerJoin(projects, eq(featureRequests.projectId, projects.id))
         .where(
           and(
             eq(featureRequests.id, input.id),
-            eq(featureRequests.organizationId, workspace.activeOrganization.id)
+            eq(featureRequests.organizationId, workspace.activeOrganization.id),
+            eq(projects.organizationId, workspace.activeOrganization.id)
           )
         )
         .limit(1);
 
-      if (!featureRequest) {
+      if (!row) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Feature request not found."
         });
       }
 
-      return featureRequest;
+      return row.featureRequest;
     }),
 
   getReleaseControlRoom: protectedProcedure
