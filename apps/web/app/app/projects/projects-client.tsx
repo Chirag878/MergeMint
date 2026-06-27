@@ -252,6 +252,14 @@ function ProjectSetupPanel({
       enabled: Boolean(projectId)
     }
   );
+  const taskSummary = trpc.engineeringTasks.getProjectSummary.useQuery(
+    {
+      projectId
+    },
+    {
+      enabled: Boolean(projectId)
+    }
+  );
   const syncRepositories =
     trpc.githubApp.syncInstallationRepositories.useMutation({
       onSuccess: async (synced) => {
@@ -489,6 +497,30 @@ function ProjectSetupPanel({
             }
           }}
         />
+
+        {taskSummary.data ? (
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+            <h3 className="font-medium text-neutral-100">Engineering tasks</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <TaskSummaryMetric
+                label="Active"
+                value={taskSummary.data.activeTasks}
+              />
+              <TaskSummaryMetric
+                label="Blocked"
+                value={taskSummary.data.blockedTasks}
+              />
+              <TaskSummaryMetric
+                label="High risk"
+                value={taskSummary.data.highRiskTasks}
+              />
+              <TaskSummaryMetric
+                label="Ready for PR"
+                value={taskSummary.data.tasksReadyForPr}
+              />
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <button
@@ -754,6 +786,21 @@ function DetailText({ title, value }: { title: string; value?: string | null }) 
     <div>
       <p className="font-medium text-neutral-200">{title}</p>
       <p className="mt-1 text-neutral-400">{value ?? "Not detected."}</p>
+    </div>
+  );
+}
+
+function TaskSummaryMetric({
+  label,
+  value
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-neutral-100">{value}</p>
     </div>
   );
 }

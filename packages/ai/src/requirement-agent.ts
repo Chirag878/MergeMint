@@ -327,6 +327,18 @@ function mockEngineeringTasks(
     (requirement) => requirement.requirementKey
   );
   const prdTitle = input.prd.title;
+  const repoFiles =
+    input.repositoryContext?.suggestedFeatureAreas ??
+    input.repositoryContext?.importantFiles?.map((file) => file.path) ??
+    [];
+  const repoModules = [
+    ...(input.repositoryContext?.routes ?? []),
+    ...(input.repositoryContext?.apiEndpoints ?? []),
+    ...(input.repositoryContext?.databaseModels ?? [])
+  ];
+  const criteria = input.requirements.flatMap(
+    (requirement) => requirement.acceptanceCriteria
+  );
 
   return {
     tasks: [
@@ -335,11 +347,20 @@ function mockEngineeringTasks(
         description:
           "Update the relevant router/service path to validate permissions, enforce scope, and persist the requested workflow state without cross-project or cross-client writes.",
         type: "backend",
+        priority: "must_have",
+        riskLevel: "high",
+        suggestedFiles: repoFiles.slice(0, 4),
+        suggestedModules: repoModules.slice(0, 3),
         relatedRequirementKeys: [key(0), key(2)],
+        relatedAcceptanceCriteria: criteria.slice(0, 3),
         acceptanceChecklist: [
           "Authorized requests in the correct scope complete and return the updated workflow record.",
           "Unauthorized, cross-scope, or invalid-state requests fail before any partial write occurs."
         ],
+        implementationNotes:
+          "Follow existing service/router authorization and persistence patterns.",
+        verificationNotes:
+          "Exercise success, invalid, and cross-scope requests before linking PR evidence.",
         complexity: "medium"
       },
       {
@@ -347,11 +368,20 @@ function mockEngineeringTasks(
         description:
           "Update the relevant page or client component so users can enter required data, see validation feedback, and understand the resulting workflow status.",
         type: "frontend",
+        priority: "must_have",
+        riskLevel: "medium",
+        suggestedFiles: repoFiles.slice(0, 4),
+        suggestedModules: input.repositoryContext?.routes?.slice(0, 3) ?? [],
         relatedRequirementKeys: [key(0), key(1), key(3)],
+        relatedAcceptanceCriteria: criteria.slice(1, 4),
         acceptanceChecklist: [
           "The UI exposes the workflow only in the intended product context.",
           "Success, loading, empty, and validation-error states are visible without a full page reload."
         ],
+        implementationNotes:
+          "Use existing page/component density, states, and form patterns.",
+        verificationNotes:
+          "Verify loading, empty, success, and validation-error states in the feature workflow.",
         complexity: "medium"
       },
       {
@@ -359,11 +389,20 @@ function mockEngineeringTasks(
         description:
           "Centralize required-field, invalid-state, stale-data, and duplicate-submission checks so bad inputs cannot create misleading release evidence.",
         type: "backend",
+        priority: "must_have",
+        riskLevel: "high",
+        suggestedFiles: repoFiles.slice(0, 3),
+        suggestedModules: repoModules.slice(0, 3),
         relatedRequirementKeys: [key(1), key(5)],
+        relatedAcceptanceCriteria: criteria.slice(2, 5),
         acceptanceChecklist: [
           "Missing required inputs return specific validation errors.",
           "Duplicate or stale submissions do not create duplicate records or conflicting statuses."
         ],
+        implementationNotes:
+          "Keep validation close to the mutation/service boundary.",
+        verificationNotes:
+          "Test missing fields, invalid states, and duplicate submissions.",
         complexity: "medium"
       },
       {
@@ -371,11 +410,20 @@ function mockEngineeringTasks(
         description:
           "Invalidate or refresh the affected feature detail, release control room, ledger, or report state after the workflow completes.",
         type: "frontend",
+        priority: "should_have",
+        riskLevel: "medium",
+        suggestedFiles: repoFiles.slice(0, 3),
+        suggestedModules: input.repositoryContext?.routes?.slice(0, 2) ?? [],
         relatedRequirementKeys: [key(3), key(4)],
+        relatedAcceptanceCriteria: criteria.slice(3, 6),
         acceptanceChecklist: [
           "After success, the updated workflow state appears in the current view.",
           "Next-action or release-readiness indicators reflect the new state."
         ],
+        implementationNotes:
+          "Invalidate the same queries that feed release readiness and dashboard state.",
+        verificationNotes:
+          "Confirm the current view updates without a manual refresh.",
         complexity: "small"
       },
       {
@@ -383,11 +431,20 @@ function mockEngineeringTasks(
         description:
           "Ensure persisted records keep the project, feature, client, or organization scope needed for later PRD generation, QA review, approval, and reporting.",
         type: "database",
+        priority: "must_have",
+        riskLevel: "high",
+        suggestedFiles: input.repositoryContext?.databaseModels?.slice(0, 4) ?? [],
+        suggestedModules: input.repositoryContext?.databaseModels?.slice(0, 3) ?? [],
         relatedRequirementKeys: [key(2), key(4)],
+        relatedAcceptanceCriteria: criteria.slice(4, 7),
         acceptanceChecklist: [
           "Created or updated records can be traced back to the intended feature and project.",
           "Records from another organization or client never appear in this workflow."
         ],
+        implementationNotes:
+          "Prefer existing schema and migration conventions.",
+        verificationNotes:
+          "Inspect persisted records and workspace filters after the workflow runs.",
         complexity: "small"
       },
       {
@@ -395,11 +452,22 @@ function mockEngineeringTasks(
         description:
           "Add focused unit or integration coverage for the successful path, permission failures, validation failures, stale state, and UI refresh behavior.",
         type: "test",
+        priority: "should_have",
+        riskLevel: "medium",
+        suggestedFiles: repoFiles
+          .filter((file) => /test|spec|playwright|vitest|jest/i.test(file))
+          .slice(0, 4),
+        suggestedModules: [],
         relatedRequirementKeys: allRequirementKeys,
+        relatedAcceptanceCriteria: criteria.slice(0, 6),
         acceptanceChecklist: [
           "Tests prove the workflow succeeds only for authorized users in the correct scope.",
           "Tests prove invalid inputs, duplicate submissions, and stale states do not create release artifacts."
         ],
+        implementationNotes:
+          "Use the repository's existing test framework and fixture style.",
+        verificationNotes:
+          "Run the relevant test command and include the result in PR notes.",
         complexity: "medium"
       },
       {
@@ -407,11 +475,20 @@ function mockEngineeringTasks(
         description:
           "Update internal notes or user-facing copy so reviewers know which evidence proves the feature is ready for approval.",
         type: "docs",
+        priority: "nice_to_have",
+        riskLevel: "low",
+        suggestedFiles: repoFiles.filter((file) => /readme|docs?/i.test(file)).slice(0, 3),
+        suggestedModules: [],
         relatedRequirementKeys: [key(4)],
+        relatedAcceptanceCriteria: criteria.slice(0, 2),
         acceptanceChecklist: [
           "Documentation or UI copy names the evidence reviewers should inspect.",
           "Release-blocking conditions are described without relying on tribal knowledge."
         ],
+        implementationNotes:
+          "Keep documentation concise and tied to release evidence.",
+        verificationNotes:
+          "Confirm the copy does not expose private implementation details.",
         complexity: "small"
       }
     ]

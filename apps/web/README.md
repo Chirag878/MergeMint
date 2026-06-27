@@ -187,3 +187,21 @@ Demo flow:
 6. Generate PRD and engineering tasks.
 7. Link PR and run QA.
 8. Approve and generate report.
+
+## Engineering Tasks Command Center
+
+Feature detail includes an **Engineering Tasks** tab between Requirements and PR
+Evidence. It turns generated tasks into a build-plan command center with:
+
+- task totals, done count, blocked count, high-risk count, and repo-aware status;
+- status groups for to do, in progress, blocked, done, and skipped;
+- task cards with type, priority, risk level, requirement IDs, suggested
+  files/modules, implementation notes, verification notes, and acceptance
+  checklists;
+- actions to regenerate tasks, copy a developer brief, or copy a structured
+  payload for an AI coding agent.
+
+Task generation uses the latest PRD, requirements, acceptance criteria, and safe
+Repo Intelligence summary when available. QA review also receives the task plan
+and returns compact task coverage evidence. Reports summarize engineering scope
+without exposing prompts, tokens, raw repo files, or internal errors.

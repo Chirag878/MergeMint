@@ -48,6 +48,15 @@ export type RequirementEvidence = {
   notes?: string[];
 };
 
+export type TaskCoverage = {
+  taskId?: string;
+  title: string;
+  status: "implemented" | "partially_implemented" | "missing" | "unclear";
+  evidence?: string[];
+  suggestedFiles?: string[];
+  concern?: string | null;
+};
+
 export type RepositoryAnalysisFileIndexItem = {
   path: string;
   size?: number;

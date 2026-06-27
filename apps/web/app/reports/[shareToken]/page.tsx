@@ -153,6 +153,10 @@ export default async function PublicReleaseReportPage({
           <RepositoryContextSection context={data.repositoryContext} />
         ) : null}
 
+        {data.taskSummary ? (
+          <TaskSummarySection summary={data.taskSummary} audience="client" />
+        ) : null}
+
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
             eyebrow="Requirement Coverage Evidence"
@@ -409,6 +413,10 @@ function InternalReleaseReportPage({
           <RepositoryContextSection context={data.repositoryContext} />
         ) : null}
 
+        {data.taskSummary ? (
+          <TaskSummarySection summary={data.taskSummary} audience="internal" />
+        ) : null}
+
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
             eyebrow="Requirement coverage"
@@ -593,6 +601,10 @@ function DeveloperFixReportPage({ data }: { data: DeveloperFixReportData }) {
           <RepositoryContextSection context={data.repositoryContext} />
         ) : null}
 
+        {data.taskSummary ? (
+          <TaskSummarySection summary={data.taskSummary} audience="developer" />
+        ) : null}
+
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
             eyebrow="Fix these first"
@@ -727,6 +739,77 @@ function RepositoryContextSection({
           </p>
         </div>
       </div>
+    </section>
+  );
+}
+
+function TaskSummarySection({
+  summary,
+  audience
+}: {
+  summary: {
+    total: number;
+    done: number;
+    blocked: number;
+    highRisk: number;
+    majorWorkAreas: string[];
+    missingOrRiskyTasks?: Array<{
+      title: string;
+      status: string;
+      suggestedFiles: string[];
+      suggestedModules: string[];
+    }>;
+  };
+  audience: "client" | "internal" | "developer";
+}) {
+  const showDetails = audience !== "client";
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+      <SectionHeading eyebrow="Engineering scope" title="Task coverage" />
+      <div className="mt-5 grid gap-4 md:grid-cols-4">
+        <Metric label="Tasks" value={`${summary.total}`} />
+        <Metric label="Done" value={`${summary.done}`} />
+        <Metric label="Blocked" value={`${summary.blocked}`} />
+        <Metric label="High Risk" value={`${summary.highRisk}`} />
+      </div>
+      {summary.majorWorkAreas.length > 0 ? (
+        <div className="mt-5 flex flex-wrap gap-2">
+          {summary.majorWorkAreas.map((area) => (
+            <span
+              key={area}
+              className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300"
+            >
+              {formatLabel(area)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {showDetails && summary.missingOrRiskyTasks?.length ? (
+        <div className="mt-5 space-y-3">
+          {summary.missingOrRiskyTasks.slice(0, 8).map((task) => (
+            <article
+              key={`${task.title}-${task.status}`}
+              className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-medium text-neutral-100">{task.title}</p>
+                <StatusPill status={task.status} />
+              </div>
+              {task.suggestedFiles.length > 0 ? (
+                <p className="mt-2 text-sm text-neutral-400">
+                  Suggested files: {task.suggestedFiles.join(", ")}
+                </p>
+              ) : null}
+              {task.suggestedModules.length > 0 ? (
+                <p className="mt-1 text-sm text-neutral-400">
+                  Suggested modules: {task.suggestedModules.join(", ")}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

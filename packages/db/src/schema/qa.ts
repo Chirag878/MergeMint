@@ -22,7 +22,7 @@ import { featureRequests } from "./feature-requests";
 import { pullRequests } from "./github";
 import { organizations } from "./organizations";
 import { prds } from "./prds";
-import type { JsonObject, RequirementEvidence, TokenUsage } from "./types";
+import type { JsonObject, RequirementEvidence, TaskCoverage, TokenUsage } from "./types";
 
 export const aiRuns = pgTable(
   "ai_runs",
@@ -83,6 +83,8 @@ export const qaReviews = pgTable(
     confidenceScore: integer("confidence_score"),
     readinessScore: integer("readiness_score"),
     summary: text("summary"),
+    taskCoverage:
+      jsonb("task_coverage").$type<TaskCoverage[]>().default([]).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull()

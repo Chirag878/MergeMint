@@ -55,6 +55,7 @@ type NextActionKind =
 type FeatureDetailTab =
   | "overview"
   | "requirements"
+  | "engineering_tasks"
   | "pr"
   | "qa"
   | "approval"
@@ -217,6 +218,7 @@ const featureDetailTabs: Array<{
 }> = [
   { id: "overview", label: "Overview" },
   { id: "requirements", label: "Requirements" },
+  { id: "engineering_tasks", label: "Engineering Tasks" },
   { id: "pr", label: "PR Evidence" },
   { id: "qa", label: "QA Review" },
   { id: "approval", label: "Approval" },
@@ -242,6 +244,7 @@ export function FeatureDetailClient({
   >(null);
   const [showApprovalConfirmation, setShowApprovalConfirmation] =
     useState(false);
+  const [taskCopyMessage, setTaskCopyMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FeatureDetailTab>("overview");
   const utils = trpc.useUtils();
   const featureQuery = trpc.featureRequests.getById.useQuery({
@@ -265,13 +268,24 @@ export function FeatureDetailClient({
   const workflow = trpc.requirementEngine.getWorkflow.useQuery({
     featureRequestId
   }, {
-    enabled: activeTab === "requirements"
+    enabled: activeTab === "requirements" || activeTab === "engineering_tasks"
   });
   const aiRunUsage = trpc.requirementEngine.getAiRunUsage.useQuery({
     featureRequestId
   }, {
     enabled: activeTab === "token_usage"
   });
+  const engineeringTaskCenter = trpc.engineeringTasks.listByFeature.useQuery({
+    featureRequestId
+  });
+  const developerBrief = trpc.engineeringTasks.getDeveloperBrief.useQuery(
+    { featureRequestId },
+    { enabled: false }
+  );
+  const agentPayload = trpc.engineeringTasks.copyPayloadForAgent.useQuery(
+    { featureRequestId },
+    { enabled: false }
+  );
   const linkedPullRequest = trpc.github.getFeaturePullRequest.useQuery({
     featureRequestId
   }, {
@@ -319,6 +333,9 @@ export function FeatureDetailClient({
       }),
       utils.guidedWorkflow.getFeatureWorkflow.invalidate({
         featureRequestId
+      }),
+      utils.engineeringTasks.listByFeature.invalidate({
+        featureRequestId
       })
     ]);
   };
@@ -339,9 +356,24 @@ export function FeatureDetailClient({
     trpc.requirementEngine.generateEngineeringTasks.useMutation({
       onSuccess: async () => {
         await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
+        await utils.engineeringTasks.listByFeature.invalidate({ featureRequestId });
         await invalidateReleaseControlRoom();
       }
     });
+  const regenerateTasks =
+    trpc.engineeringTasks.regenerateForFeature.useMutation({
+      onSuccess: async () => {
+        await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
+        await utils.engineeringTasks.listByFeature.invalidate({ featureRequestId });
+        await invalidateReleaseControlRoom();
+      }
+    });
+  const updateTaskStatus = trpc.engineeringTasks.updateStatus.useMutation({
+    onSuccess: async () => {
+      await utils.engineeringTasks.listByFeature.invalidate({ featureRequestId });
+      await invalidateReleaseControlRoom();
+    }
+  });
   const answerClarification =
     trpc.requirementEngine.answerClarification.useMutation({
       onSuccess: async (_data, variables) => {
@@ -572,10 +604,15 @@ export function FeatureDetailClient({
     }
 
     if (actionKey === "generate_tasks") {
-      openTab("requirements", "engineering-tasks-section");
+      openTab("engineering_tasks", "engineering-tasks-command-center");
       if (prd) {
         generateTasks.mutate({ prdId: prd.id });
       }
+      return;
+    }
+
+    if (actionKey === "review_engineering_tasks") {
+      openTab("engineering_tasks", "engineering-tasks-command-center");
       return;
     }
 
@@ -610,6 +647,28 @@ export function FeatureDetailClient({
           generateInternalReleaseReport.mutate({ featureRequestId });
         }
       }
+    }
+  }
+
+  async function copyDeveloperBrief() {
+    setTaskCopyMessage(null);
+    const result = await developerBrief.refetch();
+    const markdown = result.data?.markdown;
+
+    if (markdown) {
+      await navigator.clipboard.writeText(markdown);
+      setTaskCopyMessage("Developer brief copied.");
+    }
+  }
+
+  async function copyAgentPayload() {
+    setTaskCopyMessage(null);
+    const result = await agentPayload.refetch();
+    const payload = result.data?.payload;
+
+    if (payload) {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setTaskCopyMessage("AI coding agent payload copied.");
     }
   }
 
@@ -1051,6 +1110,32 @@ export function FeatureDetailClient({
         </section>
       ) : null}
 
+      {activeTab === "engineering_tasks" ? (
+        <EngineeringTasksCommandCenter
+          data={engineeringTaskCenter.data}
+          fallbackTasks={engineeringTasks}
+          hasPrd={hasPrd}
+          prdMayBeOutdated={prdMayBeOutdated}
+          isLoading={engineeringTaskCenter.isLoading}
+          error={engineeringTaskCenter.error?.message}
+          isGenerating={generateTasks.isPending || regenerateTasks.isPending}
+          generateError={generateTasks.error?.message ?? regenerateTasks.error?.message}
+          taskCopyMessage={taskCopyMessage}
+          onGenerate={() => (prd ? generateTasks.mutate({ prdId: prd.id }) : null)}
+          onRegenerate={() => regenerateTasks.mutate({ featureRequestId })}
+          onUpdateStatus={(taskId, status) =>
+            updateTaskStatus.mutate({
+              taskId,
+              status
+            })
+          }
+          isUpdatingStatus={updateTaskStatus.isPending}
+          onCopyDeveloperBrief={copyDeveloperBrief}
+          onCopyAgentPayload={copyAgentPayload}
+          isCopying={developerBrief.isFetching || agentPayload.isFetching}
+        />
+      ) : null}
+
       {activeTab === "pr" ? (
       <GitHubPullRequestSection
         data={linkedPullRequest.data}
@@ -1194,6 +1279,318 @@ function DetailBlock({
       </p>
     </section>
   );
+}
+
+function EngineeringTasksCommandCenter({
+  data,
+  fallbackTasks,
+  hasPrd,
+  prdMayBeOutdated,
+  isLoading,
+  error,
+  isGenerating,
+  generateError,
+  taskCopyMessage,
+  onGenerate,
+  onRegenerate,
+  onUpdateStatus,
+  isUpdatingStatus,
+  onCopyDeveloperBrief,
+  onCopyAgentPayload,
+  isCopying
+}: {
+  data:
+    | {
+        tasks: EngineeringTaskCardView[];
+        grouped: Record<string, EngineeringTaskCardView[]>;
+        summary: {
+          total: number;
+          done: number;
+          blocked: number;
+          highRisk: number;
+        };
+        repoAware: boolean;
+      }
+    | undefined;
+  fallbackTasks: EngineeringTaskCardView[];
+  hasPrd: boolean;
+  prdMayBeOutdated: boolean;
+  isLoading: boolean;
+  error?: string;
+  isGenerating: boolean;
+  generateError?: string;
+  taskCopyMessage: string | null;
+  onGenerate: () => void;
+  onRegenerate: () => void;
+  onUpdateStatus: (
+    taskId: string,
+    status: "todo" | "in_progress" | "blocked" | "done" | "skipped"
+  ) => void;
+  isUpdatingStatus: boolean;
+  onCopyDeveloperBrief: () => void;
+  onCopyAgentPayload: () => void;
+  isCopying: boolean;
+}) {
+  const tasks = data?.tasks ?? fallbackTasks;
+  const grouped = data?.grouped ?? groupTaskCards(tasks);
+  const summary =
+    data?.summary ?? {
+      total: tasks.length,
+      done: tasks.filter((task) => task.status === "done").length,
+      blocked: tasks.filter((task) => task.status === "blocked").length,
+      highRisk: tasks.filter((task) => task.riskLevel === "high").length
+    };
+  const groups: Array<{
+    id: "todo" | "in_progress" | "blocked" | "done" | "skipped";
+    label: string;
+  }> = [
+    { id: "todo", label: "To do" },
+    { id: "in_progress", label: "In progress" },
+    { id: "blocked", label: "Blocked" },
+    { id: "done", label: "Done" },
+    { id: "skipped", label: "Skipped" }
+  ];
+
+  return (
+    <section
+      id="engineering-tasks-command-center"
+      className="space-y-5 scroll-mt-28"
+    >
+      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.24em] text-blue-300">
+              Engineering Tasks Command Center
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-100">
+              Build plan
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-400">
+              Track what needs to be built before PR review, how each task maps
+              to requirements, and which files or modules are likely involved.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {tasks.length === 0 ? (
+              <button
+                type="button"
+                onClick={onGenerate}
+                disabled={!hasPrd || prdMayBeOutdated || isGenerating}
+                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGenerating ? "Generating..." : "Generate tasks"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onRegenerate}
+                disabled={!hasPrd || prdMayBeOutdated || isGenerating}
+                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isGenerating ? "Regenerating..." : "Regenerate tasks"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onCopyDeveloperBrief}
+              disabled={tasks.length === 0 || isCopying}
+              className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Copy developer brief
+            </button>
+            <button
+              type="button"
+              onClick={onCopyAgentPayload}
+              disabled={tasks.length === 0 || isCopying}
+              className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Copy for AI agent
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-5">
+          <MiniMetric label="Total" value={summary.total} />
+          <MiniMetric label="Done" value={summary.done} />
+          <MiniMetric label="Blocked" value={summary.blocked} />
+          <MiniMetric label="High risk" value={summary.highRisk} />
+          <MiniMetric label="Repo-aware" value={data?.repoAware ? "Yes" : "No" } />
+        </div>
+
+        {taskCopyMessage ? (
+          <p className="mt-4 text-sm text-emerald-300">{taskCopyMessage}</p>
+        ) : null}
+        {isLoading ? <p className="mt-4 text-sm text-neutral-500">Loading tasks...</p> : null}
+        {error ? <p className="mt-4 text-sm text-red-300">{error}</p> : null}
+        {generateError ? (
+          <p className="mt-4 text-sm text-red-300">{generateError}</p>
+        ) : null}
+        {!hasPrd ? (
+          <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
+            Generate the PRD before creating engineering tasks.
+          </p>
+        ) : null}
+        {prdMayBeOutdated ? (
+          <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+            PRD is outdated. Regenerate the PRD before regenerating tasks.
+          </p>
+        ) : null}
+      </div>
+
+      {tasks.length === 0 && !isLoading ? (
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+          <EmptyText>
+            Generate engineering tasks from the PRD to create a build plan.
+          </EmptyText>
+        </section>
+      ) : null}
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {groups.map((group) => (
+          <section
+            key={group.id}
+            className="rounded-lg border border-neutral-800 bg-neutral-900 p-4"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-medium text-neutral-100">{group.label}</h3>
+              <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-400">
+                {(grouped[group.id] ?? []).length}
+              </span>
+            </div>
+            <div className="mt-4 space-y-3">
+              {(grouped[group.id] ?? []).map((task) => (
+                <EngineeringTaskCard
+                  key={task.id}
+                  task={task}
+                  onUpdateStatus={onUpdateStatus}
+                  isUpdatingStatus={isUpdatingStatus}
+                />
+              ))}
+              {(grouped[group.id] ?? []).length === 0 ? (
+                <p className="text-sm text-neutral-500">No tasks.</p>
+              ) : null}
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type EngineeringTaskCardView = {
+  id: string;
+  title: string;
+  description?: string | null;
+  type: string;
+  status: string;
+  priority?: string;
+  riskLevel?: string;
+  relatedRequirementKeys: string[];
+  acceptanceCriteriaRefs?: string[];
+  acceptanceChecklist: string[];
+  suggestedFiles?: string[];
+  suggestedModules?: string[];
+  implementationNotes?: string | null;
+  verificationNotes?: string | null;
+  complexity?: string;
+};
+
+function EngineeringTaskCard({
+  task,
+  onUpdateStatus,
+  isUpdatingStatus
+}: {
+  task: EngineeringTaskCardView;
+  onUpdateStatus: (
+    taskId: string,
+    status: "todo" | "in_progress" | "blocked" | "done" | "skipped"
+  ) => void;
+  isUpdatingStatus: boolean;
+}) {
+  return (
+    <article className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="font-medium text-neutral-100">{task.title}</h4>
+          <p className="mt-2 text-sm leading-6 text-neutral-400">
+            {task.description || "No description."}
+          </p>
+        </div>
+        <select
+          value={task.status === "canceled" ? "skipped" : task.status}
+          onChange={(event) =>
+            onUpdateStatus(
+              task.id,
+              event.target.value as
+                | "todo"
+                | "in_progress"
+                | "blocked"
+                | "done"
+                | "skipped"
+            )
+          }
+          disabled={isUpdatingStatus}
+          className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-100 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <option value="todo">To do</option>
+          <option value="in_progress">In progress</option>
+          <option value="blocked">Blocked</option>
+          <option value="done">Done</option>
+          <option value="skipped">Skipped</option>
+        </select>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Badge>{task.type}</Badge>
+        <Badge>{task.priority ?? "must_have"}</Badge>
+        <Badge>{task.riskLevel ?? task.complexity ?? "medium"} risk</Badge>
+        {task.relatedRequirementKeys.map((key) => (
+          <Badge key={key}>{key}</Badge>
+        ))}
+      </div>
+      <StringList
+        title="Suggested files"
+        items={task.suggestedFiles ?? []}
+        emptyText="No suggested files."
+      />
+      <StringList
+        title="Suggested modules"
+        items={task.suggestedModules ?? []}
+        emptyText="No suggested modules."
+      />
+      <StringList
+        title="Related acceptance criteria"
+        items={task.acceptanceCriteriaRefs ?? []}
+        emptyText="No acceptance criteria mapped."
+      />
+      {task.implementationNotes ? (
+        <p className="mt-3 text-sm text-neutral-400">
+          Implementation: {task.implementationNotes}
+        </p>
+      ) : null}
+      {task.verificationNotes ? (
+        <p className="mt-2 text-sm text-neutral-400">
+          Verification: {task.verificationNotes}
+        </p>
+      ) : null}
+      <StringList
+        title="Acceptance checklist"
+        items={task.acceptanceChecklist}
+        emptyText="No acceptance checklist."
+      />
+    </article>
+  );
+}
+
+function groupTaskCards(tasks: EngineeringTaskCardView[]) {
+  return {
+    todo: tasks.filter((task) => task.status === "todo"),
+    in_progress: tasks.filter((task) => task.status === "in_progress"),
+    blocked: tasks.filter((task) => task.status === "blocked"),
+    done: tasks.filter((task) => task.status === "done"),
+    skipped: tasks.filter(
+      (task) => task.status === "skipped" || task.status === "canceled"
+    )
+  };
 }
 
 function FeatureWorkflowGuide({

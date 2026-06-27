@@ -414,8 +414,16 @@ export async function runQaReviewForFeatureRequest(
       title: task.title,
       description: task.description,
       type: task.type,
+      status: task.status,
+      priority: task.priority,
+      riskLevel: task.riskLevel,
+      suggestedFiles: task.suggestedFiles,
+      suggestedModules: task.suggestedModules,
       relatedRequirementKeys: task.relatedRequirementKeys,
-      acceptanceChecklist: task.acceptanceChecklist
+      relatedAcceptanceCriteria: task.acceptanceCriteriaRefs,
+      acceptanceChecklist: task.acceptanceChecklist,
+      implementationNotes: task.implementationNotes,
+      verificationNotes: task.verificationNotes
     })),
     pullRequest: {
       title: pullRequest.title,
@@ -476,7 +484,14 @@ export async function runQaReviewForFeatureRequest(
           overallStatus: mapOverallStatus(aiResult.data.overallStatus),
           confidenceScore: aiResult.data.confidenceScore,
           readinessScore: aiResult.data.readinessScore,
-          summary: aiResult.data.summary
+          summary: aiResult.data.summary,
+          taskCoverage: aiResult.data.taskCoverage.map((coverageItem) => ({
+            title: coverageItem.title,
+            status: coverageItem.status,
+            evidence: coverageItem.evidence,
+            suggestedFiles: coverageItem.suggestedFiles,
+            concern: coverageItem.concern
+          }))
         })
         .returning();
 

@@ -232,7 +232,11 @@ function isRequiredClarification(priority: string) {
 }
 
 function mapTaskType(type: EngineeringTasksOutput["tasks"][number]["type"]) {
-  return type === "infra" ? ("infrastructure" as const) : type;
+  if (type === "infra") {
+    return "infrastructure" as const;
+  }
+
+  return type;
 }
 
 function mapTaskComplexity(
@@ -629,7 +633,7 @@ export async function generateEngineeringTasksForPrd(
     const rows = await tx
       .insert(engineeringTasks)
       .values(
-        result.data.tasks.map((task) => ({
+        result.data.tasks.map((task, index) => ({
           organizationId: workspace.activeOrganization.id,
           projectId: featureRequest.projectId,
           featureRequestId: featureRequest.id,
@@ -637,8 +641,16 @@ export async function generateEngineeringTasksForPrd(
           title: task.title,
           description: task.description,
           type: mapTaskType(task.type),
+          priority: task.priority,
+          riskLevel: task.riskLevel,
           relatedRequirementKeys: task.relatedRequirementKeys,
+          acceptanceCriteriaRefs: task.relatedAcceptanceCriteria,
           acceptanceChecklist: task.acceptanceChecklist,
+          suggestedFiles: task.suggestedFiles,
+          suggestedModules: task.suggestedModules,
+          implementationNotes: task.implementationNotes,
+          verificationNotes: task.verificationNotes,
+          orderIndex: index,
           complexity: mapTaskComplexity(task.complexity)
         }))
       )

@@ -7,6 +7,7 @@ import {
   auditLogs,
   clients,
   db,
+  engineeringTasks,
   featureRequests,
   prdRequirements,
   prds,
@@ -50,6 +51,20 @@ type ReportRepositoryContext = {
   analyzedCommitSha: string | null;
   analyzedAt: string | null;
   summary: string | null;
+};
+
+type ReportTaskSummary = {
+  total: number;
+  done: number;
+  blocked: number;
+  highRisk: number;
+  majorWorkAreas: string[];
+  missingOrRiskyTasks?: Array<{
+    title: string;
+    status: string;
+    suggestedFiles: string[];
+    suggestedModules: string[];
+  }>;
 };
 
 export type ClientDeliveryReportData = {
@@ -105,6 +120,7 @@ export type ClientDeliveryReportData = {
     latestCommitSha: string | null;
   };
   repositoryContext?: ReportRepositoryContext;
+  taskSummary?: ReportTaskSummary;
   qaReview: {
     id: string;
     overallStatus: string;
@@ -161,6 +177,7 @@ export type DeveloperFixReportData = {
   };
   pullRequest: ClientDeliveryReportData["pullRequest"];
   repositoryContext?: ReportRepositoryContext;
+  taskSummary?: ReportTaskSummary;
   qaReview: ClientDeliveryReportData["qaReview"];
   requirements: ClientDeliveryReportData["requirements"];
   coverage: ClientDeliveryReportData["coverage"];
@@ -200,6 +217,7 @@ export type InternalReleaseReportData = {
   requirements: ClientDeliveryReportData["requirements"];
   pullRequest: ClientDeliveryReportData["pullRequest"];
   repositoryContext?: ReportRepositoryContext;
+  taskSummary?: ReportTaskSummary;
   qaReview: ClientDeliveryReportData["qaReview"];
   coverage: ClientDeliveryReportData["coverage"];
   findings: ClientDeliveryReportData["findings"];
@@ -628,6 +646,39 @@ function mapQaReview(
   };
 }
 
+async function getReportTaskSummary(
+  featureRequestId: string
+): Promise<ReportTaskSummary> {
+  const tasks = await db
+    .select()
+    .from(engineeringTasks)
+    .where(eq(engineeringTasks.featureRequestId, featureRequestId))
+    .orderBy(engineeringTasks.orderIndex, engineeringTasks.createdAt);
+  const missingOrRiskyTasks = tasks
+    .filter(
+      (task) =>
+        task.status === "blocked" ||
+        task.riskLevel === "high" ||
+        task.status === "todo" ||
+        task.status === "in_progress"
+    )
+    .map((task) => ({
+      title: task.title,
+      status: task.status,
+      suggestedFiles: task.suggestedFiles,
+      suggestedModules: task.suggestedModules
+    }));
+
+  return {
+    total: tasks.length,
+    done: tasks.filter((task) => task.status === "done").length,
+    blocked: tasks.filter((task) => task.status === "blocked").length,
+    highRisk: tasks.filter((task) => task.riskLevel === "high").length,
+    majorWorkAreas: Array.from(new Set(tasks.map((task) => task.type))).slice(0, 8),
+    missingOrRiskyTasks
+  };
+}
+
 function mapCoverage(
   coverageRows: Array<typeof qaRequirementCoverage.$inferSelect>
 ): ClientDeliveryReportData["coverage"] {
@@ -763,6 +814,7 @@ export async function generateReleaseReport(
     organizationId,
     projectId: project.id
   });
+  const taskSummary = await getReportTaskSummary(featureRequest.id);
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -828,6 +880,13 @@ export async function generateReleaseReport(
     requirements: mappedRequirements,
     pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
     repositoryContext,
+    taskSummary: {
+      total: taskSummary.total,
+      done: taskSummary.done,
+      blocked: taskSummary.blocked,
+      highRisk: taskSummary.highRisk,
+      majorWorkAreas: taskSummary.majorWorkAreas
+    },
     qaReview: mapQaReview(qaReviewBundle.review),
     coverage: mappedCoverage,
     findings: mappedFindings,
@@ -942,6 +1001,7 @@ export async function generateInternalReleaseReport(
     organizationId,
     projectId: project.id
   });
+  const taskSummary = await getReportTaskSummary(featureRequest.id);
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -1000,6 +1060,7 @@ export async function generateInternalReleaseReport(
     requirements: mappedRequirements,
     pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
     repositoryContext,
+    taskSummary,
     qaReview: mapQaReview(qaReviewBundle.review),
     coverage: mappedCoverage,
     findings: mappedFindings,
@@ -1105,6 +1166,7 @@ export async function generateDeveloperFixReport(
     organizationId,
     projectId: project.id
   });
+  const taskSummary = await getReportTaskSummary(featureRequest.id);
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -1173,6 +1235,7 @@ export async function generateDeveloperFixReport(
     },
     pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
     repositoryContext,
+    taskSummary,
     qaReview: mapQaReview(qaReviewBundle.review),
     requirements: mappedRequirements,
     coverage: mappedCoverage,

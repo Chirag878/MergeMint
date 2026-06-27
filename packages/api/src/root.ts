@@ -2,6 +2,7 @@ import { router } from "./trpc";
 import { approvalRouter } from "./routers/approval.router";
 import { clientRouter } from "./routers/client.router";
 import { dashboardRouter } from "./routers/dashboard.router";
+import { engineeringTasksRouter } from "./routers/engineering-tasks.router";
 import { featureRequestsRouter } from "./routers/feature-requests.router";
 import { githubAppRouter } from "./routers/github-app.router";
 import { githubRouter } from "./routers/github.router";
@@ -19,6 +20,7 @@ export const appRouter = router({
   approval: approvalRouter,
   clients: clientRouter,
   dashboard: dashboardRouter,
+  engineeringTasks: engineeringTasksRouter,
   workspace: workspaceRouter,
   projects: projectsRouter,
   featureRequests: featureRequestsRouter,

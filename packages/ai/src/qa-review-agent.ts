@@ -32,8 +32,16 @@ export type QAReviewInput = {
     title: string;
     description?: string | null;
     type: string;
+    status?: string;
+    priority?: string;
+    riskLevel?: string;
+    suggestedFiles?: string[];
+    suggestedModules?: string[];
     relatedRequirementKeys: string[];
+    relatedAcceptanceCriteria?: string[];
     acceptanceChecklist: string[];
+    implementationNotes?: string | null;
+    verificationNotes?: string | null;
   }>;
   pullRequest: {
     title: string;
@@ -192,6 +200,26 @@ function mockQAReview(input: QAReviewInput): QAReviewOutput {
     summary:
       "The PR appears to address part of the requirement set, but at least one requirement needs more evidence before approval.",
     coverage,
+    taskCoverage: input.engineeringTasks.map((task, index) => ({
+      title: task.title,
+      status:
+        index === 0
+          ? "implemented"
+          : index === 1
+            ? "partially_implemented"
+            : "unclear",
+      evidence:
+        index === 0
+          ? [
+              `Changed files include ${input.changedFiles[0]?.filename ?? "implementation files"}.`
+            ]
+          : ["The PR snapshot does not prove this task is fully complete."],
+      suggestedFiles: task.suggestedFiles ?? [],
+      concern:
+        index === 0
+          ? null
+          : "Additional code or test evidence may be needed for this task."
+    })),
     findings
   };
 }

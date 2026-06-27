@@ -61,14 +61,25 @@ export const EngineeringTaskSchema = z.object({
   type: z.enum([
     "frontend",
     "backend",
+    "auth",
     "database",
+    "integration",
     "test",
     "docs",
+    "qa",
+    "devops",
     "infra",
     "other"
   ]),
+  priority: z.enum(["must_have", "should_have", "nice_to_have"]).default("must_have"),
+  riskLevel: z.enum(["low", "medium", "high"]).default("medium"),
+  suggestedFiles: z.array(z.string().min(1)).default([]),
+  suggestedModules: z.array(z.string().min(1)).default([]),
   relatedRequirementKeys: z.array(z.string().regex(/^REQ-\d{3}$/)).min(1),
+  relatedAcceptanceCriteria: z.array(z.string().min(1)).default([]),
   acceptanceChecklist: z.array(z.string().min(8)).min(2),
+  implementationNotes: z.string().min(1).nullable().default(null),
+  verificationNotes: z.string().min(1).nullable().default(null),
   complexity: z.enum(["small", "medium", "large"])
 });
 
@@ -115,6 +126,22 @@ export const QAReviewOutputSchema = z.object({
   confidenceScore: z.number().int().min(0).max(100),
   summary: z.string().min(1),
   coverage: z.array(RequirementCoverageOutputSchema).min(1),
+  taskCoverage: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        status: z.enum([
+          "implemented",
+          "partially_implemented",
+          "missing",
+          "unclear"
+        ]),
+        evidence: z.array(z.string().min(1)),
+        suggestedFiles: z.array(z.string().min(1)),
+        concern: z.string().min(1).nullable()
+      })
+    )
+    .default([]),
   findings: z.array(QAFindingOutputSchema)
 });
 

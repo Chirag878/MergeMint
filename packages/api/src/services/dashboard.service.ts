@@ -3,6 +3,7 @@ import {
   approvals,
   clients,
   db,
+  engineeringTasks,
   featureRequests,
   prds,
   projects,
@@ -74,7 +75,8 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
     pullRequestRows,
     qaReviewRows,
     approvalRows,
-    releaseReportRows
+    releaseReportRows,
+    taskRows
   ] = await Promise.all([
     db
       .select()
@@ -110,7 +112,12 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
       .select()
       .from(releaseReports)
       .where(eq(releaseReports.organizationId, organizationId))
-      .orderBy(desc(releaseReports.createdAt))
+      .orderBy(desc(releaseReports.createdAt)),
+    db
+      .select()
+      .from(engineeringTasks)
+      .where(eq(engineeringTasks.organizationId, organizationId))
+      .orderBy(desc(engineeringTasks.createdAt))
   ]);
 
   const featureIds = featureRows.map((feature) => feature.id);
@@ -141,6 +148,13 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
     releaseReportRows.filter(isClientDeliveryReport)
   );
   const openFindingsByReviewId = new Map<string, number>();
+  const tasksByFeatureId = new Map<string, Array<typeof engineeringTasks.$inferSelect>>();
+
+  for (const task of taskRows) {
+    const featureTasks = tasksByFeatureId.get(task.featureRequestId) ?? [];
+    featureTasks.push(task);
+    tasksByFeatureId.set(task.featureRequestId, featureTasks);
+  }
 
   for (const finding of findingRows.filter(isOpenFinding)) {
     openFindingsByReviewId.set(
@@ -158,6 +172,9 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
       const qaReview = latestQaReview.get(feature.id);
       const approval = latestApproval.get(feature.id);
       const report = latestReleaseReport.get(feature.id);
+      const tasks = tasksByFeatureId.get(feature.id) ?? [];
+      const blockedTasks = tasks.filter((task) => task.status === "blocked");
+      const highRiskTasks = tasks.filter((task) => task.riskLevel === "high");
       const openFindings = qaReview
         ? (openFindingsByReviewId.get(qaReview.id) ?? 0)
         : 0;
@@ -173,13 +190,35 @@ export async function getDashboardSummary(ctx: ProtectedContext) {
         };
       }
 
+      if (blockedTasks.length > 0) {
+        return {
+          featureRequestId: feature.id,
+          featureTitle: feature.title,
+          projectName: getProjectName(projectById, feature.projectId),
+          clientName: client?.companyName ?? client?.name ?? null,
+          stage: "Blocked engineering tasks",
+          nextAction: "Resolve task blockers"
+        };
+      }
+
+      if (highRiskTasks.length > 0 && !pullRequest) {
+        return {
+          featureRequestId: feature.id,
+          featureTitle: feature.title,
+          projectName: getProjectName(projectById, feature.projectId),
+          clientName: client?.companyName ?? client?.name ?? null,
+          stage: "High-risk tasks ready",
+          nextAction: "Review build plan"
+        };
+      }
+
       if (!pullRequest) {
         return {
           featureRequestId: feature.id,
           featureTitle: feature.title,
           projectName: getProjectName(projectById, feature.projectId),
           clientName: client?.companyName ?? client?.name ?? null,
-          stage: "Needs GitHub PR",
+          stage: tasks.length > 0 ? "Tasks ready, no PR" : "Needs GitHub PR",
           nextAction: "Link GitHub PR"
         };
       }

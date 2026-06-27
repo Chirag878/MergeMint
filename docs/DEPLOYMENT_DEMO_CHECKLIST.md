@@ -38,7 +38,8 @@ Current migrations include:
 - `0004_github_webhook_events.sql`: GitHub webhook event tracking
 - `0005_github_app_installations.sql`: GitHub App installations and project repository mapping
 - `0006_repository_analyses.sql`: Repo Intelligence snapshots
-- `meta/_journal.json`: journal entries through migration index `6`
+- `0007_engineering_tasks_command_center.sql`: Engineering task command-center metadata and QA task coverage
+- `meta/_journal.json`: journal entries through migration index `7`
 
 Commands:
 
@@ -152,15 +153,16 @@ Avoid mismatched demos where the feature request and PR are unrelated. The stron
 8. Answer required clarification questions.
 9. Generate PRD.
 10. Generate engineering tasks.
-11. Link the matching GitHub PR.
-12. Refresh PR snapshot.
-13. Run AI QA review.
-14. Submit approval decision.
-15. Generate release report.
-16. Open public report.
-17. Return to Release Control Room and confirm status, next action, guided feature stepper, and Trust Timeline.
-18. Return to Dashboard and confirm the next best action card points to the next incomplete release step.
-19. Return to Client Delivery Ledger and confirm ledger, risks, approval, and report archive.
+11. Open the Engineering Tasks tab, mark at least one task in progress/done, copy the developer brief, and confirm suggested files/modules appear when repo intelligence exists.
+12. Link the matching GitHub PR.
+13. Refresh PR snapshot.
+14. Run AI QA review and confirm task coverage appears in saved review output/report data.
+15. Submit approval decision.
+16. Generate release report.
+17. Open public report.
+18. Return to Release Control Room and confirm status, next action, guided feature stepper, and Trust Timeline.
+19. Return to Dashboard and confirm task blockers/high-risk tasks appear in needs attention when present.
+20. Return to Client Delivery Ledger and confirm ledger, risks, approval, and report archive.
 
 ## 8. Sample Report Setup
 

@@ -653,6 +653,7 @@ export async function getFeatureWorkflow(
   );
   const hasPrd = Boolean(latestPrd && requirements.length > 0);
   const hasTasks = tasks.length > 0;
+  const blockedTasks = tasks.filter((task) => task.status === "blocked");
   const hasQa = Boolean(latestQaReview);
   const openFindings = findings.filter(isOpenFinding);
   const approved =
@@ -723,10 +724,19 @@ export async function getFeatureWorkflow(
   if (!latestPullRequest) {
     return toState({
       status: "tasks_ready",
-      title: "Link pull request",
-      description: "Link the pull request that implements this feature.",
-      primaryActionLabel: "Link pull request",
-      primaryActionKey: "link_pr",
+      title: blockedTasks.length > 0 ? "Resolve blocked engineering tasks" : "Link pull request",
+      description:
+        blockedTasks.length > 0
+          ? "Some engineering tasks are blocked. Resolve blockers or link the PR when implementation evidence is ready."
+          : "Link the pull request that implements this feature.",
+      primaryActionLabel:
+        blockedTasks.length > 0 ? "Open engineering tasks" : "Link pull request",
+      primaryActionKey:
+        blockedTasks.length > 0 ? "review_engineering_tasks" : "link_pr",
+      blockedReason:
+        blockedTasks.length > 0
+          ? `${blockedTasks.length} engineering task${blockedTasks.length === 1 ? "" : "s"} blocked.`
+          : undefined,
       steps
     });
   }
