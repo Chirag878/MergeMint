@@ -10,6 +10,7 @@ import { healthRouter } from "./routers/health.router";
 import { projectsRouter } from "./routers/projects.router";
 import { qaReviewRouter } from "./routers/qa-review.router";
 import { releaseReportRouter } from "./routers/release-report.router";
+import { repositoryIntelligenceRouter } from "./routers/repository-intelligence.router";
 import { requirementEngineRouter } from "./routers/requirement-engine.router";
 import { workspaceRouter } from "./routers/workspace.router";
 
@@ -24,6 +25,7 @@ export const appRouter = router({
   githubApp: githubAppRouter,
   github: githubRouter,
   guidedWorkflow: guidedWorkflowRouter,
+  repositoryIntelligence: repositoryIntelligenceRouter,
   qaReview: qaReviewRouter,
   releaseReport: releaseReportRouter,
   requirementEngine: requirementEngineRouter

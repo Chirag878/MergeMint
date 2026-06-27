@@ -1,4 +1,11 @@
 export type JsonObject = Record<string, unknown>;
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
 export type StringList = string[];
 
 export type TokenUsage = {
@@ -39,4 +46,18 @@ export type RequirementEvidence = {
   files?: string[];
   checks?: string[];
   notes?: string[];
+};
+
+export type RepositoryAnalysisFileIndexItem = {
+  path: string;
+  size?: number;
+  type?: string;
+  category?: string;
+};
+
+export type RepositoryAnalysisImportantFile = {
+  path: string;
+  size?: number;
+  summary?: string;
+  signals?: string[];
 };

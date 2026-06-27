@@ -14,6 +14,7 @@ import {
   qaFindings,
   qaReviews,
   releaseReports,
+  repositoryAnalyses,
   repositories
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
@@ -418,7 +419,8 @@ export async function getProjectSetup(
     });
   }
 
-  const [projectRepositoryRows, featureRows, pullRequestRows] = await Promise.all([
+  const [projectRepositoryRows, featureRows, pullRequestRows, analysisRows] =
+    await Promise.all([
     db
       .select()
       .from(projectGithubRepositories)
@@ -435,20 +437,38 @@ export async function getProjectSetup(
     db
       .select()
       .from(pullRequests)
-      .where(eq(pullRequests.projectId, project.id))
+      .where(eq(pullRequests.projectId, project.id)),
+    db
+      .select()
+      .from(repositoryAnalyses)
+      .where(
+        and(
+          eq(repositoryAnalyses.organizationId, organizationId),
+          eq(repositoryAnalyses.projectId, project.id)
+        )
+      )
+      .orderBy(desc(repositoryAnalyses.createdAt))
   ]);
 
   const hasRepository = projectRepositoryRows.length > 0;
+  const hasAnalysis = analysisRows.some((analysis) => analysis.status === "completed");
   const hasFeature = featureRows.length > 0;
   const hasVerification = pullRequestRows.length > 0;
   const steps = makeSteps(
     [
       { id: "project", label: "Project created", done: true },
       { id: "repository", label: "Repository connected", done: hasRepository },
+      { id: "analysis", label: "Repository analyzed", done: hasAnalysis },
       { id: "feature", label: "Feature request added", done: hasFeature },
       { id: "verification", label: "PR verification started", done: hasVerification }
     ],
-    !hasRepository ? "repository" : !hasFeature ? "feature" : "verification",
+    !hasRepository
+      ? "repository"
+      : !hasAnalysis
+        ? "analysis"
+        : !hasFeature
+          ? "feature"
+          : "verification",
     installationRows.length === 0 || repositoryRows.length === 0
       ? "repository"
       : undefined
@@ -485,6 +505,20 @@ export async function getProjectSetup(
       description: "Choose the repository this project ships from.",
       primaryActionLabel: "Connect repository",
       primaryActionKey: "connect_project_repository",
+      steps
+    });
+  }
+
+  if (!hasAnalysis) {
+    return toState({
+      status: "repository_connected",
+      title: "Analyze repository",
+      description:
+        "Build a codebase snapshot so PRDs, engineering tasks, and QA reviews can use real repo context.",
+      primaryActionLabel: "Analyze repository",
+      primaryActionKey: "analyze_repository",
+      secondaryActionLabel: "Create feature request",
+      secondaryActionHref: `/app/features?projectId=${project.id}`,
       steps
     });
   }

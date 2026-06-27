@@ -152,3 +152,38 @@ Feature workflow states are derived from existing records rather than stored in
 new columns. Current states include `clarification_needed`, `draft_request`,
 `prd_ready`, `tasks_ready`, `pr_linked`, `qa_ready`, `qa_needs_changes`,
 `approved`, `rejected`, `report_ready`, and `shipped`.
+
+## Repo Intelligence
+
+Repo Intelligence builds a reusable, safe codebase snapshot for a connected
+GitHub repository. After GitHub is connected and a synced repository is mapped to
+a project, open **Projects** and click **Analyze repository**.
+
+The analyzer uses the GitHub App installation token when available and falls
+back to `GITHUB_TOKEN` only when no installation token is available. It indexes
+safe repository metadata and selected architecture files, skips secret-looking
+paths such as `.env` and private keys, avoids binary/generated assets, applies
+file and prompt-size limits, and stores compact summaries instead of exposing raw
+file contents publicly.
+
+Repo Intelligence improves:
+
+- clarification questions, by asking about repo-specific architecture and risk
+  areas when useful;
+- PRD generation, by referencing relevant modules, routes, APIs, auth, database,
+  and deployment constraints;
+- engineering tasks, by suggesting likely modules/files in task descriptions and
+  checklists;
+- AI QA review, by comparing the requirement, PRD, tasks, PR diff, and safe repo
+  context together.
+
+Demo flow:
+
+1. Connect GitHub.
+2. Sync selected repositories.
+3. Select a repository for a project.
+4. Analyze repository.
+5. Create feature.
+6. Generate PRD and engineering tasks.
+7. Link PR and run QA.
+8. Approve and generate report.

@@ -35,7 +35,10 @@ Current migrations include:
 
 - `0002_free_reptil.sql`: client ledger/client-project relationship work
 - `0003_workspace_persona.sql`: workspace use-case/persona and owner foundation
-- `meta/_journal.json`: journal entries through migration index `3`
+- `0004_github_webhook_events.sql`: GitHub webhook event tracking
+- `0005_github_app_installations.sql`: GitHub App installations and project repository mapping
+- `0006_repository_analyses.sql`: Repo Intelligence snapshots
+- `meta/_journal.json`: journal entries through migration index `6`
 
 Commands:
 
@@ -142,20 +145,22 @@ Avoid mismatched demos where the feature request and PR are unrelated. The stron
 1. Log in.
 2. Choose workspace persona.
 3. Create a client or project.
-4. Add a feature request with title, description, business goal, expected behavior, acceptance criteria, and priority.
-5. Generate clarification questions.
-6. Answer required clarification questions.
-7. Generate PRD.
-8. Generate engineering tasks.
-9. Link the matching GitHub PR.
-10. Refresh PR snapshot.
-11. Run AI QA review.
-12. Submit approval decision.
-13. Generate release report.
-14. Open public report.
-15. Return to Release Control Room and confirm status, next action, guided feature stepper, and Trust Timeline.
-16. Return to Dashboard and confirm the next best action card points to the next incomplete release step.
-17. Return to Client Delivery Ledger and confirm ledger, risks, approval, and report archive.
+4. Connect GitHub, sync selected repositories, and map one repository to the project.
+5. Analyze repository and confirm Repo Intelligence shows a summary, stack chips, key modules, branch, and commit.
+6. Add a feature request with title, description, business goal, expected behavior, acceptance criteria, and priority.
+7. Generate clarification questions.
+8. Answer required clarification questions.
+9. Generate PRD.
+10. Generate engineering tasks.
+11. Link the matching GitHub PR.
+12. Refresh PR snapshot.
+13. Run AI QA review.
+14. Submit approval decision.
+15. Generate release report.
+16. Open public report.
+17. Return to Release Control Room and confirm status, next action, guided feature stepper, and Trust Timeline.
+18. Return to Dashboard and confirm the next best action card points to the next incomplete release step.
+19. Return to Client Delivery Ledger and confirm ledger, risks, approval, and report archive.
 
 ## 8. Sample Report Setup
 
@@ -173,7 +178,8 @@ After generating a clean demo report:
 
 - GitHub App installation flow is available at `https://mergemint-eight.vercel.app/api/github/installations/callback`; production testing requires GitHub App env vars and setup URL configuration.
 - GitHub webhooks are available at `https://mergemint-eight.vercel.app/api/webhooks/github`; production testing requires `GITHUB_WEBHOOK_SECRET`.
-- Guided release workflow state is derived from existing GitHub App, project repository, feature, PR, QA, approval, and report records.
+- Guided release workflow state is derived from existing GitHub App, project repository, repo analysis, feature, PR, QA, approval, and report records.
+- Repo Intelligence stores compact safe summaries only; public reports show analysis status, repo name, commit, timestamp, and short summary without raw file contents.
 - No team invites or full role-management UI yet.
 - No client portal permissions yet.
 - No billing system beyond external/payment-link CTA.

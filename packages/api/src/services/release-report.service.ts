@@ -24,6 +24,7 @@ import {
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
 import { normalizeDbTimestamp } from "./prd-staleness";
+import { getLatestRepositoryReportContext } from "./repository-intelligence.service";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -41,6 +42,14 @@ type ReportVisibility = "public" | "private" | "internal";
 type ReportTimelineItem = {
   label: string;
   at: string | null;
+};
+
+type ReportRepositoryContext = {
+  analyzed: boolean;
+  repository: string | null;
+  analyzedCommitSha: string | null;
+  analyzedAt: string | null;
+  summary: string | null;
 };
 
 export type ClientDeliveryReportData = {
@@ -95,6 +104,7 @@ export type ClientDeliveryReportData = {
     merged: boolean;
     latestCommitSha: string | null;
   };
+  repositoryContext?: ReportRepositoryContext;
   qaReview: {
     id: string;
     overallStatus: string;
@@ -150,6 +160,7 @@ export type DeveloperFixReportData = {
     name: string;
   };
   pullRequest: ClientDeliveryReportData["pullRequest"];
+  repositoryContext?: ReportRepositoryContext;
   qaReview: ClientDeliveryReportData["qaReview"];
   requirements: ClientDeliveryReportData["requirements"];
   coverage: ClientDeliveryReportData["coverage"];
@@ -188,6 +199,7 @@ export type InternalReleaseReportData = {
   prd: ClientDeliveryReportData["prd"];
   requirements: ClientDeliveryReportData["requirements"];
   pullRequest: ClientDeliveryReportData["pullRequest"];
+  repositoryContext?: ReportRepositoryContext;
   qaReview: ClientDeliveryReportData["qaReview"];
   coverage: ClientDeliveryReportData["coverage"];
   findings: ClientDeliveryReportData["findings"];
@@ -747,6 +759,10 @@ export async function generateReleaseReport(
     organizationId
   );
   const snapshot = await getLatestSnapshotOrThrow(pullRequest.id);
+  const repositoryContext = await getLatestRepositoryReportContext({
+    organizationId,
+    projectId: project.id
+  });
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -811,6 +827,7 @@ export async function generateReleaseReport(
     },
     requirements: mappedRequirements,
     pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
+    repositoryContext,
     qaReview: mapQaReview(qaReviewBundle.review),
     coverage: mappedCoverage,
     findings: mappedFindings,
@@ -921,6 +938,10 @@ export async function generateInternalReleaseReport(
     organizationId
   );
   const snapshot = await getLatestSnapshotOrThrow(pullRequest.id);
+  const repositoryContext = await getLatestRepositoryReportContext({
+    organizationId,
+    projectId: project.id
+  });
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -978,6 +999,7 @@ export async function generateInternalReleaseReport(
     },
     requirements: mappedRequirements,
     pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
+    repositoryContext,
     qaReview: mapQaReview(qaReviewBundle.review),
     coverage: mappedCoverage,
     findings: mappedFindings,
@@ -1079,6 +1101,10 @@ export async function generateDeveloperFixReport(
     organizationId
   );
   const snapshot = await getLatestSnapshotOrThrow(pullRequest.id);
+  const repositoryContext = await getLatestRepositoryReportContext({
+    organizationId,
+    projectId: project.id
+  });
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -1146,6 +1172,7 @@ export async function generateDeveloperFixReport(
       name: project.name
     },
     pullRequest: mapPullRequest({ pullRequest, repository, snapshot }),
+    repositoryContext,
     qaReview: mapQaReview(qaReviewBundle.review),
     requirements: mappedRequirements,
     coverage: mappedCoverage,

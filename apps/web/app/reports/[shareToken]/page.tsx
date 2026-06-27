@@ -149,6 +149,10 @@ export default async function PublicReleaseReportPage({
           </div>
         </section>
 
+        {data.repositoryContext ? (
+          <RepositoryContextSection context={data.repositoryContext} />
+        ) : null}
+
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
             eyebrow="Requirement Coverage Evidence"
@@ -401,6 +405,10 @@ function InternalReleaseReportPage({
           </div>
         </section>
 
+        {data.repositoryContext ? (
+          <RepositoryContextSection context={data.repositoryContext} />
+        ) : null}
+
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
             eyebrow="Requirement coverage"
@@ -581,6 +589,10 @@ function DeveloperFixReportPage({ data }: { data: DeveloperFixReportData }) {
           </div>
         </section>
 
+        {data.repositoryContext ? (
+          <RepositoryContextSection context={data.repositoryContext} />
+        ) : null}
+
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
             eyebrow="Fix these first"
@@ -674,6 +686,48 @@ function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) 
         {title}
       </h2>
     </div>
+  );
+}
+
+function RepositoryContextSection({
+  context
+}: {
+  context: {
+    analyzed: boolean;
+    repository: string | null;
+    analyzedCommitSha: string | null;
+    analyzedAt: string | null;
+    summary: string | null;
+  };
+}) {
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+      <SectionHeading eyebrow="Repository context" title="Codebase analysis" />
+      <div className="mt-5 grid gap-4 md:grid-cols-[0.8fr_1.2fr]">
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <KeyValue label="Repository analyzed" value={context.analyzed ? "Yes" : "No"} />
+          <KeyValue label="Repository" value={context.repository ?? "Not available"} />
+          <KeyValue
+            label="Analyzed commit"
+            value={shortSha(context.analyzedCommitSha)}
+          />
+          <KeyValue
+            label="Analyzed at"
+            value={context.analyzedAt ? formatDate(context.analyzedAt) : "Not analyzed"}
+          />
+        </div>
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <p className="text-sm leading-6 text-neutral-300">
+            {context.summary ??
+              "No repository intelligence snapshot was available when this report was generated."}
+          </p>
+          <p className="mt-3 text-xs text-neutral-500">
+            Raw file contents, prompts, tokens, and internal errors are not exposed
+            in public reports.
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 

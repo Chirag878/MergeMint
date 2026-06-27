@@ -20,7 +20,10 @@ import type {
   ChangedFile,
   GitHubCheckSnapshot,
   GitHubCommitSnapshot,
-  JsonObject
+  JsonObject,
+  RepositoryAnalysisFileIndexItem,
+  RepositoryAnalysisImportantFile,
+  StringList
 } from "./types";
 
 export const githubAppInstallations = pgTable(
@@ -168,6 +171,64 @@ export const projectGithubRepositories = pgTable(
     index("project_github_repositories_repository_id_idx").on(
       table.repositoryId
     )
+  ]
+);
+
+export const repositoryAnalyses = pgTable(
+  "repository_analyses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "set null"
+    }),
+    repositoryId: uuid("repository_id").references(() => repositories.id, {
+      onDelete: "set null"
+    }),
+    githubRepositoryId: bigint("github_repository_id", { mode: "number" }),
+    installationId: bigint("installation_id", { mode: "number" }),
+    owner: text("owner").notNull(),
+    name: text("name").notNull(),
+    fullName: text("full_name").notNull(),
+    defaultBranch: text("default_branch"),
+    analyzedCommitSha: text("analyzed_commit_sha"),
+    status: text("status").notNull().default("completed"),
+    techStack: jsonb("tech_stack").$type<StringList>(),
+    appStructure: jsonb("app_structure").$type<JsonObject>(),
+    importantFiles:
+      jsonb("important_files").$type<RepositoryAnalysisImportantFile[]>(),
+    routes: jsonb("routes").$type<StringList>(),
+    apiEndpoints: jsonb("api_endpoints").$type<StringList>(),
+    databaseModels: jsonb("database_models").$type<StringList>(),
+    authSummary: text("auth_summary"),
+    testingSummary: text("testing_summary"),
+    deploymentSummary: text("deployment_summary"),
+    riskAreas: jsonb("risk_areas").$type<StringList>(),
+    suggestedFeatureAreas: jsonb("suggested_feature_areas").$type<StringList>(),
+    summary: text("summary"),
+    rawFileIndex:
+      jsonb("raw_file_index").$type<RepositoryAnalysisFileIndexItem[]>(),
+    analysisData: jsonb("analysis_data").$type<JsonObject>(),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => [
+    index("repository_analyses_organization_id_idx").on(table.organizationId),
+    index("repository_analyses_project_id_idx").on(table.projectId),
+    index("repository_analyses_repository_id_idx").on(table.repositoryId),
+    index("repository_analyses_github_repository_id_idx").on(
+      table.githubRepositoryId
+    ),
+    index("repository_analyses_installation_id_idx").on(table.installationId),
+    index("repository_analyses_full_name_idx").on(table.fullName),
+    index("repository_analyses_created_at_idx").on(table.createdAt)
   ]
 );
 

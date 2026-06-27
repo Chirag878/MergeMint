@@ -1,6 +1,7 @@
 import { zodResponseFormat } from "openai/helpers/zod";
 import type { z } from "zod";
 import { getAIConfig, getOpenAIClient, shouldUseMockAI } from "./client";
+import type { RepositoryContext } from "./repository-context";
 import {
   buildClarificationPrompt,
   buildEngineeringTasksPrompt,
@@ -23,6 +24,7 @@ export type RequirementAgentInput = {
   expectedBehavior?: string | null;
   acceptanceCriteria?: string[];
   priority?: string;
+  repositoryContext?: RepositoryContext | null;
 };
 
 export type PRDInput = {
@@ -31,6 +33,7 @@ export type PRDInput = {
     question: string;
     answer?: string | null;
   }>;
+  repositoryContext?: RepositoryContext | null;
 };
 
 export type EngineeringTasksInput = {
@@ -44,6 +47,7 @@ export type EngineeringTasksInput = {
     risks: string[];
   };
   requirements: PRDOutput["requirements"];
+  repositoryContext?: RepositoryContext | null;
 };
 
 export type AITokenUsage = {

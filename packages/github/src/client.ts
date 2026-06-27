@@ -34,6 +34,10 @@ export function hasGitHubAppConfig() {
   return Boolean(env.GITHUB_APP_ID && getGitHubAppPrivateKey());
 }
 
+export function hasFallbackGitHubToken() {
+  return Boolean(env.GITHUB_TOKEN);
+}
+
 export function getGitHubAppInstallUrl() {
   if (!env.GITHUB_APP_SLUG) {
     return null;

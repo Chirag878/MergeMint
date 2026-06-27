@@ -27,6 +27,7 @@ import {
   hasClarificationAnswerChangedAfterPrd,
   isClarificationAnswerNewerThanPrd
 } from "./prd-staleness";
+import { getLatestRepositoryContextForProject } from "./repository-intelligence.service";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -278,13 +279,18 @@ export async function generateClarificationsForFeatureRequest(
     return existing;
   }
 
+  const repositoryContext = await getLatestRepositoryContextForProject({
+    organizationId: workspace.activeOrganization.id,
+    projectId: featureRequest.projectId
+  });
   const payload = {
     title: featureRequest.title,
     description: featureRequest.description,
     businessGoal: featureRequest.businessGoal,
     expectedBehavior: featureRequest.expectedBehavior,
     acceptanceCriteria: featureRequest.acceptanceCriteria,
-    priority: featureRequest.priority
+    priority: featureRequest.priority,
+    repositoryContext
   };
 
   const result = await withAIRun({
@@ -448,6 +454,10 @@ export async function generatePrdForFeatureRequest(
     });
   }
 
+  const repositoryContext = await getLatestRepositoryContextForProject({
+    organizationId: workspace.activeOrganization.id,
+    projectId: featureRequest.projectId
+  });
   const payload = {
     feature: {
       title: featureRequest.title,
@@ -460,7 +470,8 @@ export async function generatePrdForFeatureRequest(
     clarifications: clarifications.map((question) => ({
       question: question.question,
       answer: question.answer
-    }))
+    })),
+    repositoryContext
   };
 
   const result = await withAIRun({
@@ -583,6 +594,10 @@ export async function generateEngineeringTasksForPrd(
     });
   }
 
+  const repositoryContext = await getLatestRepositoryContextForProject({
+    organizationId: workspace.activeOrganization.id,
+    projectId: featureRequest.projectId
+  });
   const payload = {
     prd: {
       title: prd.title,
@@ -598,7 +613,8 @@ export async function generateEngineeringTasksForPrd(
       requirement: requirement.requirement,
       priority: mapRequirementPriority(requirement.priority),
       acceptanceCriteria: requirement.acceptanceCriteria
-    }))
+    })),
+    repositoryContext
   };
 
   const result = await withAIRun({

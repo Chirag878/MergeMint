@@ -118,6 +118,38 @@ export const QAReviewOutputSchema = z.object({
   findings: z.array(QAFindingOutputSchema)
 });
 
+export const RepositoryIntelligenceOutputSchema = z.object({
+  techStack: z.array(z.string().min(1)).max(24),
+  packageManager: z.string().min(1).nullable(),
+  appType: z.string().min(1).nullable(),
+  monorepo: z.boolean(),
+  appStructure: z.object({
+    workspaceType: z.string().min(1).nullable(),
+    majorApps: z.array(z.string().min(1)).max(20),
+    majorPackages: z.array(z.string().min(1)).max(20),
+    keyDirectories: z.array(z.string().min(1)).max(30)
+  }),
+  importantFiles: z
+    .array(
+      z.object({
+        path: z.string().min(1),
+        summary: z.string().min(1),
+        signals: z.array(z.string().min(1)).max(8)
+      })
+    )
+    .max(30),
+  routes: z.array(z.string().min(1)).max(50),
+  apiEndpoints: z.array(z.string().min(1)).max(50),
+  databaseModels: z.array(z.string().min(1)).max(50),
+  authSummary: z.string().min(1).nullable(),
+  testingSummary: z.string().min(1).nullable(),
+  deploymentSummary: z.string().min(1).nullable(),
+  riskAreas: z.array(z.string().min(1)).max(20),
+  suggestedFeatureAreas: z.array(z.string().min(1)).max(30),
+  likelyChangeAreas: z.array(z.string().min(1)).max(30),
+  summary: z.string().min(1)
+});
+
 export type ClarificationQuestionsOutput = z.infer<
   typeof ClarificationQuestionsOutputSchema
 >;
@@ -130,3 +162,6 @@ export type RequirementCoverageOutput = z.infer<
 >;
 export type QAFindingOutput = z.infer<typeof QAFindingOutputSchema>;
 export type QAReviewOutput = z.infer<typeof QAReviewOutputSchema>;
+export type RepositoryIntelligenceOutput = z.infer<
+  typeof RepositoryIntelligenceOutputSchema
+>;

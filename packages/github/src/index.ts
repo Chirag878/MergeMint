@@ -5,6 +5,7 @@ export {
   getGitHubAppClient,
   getGitHubAppInstallUrl,
   getGitHubClient,
+  hasFallbackGitHubToken,
   hasGitHubAppConfig
 } from "./client";
 export {

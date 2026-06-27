@@ -1,6 +1,7 @@
 import { zodResponseFormat } from "openai/helpers/zod";
 import { getAIConfig, getOpenAIClient, shouldUseMockAI } from "./client";
 import { buildQAReviewPrompt, REQUIREMENT_AGENT_SYSTEM_PROMPT } from "./prompts";
+import type { RepositoryContext } from "./repository-context";
 import {
   QAReviewOutputSchema,
   type QAReviewOutput,
@@ -51,6 +52,7 @@ export type QAReviewInput = {
   }>;
   diffText: string;
   diffTruncated: boolean;
+  repositoryContext?: RepositoryContext | null;
 };
 
 export async function generateQAReview(

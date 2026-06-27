@@ -1,3 +1,4 @@
+import type { RepositoryAnalysisInput } from "./repository-analysis-agent";
 import type { EngineeringTasksInput, PRDInput, RequirementAgentInput } from "./requirement-agent";
 import type { QAReviewInput } from "./qa-review-agent";
 
@@ -26,7 +27,8 @@ export function buildClarificationPrompt(input: RequirementAgentInput) {
     "Do not ask generic checklist questions, do not ask about unrelated UI details, and do not repeat information already present in the request.",
     "Do not mention border radius, roles, integrations, billing, notifications, or approvals unless the feature request implies them.",
     "",
-    formatFeatureInput(input)
+    formatFeatureInput(input),
+    formatRepositoryContext(input.repositoryContext)
   ].join("\n");
 }
 
@@ -50,7 +52,8 @@ export function buildPRDPrompt(input: PRDInput) {
     "",
     formatFeatureInput(input.feature),
     "",
-    `Clarifications: ${JSON.stringify(input.clarifications)}`
+    `Clarifications: ${JSON.stringify(input.clarifications)}`,
+    formatRepositoryContext(input.repositoryContext)
   ].join("\n");
 }
 
@@ -65,18 +68,32 @@ export function buildEngineeringTasksPrompt(input: EngineeringTasksInput) {
     "Include at least one test task.",
     "Separate frontend, backend/API, validation, persistence, integration, and testing tasks when those concerns are present.",
     "Mention likely files, modules, routes, services, components, or test targets when the PRD implies them, but do not invent a repository structure if none is implied.",
+    "When repository context is provided, use it to name likely areas/modules and suggested files in the task description and checklist.",
+    "Use the nearest supported task type for repo-aware work: frontend, backend, database, test, docs, infra, or other.",
     "Include backend, frontend, database, security, reporting, or docs tasks when relevant to the requirements.",
     "Include an acceptance checklist with at least 2 concrete checks for every task.",
     "Acceptance checklist items must be verifiable through tests, UI behavior, API responses, persisted state, or release artifacts.",
     "Prefer 5-10 tasks that a developer could pick up directly.",
     "",
     `PRD: ${JSON.stringify(input.prd)}`,
-    `Requirements: ${JSON.stringify(input.requirements)}`
+    `Requirements: ${JSON.stringify(input.requirements)}`,
+    formatRepositoryContext(input.repositoryContext)
   ].join("\n");
 }
 
 function formatFeatureInput(input: RequirementAgentInput) {
   return `Feature request: ${JSON.stringify(input)}`;
+}
+
+function formatRepositoryContext(context: RequirementAgentInput["repositoryContext"]) {
+  if (!context) {
+    return "Repository context: not available. Do not invent repository structure.";
+  }
+
+  return [
+    "Repository context summary only. Use this to improve specificity, but do not expose raw source content:",
+    JSON.stringify(context)
+  ].join("\n");
 }
 
 export function buildQAReviewPrompt(input: QAReviewInput) {
@@ -102,7 +119,21 @@ export function buildQAReviewPrompt(input: QAReviewInput) {
     `Engineering tasks: ${JSON.stringify(input.engineeringTasks)}`,
     `Pull request: ${JSON.stringify(input.pullRequest)}`,
     `Changed files: ${JSON.stringify(input.changedFiles)}`,
+    formatRepositoryContext(input.repositoryContext),
     `Diff truncated: ${input.diffTruncated ? "yes" : "no"}`,
     `Diff text:\n${input.diffText}`
+  ].join("\n");
+}
+
+export function buildRepositoryIntelligencePrompt(input: RepositoryAnalysisInput) {
+  return [
+    "Analyze this GitHub repository snapshot for MergeMint.",
+    "Return only safe architecture and implementation context. Do not include secrets, raw file contents, private keys, env values, or long code snippets.",
+    "Infer the tech stack, app type, package manager, monorepo structure, major apps/packages, routes, API endpoints, database/schema layer, auth/session layer, testing/build setup, deployment hints, risk areas, likely future change areas, and an overall summary.",
+    "Base conclusions only on the file index and compact snippets provided.",
+    "",
+    `Repository metadata: ${JSON.stringify(input.repository)}`,
+    `File index: ${JSON.stringify(input.fileIndex)}`,
+    `Safe file snippets: ${JSON.stringify(input.files)}`
   ].join("\n");
 }

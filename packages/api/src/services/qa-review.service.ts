@@ -29,6 +29,7 @@ import {
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
 import { normalizeDbTimestamp } from "./prd-staleness";
+import { getLatestRepositoryContextForProject } from "./repository-intelligence.service";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
 
 type ProtectedContext = TRPCContext & {
@@ -387,6 +388,10 @@ export async function runQaReviewForFeatureRequest(
     .orderBy(engineeringTasks.createdAt);
 
   const diffText = snapshot.diffText ?? "";
+  const repositoryContext = await getLatestRepositoryContextForProject({
+    organizationId: workspace.activeOrganization.id,
+    projectId: featureRequest.projectId
+  });
   const qaInput: QAReviewInput = {
     featureRequest: {
       title: featureRequest.title,
@@ -430,7 +435,8 @@ export async function runQaReviewForFeatureRequest(
     diffText: diffText.slice(0, 120_000),
     diffTruncated:
       diffText.length > 120_000 ||
-      diffText.includes("[TRUNCATED: diff exceeded maximum snapshot size]")
+      diffText.includes("[TRUNCATED: diff exceeded maximum snapshot size]"),
+    repositoryContext
   };
 
   const aiRun = await createAIRun({
