@@ -5,6 +5,16 @@ import { authClient, type OAuthProvider } from "@veriflow/auth/client";
 
 const postLoginPath = "/app";
 
+function getSafeNextPath() {
+  if (typeof window === "undefined") {
+    return postLoginPath;
+  }
+
+  const next = new URLSearchParams(window.location.search).get("next");
+
+  return next?.startsWith("/") && !next.startsWith("//") ? next : postLoginPath;
+}
+
 const providers: Array<{
   id: OAuthProvider;
   label: string;
@@ -30,7 +40,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   if (session.data?.user && typeof window !== "undefined") {
-    window.location.replace(postLoginPath);
+    window.location.replace(getSafeNextPath());
   }
 
   async function signIn(provider: OAuthProvider) {
@@ -39,7 +49,7 @@ export default function LoginPage() {
 
     const result = await authClient.signIn.social({
       provider,
-      callbackURL: postLoginPath
+      callbackURL: getSafeNextPath()
     });
 
     if (result.error) {

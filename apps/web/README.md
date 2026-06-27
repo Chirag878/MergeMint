@@ -23,6 +23,12 @@ MergeMint accepts GitHub webhook events at:
 https://your-domain.com/api/webhooks/github
 ```
 
+Production webhook URL:
+
+```text
+https://mergemint-eight.vercel.app/api/webhooks/github
+```
+
 Configure the webhook in GitHub with:
 
 - Content type: `application/json`
@@ -60,9 +66,21 @@ To test:
 Create a GitHub App for MergeMint with:
 
 - Homepage URL: `https://your-domain.com`
-- Setup URL: `https://your-domain.com/api/github/installations/callback`
-- Webhook URL: `https://your-domain.com/api/webhooks/github`
+- Setup URL: `https://mergemint-eight.vercel.app/api/github/installations/callback`
+- Webhook URL: `https://mergemint-eight.vercel.app/api/webhooks/github`
 - Webhook secret: same value as `GITHUB_WEBHOOK_SECRET`
+
+The Setup URL is where GitHub redirects users after app installation:
+
+```text
+https://mergemint-eight.vercel.app/api/github/installations/callback
+```
+
+This is different from the webhook URL, which receives signed GitHub events:
+
+```text
+https://mergemint-eight.vercel.app/api/webhooks/github
+```
 
 Required permissions:
 

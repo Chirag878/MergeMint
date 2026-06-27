@@ -11,6 +11,7 @@ function redirectTo(path: string, request: Request) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const installationIdText = url.searchParams.get("installation_id");
+  const setupAction = url.searchParams.get("setup_action");
   const installationId = installationIdText ? Number(installationIdText) : NaN;
 
   if (!Number.isInteger(installationId) || installationId <= 0) {
@@ -20,20 +21,37 @@ export async function GET(request: Request) {
   const authSession = await getSessionFromHeaders(request.headers);
 
   if (!authSession?.user || !authSession.session) {
+    const callbackPath = new URL("/api/github/installations/callback", request.url);
+    callbackPath.searchParams.set("installation_id", String(installationId));
+    if (setupAction) {
+      callbackPath.searchParams.set("setup_action", setupAction);
+    }
+
     const next = encodeURIComponent(
-      `/api/github/installations/callback?installation_id=${installationId}`
+      `${callbackPath.pathname}${callbackPath.search}`
     );
     return redirectTo(`/login?next=${next}`, request);
   }
 
   try {
-    await completeGitHubAppInstallation({
+    const result = await completeGitHubAppInstallation({
       user: authSession.user,
       session: authSession.session,
-      installationId
+      installationId,
+      setupAction
     });
 
-    return redirectTo("/app/projects?githubInstallation=connected", request);
+    const redirectPath = new URL("/app/projects", request.url);
+    redirectPath.searchParams.set("githubInstallation", "connected");
+    redirectPath.searchParams.set(
+      "repositoriesSynced",
+      String(result.syncedRepositories.length)
+    );
+    if (setupAction) {
+      redirectPath.searchParams.set("setupAction", setupAction);
+    }
+
+    return redirectTo(`${redirectPath.pathname}${redirectPath.search}`, request);
   } catch (error) {
     console.error("[github-app] installation_callback_failed", {
       message: error instanceof Error ? error.message : "unknown",

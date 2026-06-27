@@ -170,8 +170,8 @@ After generating a clean demo report:
 
 ## 9. Known Limitations
 
-- No GitHub App installation flow yet.
-- No GitHub webhooks yet.
+- GitHub App installation flow is available at `https://mergemint-eight.vercel.app/api/github/installations/callback`; production testing requires GitHub App env vars and setup URL configuration.
+- GitHub webhooks are available at `https://mergemint-eight.vercel.app/api/webhooks/github`; production testing requires `GITHUB_WEBHOOK_SECRET`.
 - No team invites or full role-management UI yet.
 - No client portal permissions yet.
 - No billing system beyond external/payment-link CTA.

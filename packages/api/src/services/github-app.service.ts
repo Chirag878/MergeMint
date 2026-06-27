@@ -124,6 +124,7 @@ export async function getGitHubAppInstallLink(ctx: ProtectedContext) {
 export async function completeGitHubAppInstallation(
   input: WorkspaceInput & {
     installationId: number;
+    setupAction?: string | null;
   }
 ) {
   const workspace = await ensureUserWorkspace(toBootstrapInput(input));
@@ -171,7 +172,16 @@ export async function completeGitHubAppInstallation(
     })
     .returning();
 
-  return stored;
+  const syncedRepositories = await syncInstallationRepositoriesForOrganization({
+    organizationId: workspace.activeOrganization.id,
+    installationId: input.installationId
+  });
+
+  return {
+    installation: stored,
+    syncedRepositories,
+    setupAction: input.setupAction ?? null
+  };
 }
 
 export async function getGitHubAppInstallations(ctx: ProtectedContext) {
@@ -199,9 +209,17 @@ export async function syncGitHubAppInstallationRepositories(
     installationId: input.installationId
   });
 
-  const githubRepositories = await fetchInstallationRepositories(
-    input.installationId
-  );
+  return syncInstallationRepositoriesForOrganization({
+    organizationId: workspace.activeOrganization.id,
+    installationId: input.installationId
+  });
+}
+
+async function syncInstallationRepositoriesForOrganization(input: {
+  organizationId: string;
+  installationId: number;
+}) {
+  const githubRepositories = await fetchInstallationRepositories(input.installationId);
   const now = new Date();
 
   await db
@@ -212,7 +230,7 @@ export async function syncGitHubAppInstallationRepositories(
     })
     .where(
       and(
-        eq(repositories.organizationId, workspace.activeOrganization.id),
+        eq(repositories.organizationId, input.organizationId),
         eq(repositories.githubAppInstallationId, input.installationId)
       )
     );
@@ -222,7 +240,7 @@ export async function syncGitHubAppInstallationRepositories(
     const [stored] = await db
       .insert(repositories)
       .values({
-        organizationId: workspace.activeOrganization.id,
+        organizationId: input.organizationId,
         githubRepoId: String(repository.id),
         githubAppInstallationId: input.installationId,
         owner: repository.owner.login,
@@ -404,4 +422,3 @@ export async function disconnectGitHubRepositoryFromProject(
     ok: true
   };
 }
-
