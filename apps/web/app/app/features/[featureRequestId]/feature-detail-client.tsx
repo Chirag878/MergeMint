@@ -336,7 +336,9 @@ export function FeatureDetailClient({
       }),
       utils.engineeringTasks.listByFeature.invalidate({
         featureRequestId
-      })
+      }),
+      utils.dashboard.getSummary.invalidate(),
+      utils.projects.list.invalidate()
     ]);
   };
   const generateClarifications =
@@ -698,23 +700,16 @@ export function FeatureDetailClient({
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Link href="/app/features" className="text-sm text-neutral-500">
-            Back to features
-          </Link>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-            {feature.title}
-          </h1>
-          <p className="mt-3 max-w-3xl text-neutral-400">
-            {feature.description}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Badge>{feature.priority}</Badge>
-          <Badge>{feature.status}</Badge>
-        </div>
-      </div>
+      <FeatureHierarchyHeader
+        feature={{
+          title: feature.title,
+          description: feature.description,
+          priority: feature.priority,
+          status: feature.status
+        }}
+        controlRoom={controlRoom.data}
+        prdMayBeOutdated={prdMayBeOutdated}
+      />
 
       {controlRoom.isLoading ? (
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5 text-sm text-neutral-400">
@@ -1722,6 +1717,111 @@ function FeatureDetailTabs({
         </button>
       ))}
     </nav>
+  );
+}
+
+function FeatureHierarchyHeader({
+  feature,
+  controlRoom,
+  prdMayBeOutdated
+}: {
+  feature: {
+    title: string;
+    description: string;
+    priority: string;
+    status: string;
+  };
+  controlRoom?: ReleaseControlRoomView;
+  prdMayBeOutdated: boolean;
+}) {
+  const projectName = controlRoom?.project.name ?? "Project loading";
+  const projectHref = controlRoom?.project.id
+    ? `/app/projects?projectId=${controlRoom.project.id}`
+    : "/app/projects";
+  const clientName =
+    controlRoom?.client?.companyName ??
+    controlRoom?.client?.name ??
+    controlRoom?.project.clientName ??
+    null;
+  const repositoryName = controlRoom?.prEvidence?.repo ?? "No PR linked yet";
+  const currentStep =
+    controlRoom?.progress.find((step) => step.status === "current") ??
+    controlRoom?.progress.find((step) => step.status === "blocked");
+  const readiness = prdMayBeOutdated
+    ? "PRD outdated"
+    : controlRoom?.releaseReadinessStatus ?? "Preparing";
+  const nextAction = controlRoom?.nextBestAction.title ?? "Load release workflow";
+
+  return (
+    <header className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <nav className="flex flex-wrap items-center gap-2 text-sm text-neutral-500">
+        <Link href="/app/projects" className="transition hover:text-neutral-300">
+          Projects
+        </Link>
+        <span>/</span>
+        <Link href={projectHref} className="transition hover:text-neutral-300">
+          {projectName}
+        </Link>
+        <span>/</span>
+        <Link href="/app/features" className="transition hover:text-neutral-300">
+          Features
+        </Link>
+        <span>/</span>
+        <span className="text-neutral-300">{feature.title}</span>
+      </nav>
+
+      <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium uppercase tracking-[0.24em] text-blue-400">
+            Feature release workflow
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-neutral-100">
+            {feature.title}
+          </h1>
+          <p className="mt-3 max-w-3xl text-neutral-400">
+            {feature.description}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge>{feature.priority}</Badge>
+          <Badge>{feature.status}</Badge>
+          <StatusBadge status={readiness} />
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <ContextTile label="Project" value={projectName} detail={clientName ?? "No client ledger"} />
+        <ContextTile label="Repository / PR" value={repositoryName} detail="Project repo drives PR evidence" />
+        <ContextTile
+          label="Workflow step"
+          value={currentStep?.label ?? "Not started"}
+          detail={currentStep?.blockedReason ?? currentStep?.status ?? "Ready for setup"}
+        />
+        <ContextTile label="Next action" value={nextAction} detail={readiness} />
+      </div>
+    </header>
+  );
+}
+
+function ContextTile({
+  label,
+  value,
+  detail
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3">
+      <p className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500">
+        {label}
+      </p>
+      <p className="mt-2 truncate text-sm font-medium text-neutral-100">
+        {value}
+      </p>
+      <p className="mt-1 line-clamp-2 text-xs text-neutral-500">{detail}</p>
+    </div>
   );
 }
 

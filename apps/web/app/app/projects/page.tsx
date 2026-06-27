@@ -2,8 +2,13 @@ import { ensureUserWorkspace } from "@veriflow/api";
 import { ProjectsClient } from "./projects-client";
 import { requireWebSession } from "../../server-auth";
 
-export default async function AppProjectsPage() {
+export default async function AppProjectsPage({
+  searchParams
+}: {
+  searchParams: Promise<{ projectId?: string }>;
+}) {
   const session = await requireWebSession();
+  const { projectId } = await searchParams;
   const workspace = await ensureUserWorkspace({
     user: session.user,
     session: session.session
@@ -21,7 +26,7 @@ export default async function AppProjectsPage() {
             Organize client or product work before drafting feature requests.
           </p>
         </div>
-        <ProjectsClient />
+        <ProjectsClient initialProjectId={projectId} />
       </section>
     </main>
   );

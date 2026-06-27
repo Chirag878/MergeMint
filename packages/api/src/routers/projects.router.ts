@@ -1,7 +1,19 @@
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { clients, db, projects } from "@veriflow/db";
+import {
+  approvals,
+  clients,
+  db,
+  featureRequests,
+  projectGithubRepositories,
+  projects,
+  pullRequests,
+  qaReviews,
+  releaseReports,
+  repositories,
+  repositoryAnalyses
+} from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import { ensureUserWorkspace } from "../services/workspace-bootstrap.service";
 import { protectedProcedure, router } from "../trpc";
@@ -84,13 +96,169 @@ export const projectsRouter = router({
     const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
 
     assertRoleCan(workspace.membership.role, "project:read");
+    const organizationId = workspace.activeOrganization.id;
 
-    return db
+    const projectRows = await db
       .select()
       .from(projects)
-      .where(eq(projects.organizationId, workspace.activeOrganization.id))
+      .where(eq(projects.organizationId, organizationId))
       .orderBy(desc(projects.createdAt))
       .limit(100);
+    const projectIds = projectRows.map((project) => project.id);
+
+    if (projectIds.length === 0) {
+      return [];
+    }
+
+    const [
+      featureRows,
+      projectRepositoryRows,
+      analysisRows
+    ] = await Promise.all([
+      db
+        .select()
+        .from(featureRequests)
+        .where(
+          and(
+            eq(featureRequests.organizationId, organizationId),
+            inArray(featureRequests.projectId, projectIds)
+          )
+        ),
+      db
+        .select({
+          projectRepository: projectGithubRepositories,
+          repository: repositories
+        })
+        .from(projectGithubRepositories)
+        .innerJoin(
+          repositories,
+          eq(projectGithubRepositories.repositoryId, repositories.id)
+        )
+        .where(
+          and(
+            eq(projectGithubRepositories.organizationId, organizationId),
+            eq(repositories.organizationId, organizationId),
+            inArray(projectGithubRepositories.projectId, projectIds)
+          )
+        ),
+      db
+        .select()
+        .from(repositoryAnalyses)
+        .where(
+          and(
+            eq(repositoryAnalyses.organizationId, organizationId),
+            inArray(repositoryAnalyses.projectId, projectIds)
+          )
+        )
+    ]);
+    const featureIds = featureRows.map((feature) => feature.id);
+    const [pullRequestRows, qaReviewRows, approvalRows, reportRows] =
+      featureIds.length > 0
+        ? await Promise.all([
+            db
+              .select()
+              .from(pullRequests)
+              .where(
+                and(
+                  eq(pullRequests.organizationId, organizationId),
+                  inArray(pullRequests.projectId, projectIds)
+                )
+              ),
+            db
+              .select()
+              .from(qaReviews)
+              .where(
+                and(
+                  eq(qaReviews.organizationId, organizationId),
+                  inArray(qaReviews.featureRequestId, featureIds)
+                )
+              ),
+            db
+              .select()
+              .from(approvals)
+              .where(
+                and(
+                  eq(approvals.organizationId, organizationId),
+                  inArray(approvals.featureRequestId, featureIds)
+                )
+              ),
+            db
+              .select()
+              .from(releaseReports)
+              .where(
+                and(
+                  eq(releaseReports.organizationId, organizationId),
+                  inArray(releaseReports.projectId, projectIds)
+                )
+              )
+          ])
+        : [
+            [] as Array<typeof pullRequests.$inferSelect>,
+            [] as Array<typeof qaReviews.$inferSelect>,
+            [] as Array<typeof approvals.$inferSelect>,
+            [] as Array<typeof releaseReports.$inferSelect>
+          ];
+
+    return projectRows.map((project) => {
+      const projectFeatures = featureRows.filter(
+        (feature) => feature.projectId === project.id
+      );
+      const projectFeatureIds = new Set(projectFeatures.map((feature) => feature.id));
+      const connected = projectRepositoryRows.find(
+        (row) => row.projectRepository.projectId === project.id
+      );
+      const hasAnalysis = analysisRows.some(
+        (analysis) =>
+          analysis.projectId === project.id && analysis.status === "completed"
+      );
+      const featureIdsWithPr = new Set(
+        pullRequestRows
+          .filter((pullRequest) => pullRequest.projectId === project.id)
+          .map((pullRequest) => pullRequest.featureRequestId)
+      );
+      const featureIdsWithQa = new Set(
+        qaReviewRows
+          .filter((review) => projectFeatureIds.has(review.featureRequestId))
+          .map((review) => review.featureRequestId)
+      );
+      const featureIdsWithApproval = new Set(
+        approvalRows
+          .filter((approval) => projectFeatureIds.has(approval.featureRequestId))
+          .map((approval) => approval.featureRequestId)
+      );
+      const featureIdsWithReport = new Set(
+        reportRows
+          .filter((report) => report.projectId === project.id)
+          .map((report) => report.featureRequestId)
+      );
+      const featuresNeedingAction = projectFeatures.filter((feature) => {
+        if (!projectFeatureIds.has(feature.id)) return false;
+        return (
+          !featureIdsWithPr.has(feature.id) ||
+          !featureIdsWithQa.has(feature.id) ||
+          !featureIdsWithApproval.has(feature.id) ||
+          !featureIdsWithReport.has(feature.id)
+        );
+      }).length;
+      const latestFeature = projectFeatures.reduce<
+        (typeof projectFeatures)[number] | null
+      >((latest, feature) => {
+        if (!latest) return feature;
+        return feature.createdAt > latest.createdAt ? feature : latest;
+      }, null);
+
+      return {
+        ...project,
+        connectedRepository: connected?.repository ?? null,
+        repositoryAnalyzed: hasAnalysis,
+        activeFeatureCount: projectFeatures.filter(
+          (feature) => feature.status !== "archived"
+        ).length,
+        featuresNeedingAction,
+        latestReleaseState:
+          latestFeature?.status ?? (connected ? "repo_connected" : "setup")
+      };
+    });
   }),
 
   getById: protectedProcedure

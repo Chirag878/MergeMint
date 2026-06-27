@@ -239,8 +239,16 @@ export function ClientLedgerClient({ clientId }: { clientId: string }) {
 
   const createProject = trpc.projects.create.useMutation({
     onSuccess: (project) => {
+      const projectListItem = {
+        ...project,
+        connectedRepository: null,
+        repositoryAnalyzed: false,
+        activeFeatureCount: 0,
+        featuresNeedingAction: 0,
+        latestReleaseState: "setup"
+      };
       utils.projects.list.setData(undefined, (current) =>
-        current ? [project, ...current] : [project]
+        current ? [projectListItem, ...current] : [projectListItem]
       );
       setShowNewProjectForm(false);
       setNewProjectName("");

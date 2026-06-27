@@ -15,8 +15,11 @@ export function FeaturesClient({
   const router = useRouter();
   const utils = trpc.useUtils();
   const projects = trpc.projects.list.useQuery();
-  const features = trpc.featureRequests.list.useQuery();
+  const features = trpc.featureRequests.list.useQuery(undefined, {
+    enabled: !initialProjectId
+  });
   const [projectId, setProjectId] = useState("");
+  const [projectLocked, setProjectLocked] = useState(Boolean(initialProjectId));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [businessGoal, setBusinessGoal] = useState("");
@@ -52,6 +55,7 @@ export function FeaturesClient({
       }
       void utils.dashboard.getSummary.invalidate();
       void utils.featureRequests.list.invalidate();
+      void utils.projects.list.invalidate();
     }
   });
 
@@ -65,10 +69,35 @@ export function FeaturesClient({
     }
   }, [initialProjectId, projectId, projects.data]);
 
+  useEffect(() => {
+    if (
+      projectLocked &&
+      initialProjectId &&
+      projects.data &&
+      !projects.data.some((project) => project.id === initialProjectId)
+    ) {
+      setProjectLocked(false);
+    }
+  }, [initialProjectId, projectLocked, projects.data]);
+
   const projectNameById = useMemo(
     () => new Map(projects.data?.map((project) => [project.id, project.name])),
     [projects.data]
   );
+  const selectedProject = projects.data?.find((project) => project.id === projectId);
+  const projectFeatures = trpc.featureRequests.listByProject.useQuery(
+    { projectId },
+    { enabled: Boolean(projectId) }
+  );
+  const projectIntegration = trpc.githubApp.getProjectIntegration.useQuery(
+    { projectId },
+    { enabled: Boolean(projectId) }
+  );
+  const latestAnalysis = trpc.repositoryIntelligence.getLatestByProject.useQuery(
+    { projectId },
+    { enabled: Boolean(projectId) }
+  );
+  const visibleFeatures = projectId ? projectFeatures.data : features.data;
 
   const hasProjects = (projects.data?.length ?? 0) > 0;
   const canSubmit =
@@ -144,15 +173,32 @@ export function FeaturesClient({
         <div>
           <h2 className="text-lg font-medium">Create Feature Request</h2>
           <p className="mt-1 text-sm text-neutral-500">
-            Draft a scoped request that can become a PRD and task plan.
+            {selectedProject
+              ? `Creating feature for: ${selectedProject.name}`
+              : "Select a project first, then draft a scoped request."}
           </p>
         </div>
+
+        {selectedProject ? (
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
+            <p>Project: {selectedProject.name}</p>
+            <p>
+              Repository:{" "}
+              {projectIntegration.data?.repository.fullName ?? "Not connected"}
+            </p>
+            <p>
+              Repo intelligence:{" "}
+              {latestAnalysis.data?.status === "completed" ? "Ready" : "Missing"}
+            </p>
+          </div>
+        ) : null}
 
         <label className="block text-sm">
           <span className="text-neutral-300">Project</span>
           <select
             value={projectId}
             onChange={(event) => setProjectId(event.target.value)}
+            disabled={projectLocked}
             className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
             required
           >
@@ -163,6 +209,15 @@ export function FeaturesClient({
               </option>
             ))}
           </select>
+          {projectLocked ? (
+            <button
+              type="button"
+              onClick={() => setProjectLocked(false)}
+              className="mt-2 text-xs font-medium text-blue-300 transition hover:text-blue-200"
+            >
+              Change project
+            </button>
+          ) : null}
         </label>
 
         <label className="block text-sm">
@@ -245,29 +300,37 @@ export function FeaturesClient({
           disabled={!canSubmit}
           className="w-full rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {createFeature.isPending ? "Creating..." : "Create Feature Request"}
+          {createFeature.isPending ? "Creating..." : "Create feature and continue"}
         </button>
       </form>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 className="text-lg font-medium">Feature request list</h2>
+        <h2 className="text-lg font-medium">
+          {selectedProject ? `${selectedProject.name} features` : "Feature request list"}
+        </h2>
 
-        {features.isLoading ? (
+        {(projectId ? projectFeatures.isLoading : features.isLoading) ? (
           <p className="mt-6 text-sm text-neutral-400">Loading...</p>
         ) : null}
 
-        {features.error ? (
-          <p className="mt-6 text-sm text-red-300">{features.error.message}</p>
+        {(projectId ? projectFeatures.error : features.error) ? (
+          <p className="mt-6 text-sm text-red-300">
+            {(projectId ? projectFeatures.error : features.error)?.message}
+          </p>
         ) : null}
 
-        {!features.isLoading && !features.error && features.data?.length === 0 ? (
+        {!(projectId ? projectFeatures.isLoading : features.isLoading) &&
+        !(projectId ? projectFeatures.error : features.error) &&
+        visibleFeatures?.length === 0 ? (
           <div className="mt-6 rounded-md border border-neutral-800 bg-neutral-950 p-5 text-sm text-neutral-400">
-            No feature requests yet.
+            {selectedProject
+              ? "Create the first feature request for this project."
+              : "Select a project to create and review feature requests."}
           </div>
         ) : null}
 
         <div className="mt-5 space-y-3">
-          {features.data?.map((feature) => (
+          {visibleFeatures?.map((feature) => (
             <Link
               key={feature.id}
               href={`/app/features/${feature.id}`}

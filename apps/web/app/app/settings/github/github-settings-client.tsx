@@ -27,7 +27,9 @@ export function GitHubSettingsClient() {
         await Promise.all([
           utils.githubApp.getInstallations.invalidate(),
           utils.githubApp.listInstallationRepositories.invalidate(),
-          utils.guidedWorkflow.getWorkspaceSetup.invalidate()
+          utils.guidedWorkflow.getWorkspaceSetup.invalidate(),
+          utils.projects.list.invalidate(),
+          utils.dashboard.getSummary.invalidate()
         ]);
       }
     });
@@ -95,11 +97,21 @@ export function GitHubSettingsClient() {
               {syncRepositories.isPending ? "Syncing..." : primaryLabel}
             </button>
           ) : null}
+          {activeInstallation ? (
+            <a
+              href={`https://github.com/settings/installations/${activeInstallation.installationId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+            >
+              Manage installation
+            </a>
+          ) : null}
           <Link
             href="/app/projects"
             className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
           >
-            Connect repo to project
+            Back to projects
           </Link>
         </div>
 

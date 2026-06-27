@@ -5,22 +5,35 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/react";
 
-export function ProjectsClient() {
+export function ProjectsClient({
+  initialProjectId
+}: {
+  initialProjectId?: string;
+}) {
   const router = useRouter();
   const utils = trpc.useUtils();
   const projects = trpc.projects.list.useQuery();
   const clients = trpc.clients.listBasic.useQuery();
+  const githubInstallations = trpc.githubApp.getInstallations.useQuery();
   const createProject = trpc.projects.create.useMutation({
     onSuccess: (project) => {
+      const projectListItem = {
+        ...project,
+        connectedRepository: null,
+        repositoryAnalyzed: false,
+        activeFeatureCount: 0,
+        featuresNeedingAction: 0,
+        latestReleaseState: "setup"
+      };
       utils.projects.list.setData(undefined, (current) =>
-        current ? [project, ...current] : [project]
+        current ? [projectListItem, ...current] : [projectListItem]
       );
       setName("");
       setDescription("");
       setClientName("");
       setClientId("");
       setSuccess("Project created.");
-      router.push(`/app/features?projectId=${project.id}`);
+      router.push(`/app/projects?projectId=${project.id}`);
       if (project.clientId) {
         void utils.clients.getDeliveryLedger.invalidate({
           clientId: project.clientId
@@ -135,7 +148,10 @@ export function ProjectsClient() {
         </button>
         </form>
 
-        <ProjectSetupPanel projects={projects.data ?? []} />
+        <ProjectSetupPanel
+          projects={projects.data ?? []}
+          initialProjectId={initialProjectId}
+        />
       </div>
 
       <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
@@ -165,7 +181,12 @@ export function ProjectsClient() {
         ) : null}
 
         <div className="mt-5 space-y-3">
-          {projects.data?.map((project) => (
+          {projects.data?.map((project) => {
+            const projectCta = getProjectPrimaryCta(project, {
+              githubInstalled: (githubInstallations.data?.length ?? 0) > 0
+            });
+
+            return (
             <article
               key={project.id}
               className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
@@ -178,10 +199,21 @@ export function ProjectsClient() {
                       {project.clientName}
                     </p>
                   ) : null}
+                  <p className="mt-2 text-sm text-neutral-500">
+                    Repo: {project.connectedRepository?.fullName ?? "Not connected"}
+                  </p>
                 </div>
                 <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300">
-                  {project.status}
+                  {formatProjectState(project.latestReleaseState)}
                 </span>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <ProjectMetric label="Active features" value={project.activeFeatureCount ?? 0} />
+                <ProjectMetric label="Needs action" value={project.featuresNeedingAction ?? 0} />
+                <ProjectMetric
+                  label="Repo analysis"
+                  value={project.repositoryAnalyzed ? "Ready" : "Missing"}
+                />
               </div>
               {project.description ? (
                 <p className="mt-3 text-sm text-neutral-400">
@@ -192,13 +224,14 @@ export function ProjectsClient() {
                 Created {new Date(project.createdAt).toLocaleDateString()}
               </p>
               <Link
-                href={`/app/features?projectId=${project.id}`}
-                className="mt-4 inline-flex rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+                href={projectCta.href}
+                className="mt-4 inline-flex rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white"
               >
-                Create Feature Request
+                {projectCta.label}
               </Link>
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>
@@ -206,12 +239,14 @@ export function ProjectsClient() {
 }
 
 function ProjectSetupPanel({
-  projects
+  projects,
+  initialProjectId
 }: {
   projects: Array<{
     id: string;
     name: string;
   }>;
+  initialProjectId?: string;
 }) {
   const utils = trpc.useUtils();
   const installations = trpc.githubApp.getInstallations.useQuery();
@@ -265,6 +300,8 @@ function ProjectSetupPanel({
       onSuccess: async (synced) => {
         await utils.githubApp.listInstallationRepositories.invalidate();
         await utils.guidedWorkflow.getProjectSetup.invalidate();
+        await utils.projects.list.invalidate();
+        await utils.dashboard.getSummary.invalidate();
         if (synced[0]) {
           setRepositoryId(synced[0].id);
         }
@@ -277,6 +314,8 @@ function ProjectSetupPanel({
         await utils.githubApp.listInstallationRepositories.invalidate();
         await utils.guidedWorkflow.getProjectSetup.invalidate();
         await utils.repositoryIntelligence.getLatestByProject.invalidate();
+        await utils.projects.list.invalidate();
+        await utils.dashboard.getSummary.invalidate();
       }
     });
   const disconnectRepository =
@@ -287,6 +326,8 @@ function ProjectSetupPanel({
         await utils.githubApp.getProjectIntegration.invalidate();
         await utils.guidedWorkflow.getProjectSetup.invalidate();
         await utils.repositoryIntelligence.getLatestByProject.invalidate();
+        await utils.projects.list.invalidate();
+        await utils.dashboard.getSummary.invalidate();
       }
     });
   const analyzeRepository =
@@ -296,6 +337,8 @@ function ProjectSetupPanel({
           projectId
         });
         await utils.guidedWorkflow.getProjectSetup.invalidate();
+        await utils.projects.list.invalidate();
+        await utils.dashboard.getSummary.invalidate();
         setShowAnalysisDetails(true);
       }
     });
@@ -312,10 +355,14 @@ function ProjectSetupPanel({
     Boolean(projectId && repositoryId) && !connectRepository.isPending;
 
   useEffect(() => {
-    if (!projectId && projects[0]) {
-      setProjectId(projects[0].id);
+    if (!projectId) {
+      if (initialProjectId && projects.some((project) => project.id === initialProjectId)) {
+        setProjectId(initialProjectId);
+      } else if (projects[0]) {
+        setProjectId(projects[0].id);
+      }
     }
-  }, [projectId, projects]);
+  }, [initialProjectId, projectId, projects]);
 
   useEffect(() => {
     if (!installationIdText && installations.data?.[0]) {
@@ -373,7 +420,7 @@ function ProjectSetupPanel({
           href="/app/settings/github"
           className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
         >
-          Workspace GitHub settings
+          Connect GitHub
         </Link>
         {installationId ? (
           <button
@@ -397,8 +444,7 @@ function ProjectSetupPanel({
 
       {installations.data?.length === 0 ? (
         <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
-          Not connected. Install the GitHub App, then return here to sync
-          repositories.
+          Connect GitHub so MergeMint can verify PRs against requirements.
         </p>
       ) : null}
 
@@ -451,6 +497,12 @@ function ProjectSetupPanel({
             <p>Status: {activeInstallation.suspendedAt ? "Suspended" : "Installed"}</p>
             <p>Repository access: {activeInstallation.repositorySelection ?? "selected"}</p>
           </div>
+        ) : null}
+
+        {activeInstallation && !repositories.isLoading && repositories.data?.length === 0 ? (
+          <p className="rounded-md border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
+            Sync selected repositories from your GitHub App installation.
+          </p>
         ) : null}
 
         <label className="block text-sm">
@@ -786,6 +838,74 @@ function DetailText({ title, value }: { title: string; value?: string | null }) 
     <div>
       <p className="font-medium text-neutral-200">{title}</p>
       <p className="mt-1 text-neutral-400">{value ?? "Not detected."}</p>
+    </div>
+  );
+}
+
+function getProjectPrimaryCta(
+  project: {
+    id: string;
+    connectedRepository?: { fullName: string } | null;
+    repositoryAnalyzed?: boolean;
+    activeFeatureCount?: number;
+  },
+  options: {
+    githubInstalled: boolean;
+  }
+) {
+  if (!options.githubInstalled) {
+    return {
+      label: "Connect GitHub",
+      href: "/app/settings/github"
+    };
+  }
+
+  if (!project.connectedRepository) {
+    return {
+      label: "Connect repository",
+      href: `/app/projects?projectId=${project.id}`
+    };
+  }
+
+  if (!project.repositoryAnalyzed) {
+    return {
+      label: "Analyze repository",
+      href: `/app/projects?projectId=${project.id}`
+    };
+  }
+
+  if (!project.activeFeatureCount) {
+    return {
+      label: "Create feature request",
+      href: `/app/features?projectId=${project.id}`
+    };
+  }
+
+  return {
+    label: "Continue release",
+    href: `/app/features?projectId=${project.id}`
+  };
+}
+
+function formatProjectState(state?: string | null) {
+  if (!state) {
+    return "setup";
+  }
+
+  return state.replaceAll("_", " ");
+}
+
+function ProjectMetric({
+  label,
+  value
+}: {
+  label: string;
+  value: number | string;
+}) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="mt-1 text-sm font-medium text-neutral-100">{value}</p>
     </div>
   );
 }

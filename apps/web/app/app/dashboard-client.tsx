@@ -31,26 +31,6 @@ const personaOptions: Array<{
   }
 ];
 
-const quickActions = [
-  ["New Client", "/app/clients"],
-  ["New Project", "/app/projects"],
-  ["Add Feature Request", "/app/features"],
-  ["View Client Ledgers", "/app/clients"],
-  ["Open Features", "/app/features"],
-  ["Pricing / Plan", "/pricing"]
-] as const;
-
-const workflowSteps = [
-  ["Client optional", "Use client ledgers when delivery proof is client-facing."],
-  ["Project", "Project is the base workspace for features and PR evidence."],
-  ["Feature Request", "Feature is the verification unit."],
-  ["PRD / REQ IDs", "Generate traceable requirements before implementation review."],
-  ["GitHub PR", "Link the implementation PR and refresh evidence."],
-  ["AI QA", "Compare code evidence against agreed requirements."],
-  ["Approval", "Record the human release decision and accepted risk."],
-  ["Report", "Share the proof artifact with stakeholders."]
-] as const;
-
 export function DashboardClient({
   userLabel
 }: {
@@ -168,30 +148,35 @@ export function DashboardClient({
           />
         </section>
 
-        <StatsGrid stats={data.stats} />
-
         {data.isEmpty ? <FirstTimeEmptyState /> : null}
-
-        <section className="grid gap-4 lg:grid-cols-3">
-          {quickActions.map(([label, href]) => (
-            <Link
-              key={label}
-              href={href}
-              className="vf-fade-up rounded-md border border-white/10 bg-white/[0.035] p-5 transition hover:-translate-y-1 hover:border-emerald-300/30 hover:bg-white/[0.055]"
-            >
-              <p className="font-semibold text-white">{label}</p>
-              <p className="mt-2 text-sm text-neutral-500">Open {label.toLowerCase()}.</p>
-            </Link>
-          ))}
-        </section>
-
-        <WorkflowGuide />
 
         <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
           <NeedsAttention items={data.needsAttention} />
           <div className="space-y-5">
             <RecentClients clients={data.recentClients} />
             <RecentProjects projects={data.recentProjects} />
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Workspace snapshot
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Lightweight health counters after the active work queue.
+              </p>
+            </div>
+            <Link
+              href="/app/projects"
+              className="rounded-md border border-white/15 px-3 py-2 text-sm font-semibold text-white transition hover:border-emerald-300/40"
+            >
+              Open projects
+            </Link>
+          </div>
+          <div className="mt-4">
+            <StatsGrid stats={data.stats} />
           </div>
         </section>
       </section>
@@ -492,25 +477,6 @@ function FirstTimeEmptyState() {
   );
 }
 
-function WorkflowGuide() {
-  return (
-    <section className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
-      <h2 className="text-lg font-semibold text-white">Product workflow</h2>
-      <div className="mt-5 grid gap-3 md:grid-cols-4 xl:grid-cols-8">
-        {workflowSteps.map(([title, copy], index) => (
-          <div key={title} className="rounded-md border border-white/10 bg-black/25 p-4">
-            <p className="text-xs font-semibold text-emerald-200">
-              {String(index + 1).padStart(2, "0")}
-            </p>
-            <h3 className="mt-3 text-sm font-semibold text-white">{title}</h3>
-            <p className="mt-2 text-xs leading-5 text-neutral-500">{copy}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function NeedsAttention({
   items
 }: {
@@ -616,7 +582,7 @@ function RecentProjects({
         {projects.map((project) => (
           <Link
             key={project.projectId}
-            href="/app/features"
+            href={`/app/features?projectId=${project.projectId}`}
             className="block rounded-md border border-white/10 bg-black/25 p-4 transition hover:border-sky-300/30"
           >
             <p className="font-semibold text-white">{project.name}</p>
