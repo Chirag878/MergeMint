@@ -548,7 +548,7 @@ export async function getReleaseControlRoom(
         prdMayBeOutdated,
       blockedReason: prdMayBeOutdated
         ? "Clarification answers changed after this PRD was generated."
-        : "Required clarification questions must be answered first.",
+        : "Complete Requirement Review before generating PRD.",
       actionKind: "generate_prd"
     }),
     buildStep({

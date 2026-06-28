@@ -7,7 +7,7 @@ export const ClarificationQuestionSchema = z.object({
 });
 
 export const ClarificationQuestionsOutputSchema = z.object({
-  questions: z.array(ClarificationQuestionSchema).min(3).max(6)
+  questions: z.array(ClarificationQuestionSchema).min(0).max(6)
 });
 
 export const PRDRequirementSchema = z.object({

@@ -163,6 +163,24 @@ function mockClarifications(
 ): ClarificationQuestionsOutput {
   const criteria = input.acceptanceCriteria ?? [];
   const context = getFeatureContext(input);
+  const textContent = `${input.title} ${input.description} ${input.expectedBehavior ?? ""} ${input.businessGoal ?? ""}`.toLowerCase();
+
+  const needsClarificationExplicit =
+    textContent.includes("needs clarification") ||
+    textContent.includes("clarification needed") ||
+    textContent.includes("ambiguous");
+  const isSufficientContext =
+    !needsClarificationExplicit &&
+    (textContent.includes("enough") ||
+      textContent.includes("complete") ||
+      textContent.includes("detailed") ||
+      Boolean(input.expectedBehavior && input.expectedBehavior.length > 20) ||
+      criteria.length >= 2 ||
+      (input.description.length > 120 && Boolean(input.businessGoal)));
+
+  if (isSufficientContext) {
+    return { questions: [] };
+  }
 
   return {
     questions: [

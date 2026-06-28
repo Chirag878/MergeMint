@@ -17,7 +17,10 @@ export const REQUIREMENT_AGENT_SYSTEM_PROMPT = [
 
 export function buildClarificationPrompt(input: RequirementAgentInput) {
   return [
-    "Generate 3 to 6 clarification questions for this exact feature request.",
+    "Analyze the feature request and repository context carefully.",
+    "If the feature request brief and repository context provide sufficient detail to write an unambiguous PRD, return an empty array [] of questions.",
+    "Otherwise, generate 1 to 6 clarification questions for this exact feature request for missing critical information.",
+    "Do not ask duplicate questions if the feature request or repository context already provides that information.",
     "Questions must be specific to the feature, answerable by a client/product owner, and useful for writing REQ IDs and acceptance criteria.",
     "Every question must help later PR verification against a GitHub diff.",
     "Use priority must_answer only when the PRD would be materially unsafe or ambiguous without the answer.",

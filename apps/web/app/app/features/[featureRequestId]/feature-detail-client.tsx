@@ -250,6 +250,9 @@ export function FeatureDetailClient({
     useState(false);
   const [taskCopyMessage, setTaskCopyMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FeatureDetailTab>("overview");
+  const [requirementsNestedTab, setRequirementsNestedTab] = useState<
+    "review" | "prd" | "scope" | "acceptance_criteria"
+  >("review");
   const utils = trpc.useUtils();
   const featureQuery = trpc.featureRequests.getById.useQuery({
     id: featureRequestId
@@ -343,6 +346,8 @@ export function FeatureDetailClient({
   const invalidateReleaseControlRoom = async () => {
     const projectId = featureQuery.data?.projectId;
     await Promise.all([
+      utils.featureRequests.getById.invalidate({ id: featureRequestId }),
+      utils.requirementEngine.getWorkflow.invalidate({ featureRequestId }),
       utils.featureRequests.getReleaseControlRoom.invalidate({
         featureRequestId
       }),
@@ -562,6 +567,18 @@ export function FeatureDetailClient({
 
   function openTab(tab: FeatureDetailTab, sectionId?: string) {
     setActiveTab(tab);
+
+    if (tab === "requirements") {
+      if (sectionId === "clarifications-section" || sectionId === "answer_clarifications") {
+        setRequirementsNestedTab("review");
+      } else if (sectionId === "requirement-engine-section" || sectionId === "generate_prd" || sectionId === "prd-section") {
+        setRequirementsNestedTab("prd");
+      } else if (sectionId === "scope-section") {
+        setRequirementsNestedTab("scope");
+      } else if (sectionId === "acceptance-criteria-section") {
+        setRequirementsNestedTab("acceptance_criteria");
+      }
+    }
 
     if (!sectionId) {
       return;
@@ -832,308 +849,516 @@ export function FeatureDetailClient({
       ) : null}
 
       {activeTab === "requirements" ? (
-        <section
-          id="requirements-section"
-          className="space-y-4 scroll-mt-28"
-        >
-      <section
-        id="requirement-engine-section"
-        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-medium">Requirement engine</h2>
-            <p className="mt-1 text-sm text-neutral-500">
-              Generated artifacts stay idempotent and are shown below.
-            </p>
-          </div>
-          {latestAiRuns[0] ? (
-            <span className="rounded-full border border-blue-900/70 bg-blue-950/30 px-3 py-1 text-xs text-blue-200">
-              Latest AI: {latestAiRuns[0].model}
-            </span>
-          ) : null}
-        </div>
+        <section id="requirements-section" className="space-y-4 scroll-mt-28">
+          {/* Nested Tabs Header & Status Chips */}
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 pb-3">
+              <nav className="flex flex-wrap gap-2" aria-label="Requirements section tabs">
+                {[
+                  { id: "review", label: "1. Review" },
+                  { id: "prd", label: "2. PRD" },
+                  { id: "scope", label: "3. Scope" },
+                  { id: "acceptance_criteria", label: "4. Acceptance Criteria" }
+                ].map((tab) => {
+                  const isSelected = requirementsNestedTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() =>
+                        setRequirementsNestedTab(
+                          tab.id as "review" | "prd" | "scope" | "acceptance_criteria"
+                        )
+                      }
+                      className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
+                        isSelected
+                          ? "bg-neutral-100 text-neutral-950 shadow-sm"
+                          : "text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </nav>
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() =>
-              generateClarifications.mutate({ featureRequestId: feature.id })
-            }
-            disabled={hasQuestions || generateClarifications.isPending}
-            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {hasQuestions
-              ? "Clarifications generated"
-              : generateClarifications.isPending
-                ? "Generating..."
-                : "Generate clarification questions"}
-          </button>
-          <button
-            type="button"
-            onClick={() => generatePrd.mutate({ featureRequestId: feature.id })}
-            disabled={
-              (hasPrd && !prdMayBeOutdated) ||
-              prdBlockedByClarifications ||
-              generatePrd.isPending
-            }
-            className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {hasPrd
-              ? prdMayBeOutdated
-                ? "Regenerate PRD"
-                : "PRD generated"
-              : prdBlockedByClarifications
-                ? "Answer required questions"
-              : generatePrd.isPending
-                ? "Generating..."
-                : "Generate PRD"}
-          </button>
-          <button
-            type="button"
-            onClick={() => (prd ? generateTasks.mutate({ prdId: prd.id }) : null)}
-            disabled={!prd || prdMayBeOutdated || hasTasks || generateTasks.isPending}
-            className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {hasTasks
-              ? "Tasks generated"
-              : generateTasks.isPending
-                ? "Generating..."
-                : "Generate engineering tasks"}
-          </button>
-        </div>
+              {/* Status Chips */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {clarificationQuestions.length === 0 ? (
+                  <span className="rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-0.5 font-medium text-emerald-300">
+                    Review complete
+                  </span>
+                ) : unansweredRequiredClarificationQuestions.length > 0 ? (
+                  <span className="rounded-full border border-amber-900/70 bg-amber-950/40 px-2.5 py-0.5 font-medium text-amber-300">
+                    Review needed
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-0.5 font-medium text-emerald-300">
+                    Answers saved
+                  </span>
+                )}
 
-        {generateClarifications.error || generatePrd.error || generateTasks.error ? (
-          <p className="mt-4 text-sm text-red-300">
-            {generateClarifications.error?.message ??
-              generatePrd.error?.message ??
-              generateTasks.error?.message}
-          </p>
-        ) : null}
+                {hasPrd ? (
+                  <span className="rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-0.5 font-medium text-emerald-300">
+                    PRD generated
+                  </span>
+                ) : prdBlockedByClarifications ? (
+                  <span className="rounded-full border border-red-900/70 bg-red-950/40 px-2.5 py-0.5 font-medium text-red-300">
+                    PRD missing
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-blue-900/70 bg-blue-950/40 px-2.5 py-0.5 font-medium text-blue-300">
+                    Ready to generate
+                  </span>
+                )}
 
-        {prdMayBeOutdated ? (
-          <p className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
-            PRD may be outdated because a clarification answer changed. Regenerate
-            the PRD before running QA or generating release evidence.
-          </p>
-        ) : prdBlockedByClarifications ? (
-          <p className="mt-4 text-sm text-amber-300">
-            Answer required clarification questions before generating the PRD.
-          </p>
-        ) : hasPrd || hasTasks ? (
-          <p className="mt-4 text-sm text-neutral-500">
-            Create a new feature request to generate a fresh PRD, or enable
-            regeneration later.
-          </p>
-        ) : null}
-      </section>
+                {prdRequirements.length > 0 ? (
+                  <span className="rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-0.5 font-medium text-emerald-300">
+                    Scope generated
+                  </span>
+                ) : null}
 
-      <section
-        id="clarifications-section"
-        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
-      >
-        <h2 className="text-lg font-medium">Clarification questions</h2>
-        {clarificationQuestions.length > 0 ? (
-          <div className="mt-4 space-y-3">
-            {clarificationQuestions.map((question) => {
-              const isEditing = editingQuestionId === question.id;
-              const isSavingQuestion =
-                answerClarification.isPending &&
-                answerClarification.variables?.questionId === question.id;
-              const draft = answerDrafts[question.id] ?? "";
-              const canSave = draft.trim().length > 0 && !isSavingQuestion;
-
-              return (
-                <article
-                  key={question.id}
-                  className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <h3 className="font-medium text-neutral-100">
-                      {question.question}
-                    </h3>
-                    <Badge>{formatQuestionPriority(question.priority)}</Badge>
-                  </div>
-                  {question.reason ? (
-                    <p className="mt-3 text-sm text-neutral-400">
-                      <span className="text-neutral-500">Reason:</span>{" "}
-                      {question.reason}
-                    </p>
-                  ) : null}
-                  {question.answer && !isEditing ? (
-                    <div className="mt-3 space-y-3 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3">
-                      <p className="text-sm text-emerald-100">
-                        <span className="text-emerald-400">Answered:</span>{" "}
-                        {question.answer}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => editAnswer(question.id, question.answer ?? "")}
-                        disabled={answerClarification.isPending}
-                        className="rounded-md border border-emerald-800 px-3 py-1.5 text-xs font-medium text-emerald-100 transition hover:border-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      {isRequiredQuestionPriority(question.priority) ? (
-                        <p className="text-sm text-amber-300">
-                          Required before PRD generation.
-                        </p>
-                      ) : null}
-                      {isEditing && prd ? (
-                        <p className="rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
-                          Changing this answer will mark the current PRD as
-                          outdated until you regenerate it.
-                        </p>
-                      ) : null}
-                      <textarea
-                        value={draft}
-                        onChange={(event) =>
-                          setAnswerDraft(question.id, event.target.value)
-                        }
-                        className="min-h-24 w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
-                        placeholder="Answer this clarification..."
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => saveAnswer(question.id)}
-                          disabled={!canSave}
-                          className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {isSavingQuestion
-                            ? "Saving..."
-                            : isEditing
-                              ? "Save changes"
-                              : "Save answer"}
-                        </button>
-                        {isEditing ? (
-                          <button
-                            type="button"
-                            onClick={() => cancelEditAnswer(question.id)}
-                            disabled={isSavingQuestion}
-                            className="rounded-md border border-neutral-700 px-3 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Cancel
-                          </button>
-                        ) : null}
-                      </div>
-                      {answerClarification.error &&
-                      answerClarification.variables?.questionId === question.id ? (
-                        <p className="text-sm text-red-300">
-                          {answerClarification.error.message}
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <EmptyText>No clarification questions generated yet.</EmptyText>
-        )}
-      </section>
-
-      <section
-        id="engineering-tasks-section"
-        className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
-      >
-        <h2 className="text-lg font-medium">PRD</h2>
-        {prd ? (
-          <div className="mt-4 space-y-5">
-            <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium text-neutral-100">{prd.title}</h3>
-                  <p className="mt-2 text-sm text-neutral-400">
-                    {prd.problem || "No problem statement."}
-                  </p>
-                </div>
-                <Badge>v{prd.version}</Badge>
+                {prdRequirements.some(
+                  (r) => r.acceptanceCriteria && r.acceptanceCriteria.length > 0
+                ) ? (
+                  <span className="rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-0.5 font-medium text-emerald-300">
+                    Criteria generated
+                  </span>
+                ) : null}
               </div>
             </div>
 
-            <PRDLists prd={prd} />
-          </div>
-        ) : (
-          <EmptyText>No PRD generated yet.</EmptyText>
-        )}
-      </section>
-
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 className="text-lg font-medium">Requirements</h2>
-        {prdRequirements.length > 0 ? (
-          <div className="mt-4 space-y-3">
-            {prdRequirements.map((requirement) => (
-              <article
-                key={requirement.id}
-                className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+            {/* NESTED TAB 1: REVIEW */}
+            {requirementsNestedTab === "review" ? (
+              <div id="clarifications-section" className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-blue-300">
-                      {requirement.requirementKey}
-                    </p>
-                    <h3 className="mt-1 font-medium text-neutral-100">
-                      {requirement.requirement}
-                    </h3>
-                  </div>
-                  <Badge>{requirement.priority}</Badge>
-                </div>
-                <StringList
-                  title="Acceptance criteria"
-                  items={requirement.acceptanceCriteria}
-                  emptyText="No acceptance criteria."
-                />
-              </article>
-            ))}
-          </div>
-        ) : (
-          <EmptyText>No requirements generated yet.</EmptyText>
-        )}
-      </section>
-
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 className="text-lg font-medium">Engineering tasks</h2>
-        {engineeringTasks.length > 0 ? (
-          <div className="mt-4 space-y-3">
-            {engineeringTasks.map((task) => (
-              <article
-                key={task.id}
-                className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-medium text-neutral-100">{task.title}</h3>
-                    <p className="mt-2 text-sm text-neutral-400">
-                      {task.description || "No description."}
+                    <h2 className="text-lg font-medium text-neutral-100">Requirement Review</h2>
+                    <p className="mt-1 text-sm text-neutral-400">
+                      Review feature details and answer clarification questions before PRD generation.
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge>{task.type}</Badge>
-                    <Badge>{task.complexity}</Badge>
-                  </div>
                 </div>
-                <StringList
-                  title="Related requirements"
-                  items={task.relatedRequirementKeys}
-                  emptyText="No related requirements."
-                />
-                <StringList
-                  title="Acceptance checklist"
-                  items={task.acceptanceChecklist}
-                  emptyText="No acceptance checklist."
-                />
-              </article>
-            ))}
+
+                {clarificationQuestions.length > 0 ? (
+                  <div className="space-y-4">
+                    {unansweredRequiredClarificationQuestions.length > 0 ? (
+                      <div className="rounded-md border border-amber-900/60 bg-amber-950/30 p-3.5 text-sm text-amber-200">
+                        <span className="font-semibold text-amber-400">Requirement Review needed:</span> Complete required open questions below to unlock PRD generation.
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-emerald-900/60 bg-emerald-950/30 p-3.5 text-sm text-emerald-200 flex items-center justify-between">
+                        <div>
+                          <span className="font-semibold text-emerald-400">Requirement Review complete.</span> All required answers saved. MergeMint has enough context for PRD generation.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRequirementsNestedTab("prd")}
+                          className="rounded bg-emerald-400 px-3 py-1 text-xs font-medium text-neutral-950 transition hover:bg-emerald-300"
+                        >
+                          Go to PRD &rarr;
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-400">
+                        Open questions ({clarificationQuestions.length})
+                      </h3>
+                      {clarificationQuestions.map((question) => {
+                        const isEditing = editingQuestionId === question.id;
+                        const isSavingQuestion =
+                          answerClarification.isPending &&
+                          answerClarification.variables?.questionId === question.id;
+                        const draft = answerDrafts[question.id] ?? "";
+                        const canSave = draft.trim().length > 0 && !isSavingQuestion;
+
+                        return (
+                          <article
+                            key={question.id}
+                            className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <h4 className="font-medium text-neutral-100">
+                                {question.question}
+                              </h4>
+                              <Badge>{formatQuestionPriority(question.priority)}</Badge>
+                            </div>
+                            {question.reason ? (
+                              <p className="mt-2 text-sm text-neutral-400">
+                                <span className="text-neutral-500">Reason:</span>{" "}
+                                {question.reason}
+                              </p>
+                            ) : null}
+                            {question.answer && !isEditing ? (
+                              <div className="mt-3 space-y-2 rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3">
+                                <p className="text-sm text-emerald-100">
+                                  <span className="font-semibold text-emerald-400">Saved Answer:</span>{" "}
+                                  {question.answer}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => editAnswer(question.id, question.answer ?? "")}
+                                  disabled={answerClarification.isPending}
+                                  className="rounded-md border border-emerald-800 px-2.5 py-1 text-xs font-medium text-emerald-200 transition hover:border-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Edit answer
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="mt-3 space-y-3">
+                                {isRequiredQuestionPriority(question.priority) ? (
+                                  <p className="text-xs font-medium text-amber-400">
+                                    &bull; Required before PRD generation
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-neutral-500">
+                                    &bull; Optional clarification context
+                                  </p>
+                                )}
+                                {isEditing && prd ? (
+                                  <p className="rounded-md border border-amber-800 bg-amber-950/30 p-2.5 text-xs text-amber-200">
+                                    Updating this answer will mark the current PRD as outdated until regenerated.
+                                  </p>
+                                ) : null}
+                                <textarea
+                                  value={draft}
+                                  onChange={(event) =>
+                                    setAnswerDraft(question.id, event.target.value)
+                                  }
+                                  className="min-h-20 w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none transition focus:border-blue-500"
+                                  placeholder="Type your answer here..."
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => saveAnswer(question.id)}
+                                    disabled={!canSave}
+                                    className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {isSavingQuestion
+                                      ? "Saving..."
+                                      : isEditing
+                                        ? "Save changes"
+                                        : "Save answer"}
+                                  </button>
+                                  {isEditing ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => cancelEditAnswer(question.id)}
+                                      disabled={isSavingQuestion}
+                                      className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                      Cancel
+                                    </button>
+                                  ) : null}
+                                </div>
+                                {answerClarification.error &&
+                                answerClarification.variables?.questionId === question.id ? (
+                                  <p className="text-xs text-red-400">
+                                    {answerClarification.error.message}
+                                  </p>
+                                ) : null}
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-emerald-900/60 bg-emerald-950/20 p-4 text-sm text-emerald-200">
+                    <p className="font-medium text-emerald-400">
+                      Requirement Review complete. MergeMint has enough context to generate the PRD.
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-300/80">
+                      No further clarification questions are needed for this feature request.
+                    </p>
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => setRequirementsNestedTab("prd")}
+                        className="rounded bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 transition hover:bg-white"
+                      >
+                        Proceed to PRD Generation &rarr;
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* NESTED TAB 2: PRD */}
+            {requirementsNestedTab === "prd" ? (
+              <div id="requirement-engine-section" className="mt-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-medium text-neutral-100">PRD</h2>
+                    <p className="mt-1 text-sm text-neutral-400">
+                      Generate and inspect the Product Requirement Document artifact.
+                    </p>
+                  </div>
+                  {latestAiRuns[0] ? (
+                    <span className="rounded-full border border-blue-900/70 bg-blue-950/30 px-3 py-1 text-xs text-blue-200">
+                      Latest AI: {latestAiRuns[0].model}
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* Compact Blocked State / Warning Banners */}
+                {prdMayBeOutdated ? (
+                  <div className="rounded-md border border-amber-800 bg-amber-950/30 p-3.5 text-sm text-amber-200">
+                    PRD may be outdated because a clarification answer changed. Regenerate the PRD before running QA or generating release evidence.
+                  </div>
+                ) : prdBlockedByClarifications ? (
+                  <div className="rounded-md border border-red-900/70 bg-red-950/40 p-3.5 text-sm text-red-200 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="font-semibold text-red-300">Blocked by Requirement Review:</span> Complete Requirement Review before generating PRD.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRequirementsNestedTab("review")}
+                      className="rounded bg-red-900 px-3 py-1 text-xs font-medium text-red-100 hover:bg-red-800"
+                    >
+                      Go to Requirement Review
+                    </button>
+                  </div>
+                ) : null}
+
+                {/* PRD Generation Controls */}
+                <div className="flex flex-wrap gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => generatePrd.mutate({ featureRequestId: feature.id })}
+                    disabled={
+                      (hasPrd && !prdMayBeOutdated) ||
+                      prdBlockedByClarifications ||
+                      generatePrd.isPending
+                    }
+                    className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {hasPrd
+                      ? prdMayBeOutdated
+                        ? "Regenerate PRD"
+                        : "PRD generated"
+                      : prdBlockedByClarifications
+                        ? "Blocked by Requirement Review"
+                        : generatePrd.isPending
+                          ? "Generating PRD..."
+                          : "Generate PRD"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => (prd ? generateTasks.mutate({ prdId: prd.id }) : null)}
+                    disabled={!prd || prdMayBeOutdated || hasTasks || generateTasks.isPending}
+                    className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {hasTasks
+                      ? "Engineering tasks generated"
+                      : generateTasks.isPending
+                        ? "Generating tasks..."
+                        : "Generate engineering tasks"}
+                  </button>
+                </div>
+
+                {generatePrd.error ? (
+                  <p className="text-xs text-red-400">{generatePrd.error.message}</p>
+                ) : null}
+
+                {/* PRD Content View */}
+                {prd ? (
+                  <div className="mt-4 space-y-4 border-t border-neutral-800 pt-4">
+                    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="font-medium text-neutral-100">{prd.title}</h3>
+                          <p className="mt-2 text-sm text-neutral-400">
+                            {prd.problem || "No problem statement."}
+                          </p>
+                        </div>
+                        <Badge>v{prd.version}</Badge>
+                      </div>
+                    </div>
+                    <PRDLists prd={prd} />
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-neutral-800/80 bg-neutral-950 p-6 text-center">
+                    <EmptyText>No PRD generated yet.</EmptyText>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* NESTED TAB 3: SCOPE */}
+            {requirementsNestedTab === "scope" ? (
+              <div id="scope-section" className="mt-4 space-y-4">
+                <div>
+                  <h2 className="text-lg font-medium text-neutral-100">Scope & Structured Requirements</h2>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    High-level functional requirements categorized by priority and scope boundaries.
+                  </p>
+                </div>
+
+                {prdRequirements.length > 0 || (prd && prd.nonGoals.length > 0) ? (
+                  <div className="space-y-6">
+                    {/* Must have */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-red-400" />
+                        <h3 className="text-sm font-semibold text-neutral-200">Must have</h3>
+                      </div>
+                      {prdRequirements.filter((r) => r.priority === "P0" || r.priority === "high" || r.priority === "urgent").length > 0 ? (
+                        <div className="space-y-2.5">
+                          {prdRequirements
+                            .filter((r) => r.priority === "P0" || r.priority === "high" || r.priority === "urgent")
+                            .map((req) => (
+                              <article key={req.id} className="rounded-md border border-neutral-800 bg-neutral-950 p-3.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-xs font-medium text-blue-400">{req.requirementKey}</p>
+                                  <span className="rounded bg-red-950/80 px-2 py-0.5 text-[10px] font-semibold text-red-300 border border-red-900/60">Must have</span>
+                                </div>
+                                <p className="mt-1.5 text-sm text-neutral-100">{req.requirement}</p>
+                              </article>
+                            ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-neutral-500 italic">No Must have requirements defined.</p>
+                      )}
+                    </div>
+
+                    {/* Nice to have */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-blue-400" />
+                        <h3 className="text-sm font-semibold text-neutral-200">Nice to have</h3>
+                      </div>
+                      {prdRequirements.filter((r) => r.priority !== "P0" && r.priority !== "high" && r.priority !== "urgent").length > 0 ? (
+                        <div className="space-y-2.5">
+                          {prdRequirements
+                            .filter((r) => r.priority !== "P0" && r.priority !== "high" && r.priority !== "urgent")
+                            .map((req) => (
+                              <article key={req.id} className="rounded-md border border-neutral-800 bg-neutral-950 p-3.5">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-xs font-medium text-blue-400">{req.requirementKey}</p>
+                                  <span className="rounded bg-blue-950/80 px-2 py-0.5 text-[10px] font-semibold text-blue-300 border border-blue-900/60">Nice to have</span>
+                                </div>
+                                <p className="mt-1.5 text-sm text-neutral-100">{req.requirement}</p>
+                              </article>
+                            ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-neutral-500 italic">No Nice to have requirements defined.</p>
+                      )}
+                    </div>
+
+                    {/* Out of scope */}
+                    {prd && prd.nonGoals && prd.nonGoals.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-neutral-500" />
+                          <h3 className="text-sm font-semibold text-neutral-200">Out of scope</h3>
+                        </div>
+                        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3.5">
+                          <ul className="list-disc space-y-1.5 pl-5 text-sm text-neutral-300">
+                            {prd.nonGoals.map((item, index) => (
+                              <li key={index}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* User stories */}
+                    {prd && prd.userStories && prd.userStories.length > 0 ? (
+                      <div className="space-y-3">
+                        <h3 className="text-sm font-semibold text-neutral-200">User stories</h3>
+                        <div className="space-y-2.5">
+                          {prd.userStories.map((story, index) => {
+                            if (isRecord(story)) {
+                              return (
+                                <article key={index} className="rounded-md border border-neutral-800 bg-neutral-950 p-3.5 text-sm">
+                                  <p className="text-neutral-200">
+                                    <span className="font-medium text-neutral-400">As a</span>{" "}
+                                    <span className="text-blue-300">{String(story.actor ?? "user")}</span>,{" "}
+                                    <span className="font-medium text-neutral-400">I want</span>{" "}
+                                    <span className="text-neutral-100">{String(story.want ?? "")}</span>{" "}
+                                    <span className="font-medium text-neutral-400">so that</span>{" "}
+                                    <span className="text-emerald-300">{String(story.benefit ?? "")}</span>.
+                                  </p>
+                                </article>
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-neutral-800/80 bg-neutral-950 p-6 text-center">
+                    <EmptyText>No scope or requirements generated yet.</EmptyText>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {/* NESTED TAB 4: ACCEPTANCE CRITERIA */}
+            {requirementsNestedTab === "acceptance_criteria" ? (
+              <div id="acceptance-criteria-section" className="mt-4 space-y-4">
+                <div>
+                  <h2 className="text-lg font-medium text-neutral-100">Acceptance Criteria</h2>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    Testable verification criteria grouped by requirement ID.
+                  </p>
+                </div>
+
+                {prdRequirements.length > 0 ? (
+                  <div className="space-y-4">
+                    {prdRequirements.map((requirement) => (
+                      <article
+                        key={requirement.id}
+                        className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-900 pb-2.5">
+                          <span className="rounded bg-blue-950/80 px-2 py-0.5 text-xs font-semibold text-blue-300 border border-blue-900/60">
+                            {requirement.requirementKey}
+                          </span>
+                          <span className="text-xs text-neutral-400 font-medium">
+                            {formatQuestionPriority(requirement.priority)}
+                          </span>
+                        </div>
+                        <h3 className="mt-2.5 font-medium text-neutral-100 text-sm">
+                          {requirement.requirement}
+                        </h3>
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                            Testable Criteria:
+                          </p>
+                          {requirement.acceptanceCriteria && requirement.acceptanceCriteria.length > 0 ? (
+                            <ul className="space-y-1.5">
+                              {requirement.acceptanceCriteria.map((criterion, idx) => (
+                                <li key={idx} className="flex items-start gap-2 text-sm text-neutral-300">
+                                  <span className="text-emerald-400 mt-0.5 text-xs">&check;</span>
+                                  <span>{criterion}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-xs text-neutral-500 italic">No criteria specified for this requirement.</p>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-neutral-800/80 bg-neutral-950 p-6 text-center">
+                    <EmptyText>No acceptance criteria generated yet.</EmptyText>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
-        ) : (
-          <EmptyText>No engineering tasks generated yet.</EmptyText>
-        )}
-      </section>
         </section>
       ) : null}
 

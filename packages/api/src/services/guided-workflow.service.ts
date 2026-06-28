@@ -690,11 +690,11 @@ export async function getFeatureWorkflow(
   if (unansweredRequired.length > 0) {
     return toState({
       status: "clarification_needed",
-      title: "Answer clarification questions",
-      description: "Answer required clarification questions before generating the PRD.",
-      primaryActionLabel: "Answer questions",
+      title: "Requirement Review needed",
+      description: "Complete Requirement Review before generating PRD.",
+      primaryActionLabel: "Requirement Review",
       primaryActionKey: "answer_clarifications",
-      blockedReason: "Required clarification questions are unanswered.",
+      blockedReason: "Complete Requirement Review before generating PRD.",
       steps
     });
   }

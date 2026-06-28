@@ -392,6 +392,11 @@ export async function answerClarificationQuestion(
     .where(eq(clarificationQuestions.id, row.question.id))
     .returning();
 
+  await db
+    .update(featureRequests)
+    .set({ updatedAt: new Date() })
+    .where(eq(featureRequests.id, row.featureRequest.id));
+
   await writeAuditLog({
     organizationId: workspace.activeOrganization.id,
     actorId: workspace.appUser.id,
@@ -425,11 +430,31 @@ export async function generatePrdForFeatureRequest(
     .orderBy(desc(prds.version))
     .limit(1);
 
-  const clarifications = await db
+  let clarifications = await db
     .select()
     .from(clarificationQuestions)
     .where(eq(clarificationQuestions.featureRequestId, featureRequest.id))
     .orderBy(clarificationQuestions.createdAt);
+
+  const [clarificationRun] = await db
+    .select({ id: aiRuns.id })
+    .from(aiRuns)
+    .where(
+      and(
+        eq(aiRuns.featureRequestId, featureRequest.id),
+        eq(aiRuns.agentType, "clarification"),
+        eq(aiRuns.status, "succeeded")
+      )
+    )
+    .limit(1);
+
+  if (clarifications.length === 0 && !clarificationRun) {
+    clarifications = await generateClarificationsForFeatureRequest(
+      ctx,
+      featureRequestId
+    );
+  }
+
   const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
     clarifications,
     existingPrd
@@ -455,7 +480,7 @@ export async function generatePrdForFeatureRequest(
   if (unansweredRequiredClarifications.length > 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Answer required clarification questions before generating the PRD."
+      message: "Complete Requirement Review before generating PRD."
     });
   }
 
