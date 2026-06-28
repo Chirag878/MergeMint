@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "../components/theme-provider";
 
 const navItems = [
   ["Dashboard", "/app"],
@@ -16,33 +17,36 @@ export function AppNav() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#060706]/82 px-5 py-4 text-neutral-100 backdrop-blur-xl sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/85 px-5 py-3 text-[var(--text)] backdrop-blur-md sm:px-6 lg:px-8">
       <nav className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
-        <Link href="/app" className="flex items-center gap-3">
-          <span className="grid h-9 w-9 place-items-center rounded-md border border-emerald-400/40 bg-emerald-400/10 text-sm font-semibold text-emerald-200">
+        <Link href="/app" className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--mint)]/30 bg-[var(--mint)]/10 text-xs font-bold text-[var(--mint)]">
             MM
           </span>
-          <span className="text-base font-semibold tracking-tight">MergeMint</span>
+          <span className="text-base font-semibold tracking-tight text-[var(--text)]">MergeMint</span>
         </Link>
-        <div className="flex flex-wrap gap-2 text-sm font-semibold">
-          {navItems.map(([label, href]) => {
-            const active =
-              href === "/app" ? pathname === href : pathname.startsWith(href);
+        <div className="flex items-center gap-3">
+          <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+            {navItems.map(([label, href]) => {
+              const active =
+                href === "/app" ? pathname === href : pathname.startsWith(href);
 
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={
-                  active
-                    ? "rounded-md border border-emerald-300/35 bg-emerald-300/10 px-3 py-2 text-emerald-100 shadow-sm shadow-emerald-950/30"
-                    : "rounded-md border border-white/10 bg-white/[0.025] px-3 py-2 text-neutral-300 transition hover:-translate-y-0.5 hover:border-emerald-300/30 hover:bg-white/[0.055] hover:text-white"
-                }
-              >
-                {label}
-              </Link>
-            );
-          })}
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={
+                    active
+                      ? "rounded-md border border-[var(--mint)]/35 bg-[var(--mint)]/10 px-3 py-1.5 text-[var(--mint)] shadow-xs"
+                      : "rounded-md border border-transparent px-3 py-1.5 text-[var(--text-muted)] transition hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"
+                  }
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
+          <ThemeToggle />
         </div>
       </nav>
     </header>

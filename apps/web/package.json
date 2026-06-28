@@ -3,28 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@9.15.9",
-  
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
-
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",
     "@trpc/client": "^11.18.0",
     "@trpc/react-query": "^11.18.0",
     "@trpc/server": "^11.18.0",
+    "@veriflow/api": "workspace:*",
+    "@veriflow/auth": "workspace:*",
+    "@veriflow/shared": "workspace:*",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "superjson": "^2.2.6",
-    "zod": "^4.4.3",
-    "@veriflow/api": "workspace:*",
-    "@veriflow/auth": "workspace:*",
-    "@veriflow/shared": "workspace:*"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

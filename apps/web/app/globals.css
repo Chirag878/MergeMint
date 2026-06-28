@@ -1,97 +1,190 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+:root,
+html[data-theme="dark"],
+html.dark {
+  --bg: #070A09;
+  --surface: #101614;
+  --surface-elevated: #151C19;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --text: #F8FAF9;
+  --text-muted: #9CAAA4;
+  --mint: #65F2B0;
+  --mint-light: rgba(101, 242, 176, 0.12);
+  --pink: #FF7AAE;
+  --pink-light: rgba(255, 122, 174, 0.12);
+  --blue: #51BFFF;
+  --warning: #FE6E26;
+  --shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 25px 60px -15px rgba(0, 0, 0, 0.9);
+}
+
+html[data-theme="light"] {
+  --bg: #F8FAF9;
+  --surface: #FFFFFF;
+  --surface-elevated: #F1F6F3;
+  --border: #DDE7E1;
+  --border-subtle: #E8F0EA;
+  --text: #101312;
+  --text-muted: #66736D;
+  --mint: #10B981;
+  --mint-light: rgba(16, 185, 129, 0.10);
+  --pink: #F472B6;
+  --pink-light: rgba(244, 114, 182, 0.10);
+  --blue: #0284C7;
+  --warning: #F59E0B;
+  --shadow: 0 1px 3px 0 rgba(16, 19, 18, 0.05), 0 1px 2px -1px rgba(16, 19, 18, 0.05);
+  --shadow-lg: 0 15px 35px -5px rgba(16, 19, 18, 0.08), 0 8px 10px -6px rgba(16, 19, 18, 0.04);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  transition: background-color 0.25s ease-in-out, color 0.25s ease-in-out;
+  overflow-x: hidden;
 }
 
 html {
   scroll-behavior: smooth;
 }
 
+/* Keyframes for subtle CSS motion */
 @keyframes vf-fade-up {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(20px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-@keyframes vf-preview-scan {
-  0%,
-  100% {
-    opacity: 0;
-    transform: translateX(-40%);
+@keyframes gentle-float {
+  0%, 100% {
+    transform: translateY(0px);
   }
+  50% {
+    transform: translateY(-8px);
+  }
+}
 
-  45% {
+@keyframes soft-glow-pulse {
+  0%, 100% {
     opacity: 0.7;
   }
-
-  55% {
-    opacity: 0.7;
-  }
-
-  100% {
-    transform: translateX(140%);
+  50% {
+    opacity: 1;
   }
 }
 
 .vf-fade-up {
-  animation: vf-fade-up 700ms ease both;
+  animation: vf-fade-up 600ms ease-out both;
 }
 
-.vf-preview-scan {
+.animate-float {
+  animation: gentle-float 7s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: soft-glow-pulse 4s ease-in-out infinite;
+}
+
+/* Premium Hero Mockup & Card utilities */
+.hero-mockup-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-lg);
   position: relative;
   overflow: hidden;
 }
 
-.vf-preview-scan::after {
-  animation: vf-preview-scan 5.5s ease-in-out infinite;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.12),
-    transparent
-  );
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
-  width: 40%;
+html[data-theme="dark"] .hero-mockup-card {
+  background: linear-gradient(180deg, rgba(16, 22, 20, 0.95) 0%, rgba(10, 15, 13, 0.98) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.95), 0 0 40px rgba(101, 242, 176, 0.08);
+}
+
+.mint-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+html[data-theme="dark"] .mint-card {
+  background: linear-gradient(180deg, rgba(16, 22, 20, 0.85) 0%, rgba(10, 15, 13, 0.95) 100%);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.mint-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--mint);
+}
+
+html[data-theme="dark"] .mint-card:hover {
+  border-color: rgba(101, 242, 176, 0.4);
+  box-shadow: 0 8px 30px rgba(101, 242, 176, 0.08);
+}
+
+/* Gradient buttons & texts */
+.gradient-btn-mint-pink {
+  background: linear-gradient(135deg, #65F2B0 0%, #FF7AAE 100%);
+  color: #070A09;
+  font-weight: 700;
+  transition: all 0.2s ease-in-out;
+}
+
+.gradient-btn-mint-pink:hover {
+  opacity: 0.95;
+  box-shadow: 0 6px 25px rgba(101, 242, 176, 0.3);
+  transform: translateY(-1px);
+}
+
+html[data-theme="light"] .gradient-btn-mint-pink {
+  background: #10B981;
+  color: #FFFFFF;
+}
+
+html[data-theme="light"] .gradient-btn-mint-pink:hover {
+  background: #059669;
+}
+
+.gradient-text-mint-pink {
+  background: linear-gradient(135deg, #65F2B0 30%, #FF7AAE 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+html[data-theme="light"] .gradient-text-mint-pink {
+  background: linear-gradient(135deg, #059669 30%, #DB2777 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-
   .vf-fade-up,
-  .vf-preview-scan::after {
-    animation: none;
+  .animate-float,
+  .animate-glow {
+    animation: none !important;
+    transform: none !important;
+  }
+  .mint-card:hover {
+    transform: none !important;
   }
 }

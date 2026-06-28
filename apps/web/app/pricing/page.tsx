@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "../components/theme-provider";
 
 const pricingPlans = [
   {
@@ -11,7 +12,7 @@ const pricingPlans = [
     offerNote: "Valid until 30 June",
     bestFor: "Trying MergeMint on a real project",
     ctaText: "Get launch offer",
-    ctaHref: "mailto:tiwarichirag19@gmail.com?subject=Launch%20Pack%20Offer",
+    ctaHref: "mailto:hello@mergemint.com?subject=Launch%20Pack%20Offer",
     isExternal: true,
     highlight: false
   },
@@ -56,15 +57,15 @@ const pricingPlans = [
     highlight: false
   },
   {
-    id: "elite",
-    name: "Elite",
+    id: "agency-max",
+    name: "Agency Max",
     price: "$199",
     billing: "/month",
     prs: "Fair-use 600 verified PRs/month",
     validity: "Monthly subscription",
     bestFor: "High-volume agencies",
     ctaText: "Talk to us",
-    ctaHref: "mailto:tiwarichirag19@gmail.com?subject=Elite%20Plan%20Inquiry",
+    ctaHref: "mailto:hello@mergemint.com?subject=Agency%20Max%20Inquiry",
     isExternal: true,
     highlight: false
   }
@@ -110,105 +111,112 @@ const faqs = [
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-[#101312] font-sans text-white selection:bg-[#ABFF57]/30 selection:text-[#ABFF57]">
+    <div className="min-h-screen bg-[var(--bg)] font-sans text-[var(--text)] transition-colors duration-200">
       {/* Navigation Header */}
-      <header className="sticky top-0 z-50 border-b border-[#3F3F3F]/40 bg-[#101312]/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="grid h-9 w-9 place-items-center rounded-md border border-[#ABFF57]/40 bg-[#ABFF57]/10 text-sm font-bold text-[#ABFF57]">
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-6 lg:px-8">
+          <Link href="/" className="flex items-center gap-2.5">
+            <span className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--mint)]/30 bg-[var(--mint)]/10 text-xs font-bold text-[var(--mint)]">
               MM
             </span>
-            <span className="text-base font-semibold tracking-normal text-white">
+            <span className="text-base font-semibold tracking-tight text-[var(--text)]">
               MergeMint
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-8 text-sm text-[#A7B0AA] md:flex">
-            <Link href="/" className="transition hover:text-white">
+          <nav className="hidden items-center gap-8 text-xs font-medium text-[var(--text-muted)] md:flex">
+            <Link href="/#product" className="transition hover:text-[var(--text)]">
               Product
             </Link>
-            <Link href="/pricing" className="font-medium text-[#ABFF57]">
+            <Link href="/#how-it-works" className="transition hover:text-[var(--text)]">
+              How it works
+            </Link>
+            <Link href="/pricing" className="font-semibold text-[var(--mint)]">
               Pricing
+            </Link>
+            <Link href="/#proof-map" className="transition hover:text-[var(--text)]">
+              Resources
             </Link>
           </nav>
 
           <div className="flex items-center gap-3">
             <Link
               href="/login"
-              className="rounded-md px-3 py-2 text-sm text-[#A7B0AA] transition hover:text-white"
+              className="rounded-md px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:text-[var(--text)]"
             >
               Sign in
             </Link>
             <Link
               href="/login"
-              className="rounded-md bg-[#ABFF57] px-4 py-2 text-sm font-semibold text-[#101312] transition hover:bg-[#b8ff6d]"
+              className="gradient-btn-mint-pink rounded-md px-3.5 py-1.5 text-xs font-bold shadow-xs"
             >
               Start verifying
             </Link>
+            <ThemeToggle />
           </div>
         </div>
       </header>
 
       {/* Hero Section */}
-      <main className="mx-auto max-w-7xl px-5 py-16 sm:px-6 lg:px-8 lg:py-24">
+      <main className="mx-auto max-w-7xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
         <div className="mx-auto max-w-3xl text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#ABFF57]/30 bg-[#ABFF57]/10 px-3.5 py-1 text-xs font-semibold uppercase tracking-widest text-[#ABFF57]">
-            Proof OS Pricing
+          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--mint)]/30 bg-[var(--mint)]/10 px-3 py-1 text-xs font-medium text-[var(--mint)]">
+            Transparent Delivery Pricing
           </div>
-          <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-5xl lg:text-6xl">
+          <h1 className="mt-5 text-4xl font-bold tracking-tight text-[var(--text)] sm:text-5xl">
             Pricing built around verified PRs.
           </h1>
-          <p className="mt-6 text-lg leading-8 text-[#A7B0AA]">
+          <p className="mt-5 text-base leading-7 text-[var(--text-muted)] sm:text-lg">
             Pay for release proof, not another developer seat. MergeMint verifies pull requests against requirements, repo context, QA evidence, and approval state before you ship.
           </p>
-          <p className="mt-3 text-sm font-medium text-[#51BFFF]">
+          <p className="mt-3 text-xs font-semibold text-[var(--blue)]">
             Built for agencies, AI studios, freelancers, and product teams that need proof before delivery.
           </p>
         </div>
 
         {/* Pricing Cards Grid */}
-        <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4 xl:gap-6">
+        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4 xl:gap-6">
           {pricingPlans.map((plan) => {
             const isHighlight = plan.highlight;
             return (
               <div
                 key={plan.id}
-                className={`relative flex flex-col justify-between rounded-xl p-6 transition-all duration-200 ${
+                className={`mint-card relative flex flex-col justify-between p-6 ${
                   isHighlight
-                    ? "border-2 border-[#ABFF57] bg-[#202623] shadow-2xl shadow-[#ABFF57]/10"
-                    : "border border-[#3F3F3F]/60 bg-[#171B19] hover:border-[#3F3F3F]"
+                    ? "border-2 border-[var(--mint)] bg-[var(--surface-elevated)] shadow-md"
+                    : ""
                 }`}
               >
                 {plan.badge ? (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#ABFF57] px-3 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#101312]">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--mint)] px-3 py-0.5 text-[10px] font-bold text-[#070A09] uppercase tracking-wider">
                     {plan.badge}
                   </div>
                 ) : null}
 
                 <div>
                   <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
+                    <h3 className="text-base font-bold text-[var(--text)]">{plan.name}</h3>
                     {plan.offerNote ? (
-                      <span className="rounded bg-[#FE6E26]/15 px-2 py-0.5 text-[10px] font-semibold text-[#FE6E26]">
+                      <span className="rounded bg-[var(--warning)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">
                         {plan.offerNote}
                       </span>
                     ) : null}
                   </div>
 
                   <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+                    <span className="text-3xl font-extrabold tracking-tight text-[var(--text)]">
                       {plan.price}
                     </span>
-                    <span className="text-xs text-[#A7B0AA]">{plan.billing}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{plan.billing}</span>
                   </div>
 
-                  <div className="mt-4 rounded-lg border border-[#3F3F3F]/40 bg-[#101312]/60 p-3 text-xs">
-                    <p className="font-semibold text-[#ABFF57]">{plan.prs}</p>
-                    <p className="mt-1 text-[#A7B0AA]">{plan.validity}</p>
+                  <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--bg)] p-3 text-xs">
+                    <p className="font-bold text-[var(--mint)]">{plan.prs}</p>
+                    <p className="mt-0.5 text-[var(--text-muted)]">{plan.validity}</p>
                   </div>
 
-                  <p className="mt-4 text-xs leading-5 text-[#A7B0AA]">
-                    <span className="font-medium text-white">Best for:</span> {plan.bestFor}
+                  <p className="mt-4 text-xs leading-5 text-[var(--text-muted)]">
+                    <span className="font-semibold text-[var(--text)]">Best for:</span> {plan.bestFor}
                   </p>
                 </div>
 
@@ -216,10 +224,10 @@ export default function PricingPage() {
                   {plan.isExternal ? (
                     <a
                       href={plan.ctaHref}
-                      className={`block w-full rounded-lg px-4 py-2.5 text-center text-xs font-semibold transition ${
+                      className={`block w-full rounded-md px-4 py-2 text-center text-xs font-semibold transition ${
                         isHighlight
-                          ? "bg-[#ABFF57] text-[#101312] hover:bg-[#b8ff6d]"
-                          : "border border-[#3F3F3F] bg-[#202623] text-white hover:bg-[#202623]/80"
+                          ? "gradient-btn-mint-pink"
+                          : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] hover:border-[var(--mint)]/40"
                       }`}
                     >
                       {plan.ctaText}
@@ -227,10 +235,10 @@ export default function PricingPage() {
                   ) : (
                     <Link
                       href={plan.ctaHref}
-                      className={`block w-full rounded-lg px-4 py-2.5 text-center text-xs font-semibold transition ${
+                      className={`block w-full rounded-md px-4 py-2 text-center text-xs font-semibold transition ${
                         isHighlight
-                          ? "bg-[#ABFF57] text-[#101312] hover:bg-[#b8ff6d]"
-                          : "border border-[#3F3F3F] bg-[#202623] text-white hover:bg-[#202623]/80"
+                          ? "gradient-btn-mint-pink"
+                          : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] hover:border-[var(--mint)]/40"
                       }`}
                     >
                       {plan.ctaText}
@@ -243,17 +251,17 @@ export default function PricingPage() {
         </div>
 
         {/* What counts as a verified PR section */}
-        <section className="mt-24 rounded-2xl border border-[#3F3F3F]/60 bg-[#171B19] p-8 lg:p-12">
+        <section className="mt-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-xs lg:p-10">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
               What counts as a verified PR?
             </h2>
-            <p className="mt-4 text-base leading-7 text-[#A7B0AA]">
+            <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
               A verified PR means MergeMint links a pull request, reviews the diff against the PRD, REQ-IDs, acceptance criteria, engineering tasks, and repository context, then produces QA evidence for approval.
             </p>
           </div>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { step: "01", title: "Link PR", desc: "Attach pull request from your connected GitHub repository." },
               { step: "02", title: "Analyze Diff", desc: "Compare code changes against PRD and REQ-ID mapped criteria." },
@@ -262,49 +270,49 @@ export default function PricingPage() {
             ].map((item) => (
               <div
                 key={item.step}
-                className="rounded-xl border border-[#3F3F3F]/40 bg-[#101312]/70 p-5"
+                className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 text-left"
               >
-                <span className="text-xs font-mono font-bold text-[#51BFFF]">{item.step}</span>
-                <h3 className="mt-2 text-sm font-semibold text-white">{item.title}</h3>
-                <p className="mt-1.5 text-xs text-[#A7B0AA] leading-5">{item.desc}</p>
+                <span className="text-xs font-mono font-bold text-[var(--blue)]">{item.step}</span>
+                <h3 className="mt-1.5 text-sm font-semibold text-[var(--text)]">{item.title}</h3>
+                <p className="mt-1 text-xs text-[var(--text-muted)] leading-5">{item.desc}</p>
               </div>
             ))}
           </div>
         </section>
 
         {/* Value Comparison Section */}
-        <section className="mt-16 rounded-2xl border border-[#51BFFF]/30 bg-[linear-gradient(135deg,rgba(81,191,255,0.06),rgba(171,255,87,0.03))] p-8 text-center lg:p-12">
-          <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+        <section className="mt-14 rounded-2xl border border-[var(--blue)]/20 bg-[var(--blue)]/5 p-8 text-center lg:p-10">
+          <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
             Not another seat-based code review tool.
           </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-[#A7B0AA]">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
             Most tools charge per developer seat. MergeMint is priced around release volume, so you pay for the PRs you actually verify and deliver.
           </p>
-          <div className="mt-8 inline-block rounded-xl border border-[#ABFF57]/40 bg-[#101312] px-6 py-4 shadow-xl">
-            <p className="text-base font-semibold tracking-wide text-[#ABFF57] sm:text-lg">
+          <div className="mt-6 inline-block rounded-xl border border-[var(--mint)]/30 bg-[var(--surface)] px-6 py-3.5 shadow-xs">
+            <p className="text-sm font-bold tracking-wide text-[var(--mint)] sm:text-base">
               GitHub shows what changed. MergeMint shows whether it is actually done.
             </p>
           </div>
         </section>
 
         {/* Included Features Section */}
-        <section className="mt-20">
+        <section className="mt-16">
           <div className="text-center">
-            <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
               Everything included across all plans
             </h2>
-            <p className="mt-3 text-sm text-[#A7B0AA]">
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
               Complete requirement-to-release proof pipeline out of the box.
             </p>
           </div>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {includedFeatures.map((feature) => (
               <div
                 key={feature}
-                className="flex items-center gap-3 rounded-lg border border-[#3F3F3F]/40 bg-[#171B19] p-4 text-sm text-white"
+                className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3.5 text-xs font-medium text-[var(--text)] shadow-xs"
               >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ABFF57]/15 text-xs font-bold text-[#ABFF57]">
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--mint)]/15 text-[10px] font-bold text-[var(--mint)]">
                   ✓
                 </span>
                 <span>{feature}</span>
@@ -314,23 +322,23 @@ export default function PricingPage() {
         </section>
 
         {/* FAQ Section */}
-        <section className="mt-24 max-w-3xl mx-auto">
+        <section className="mt-20 max-w-3xl mx-auto">
           <div className="text-center">
-            <h2 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
               Frequently asked questions
             </h2>
           </div>
 
-          <div className="mt-10 space-y-6">
+          <div className="mt-8 space-y-4">
             {faqs.map((faq) => (
               <div
                 key={faq.question}
-                className="rounded-xl border border-[#3F3F3F]/40 bg-[#171B19] p-6"
+                className="mint-card p-5 text-left"
               >
-                <h3 className="text-base font-semibold text-white">
+                <h3 className="text-sm font-bold text-[var(--text)]">
                   {faq.question}
                 </h3>
-                <p className="mt-3 text-sm leading-6 text-[#A7B0AA]">
+                <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
                   {faq.answer}
                 </p>
               </div>
@@ -339,18 +347,18 @@ export default function PricingPage() {
         </section>
 
         {/* Bottom CTA */}
-        <section className="mt-24 text-center">
-          <div className="rounded-2xl border border-[#3F3F3F]/60 bg-[#171B19] p-10 lg:p-14">
-            <h2 className="text-3xl font-semibold tracking-tight text-white">
+        <section className="mt-20 text-center">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 lg:p-12 shadow-xs">
+            <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
               Ready to verify your next release?
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-[#A7B0AA]">
+            <p className="mx-auto mt-3 max-w-xl text-xs text-[var(--text-muted)] leading-5">
               Get complete release proof for your pull requests with AI requirement verification and shareable client reports.
             </p>
-            <div className="mt-8 flex justify-center gap-4">
+            <div className="mt-6 flex justify-center">
               <Link
                 href="/login"
-                className="rounded-lg bg-[#ABFF57] px-6 py-3 text-sm font-semibold text-[#101312] transition hover:bg-[#b8ff6d]"
+                className="gradient-btn-mint-pink rounded-md px-6 py-2.5 text-xs font-bold shadow-xs"
               >
                 Start verifying now
               </Link>
@@ -360,23 +368,23 @@ export default function PricingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-[#3F3F3F]/40 bg-[#101312] py-10 text-xs text-[#A7B0AA]">
+      <footer className="border-t border-[var(--border)] bg-[var(--surface)] py-8 text-xs text-[var(--text-muted)]">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 sm:flex-row sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <span className="grid h-7 w-7 place-items-center rounded border border-[#ABFF57]/40 bg-[#ABFF57]/10 text-xs font-bold text-[#ABFF57]">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-6 w-6 place-items-center rounded border border-[var(--mint)]/30 bg-[var(--mint)]/10 text-[10px] font-bold text-[var(--mint)]">
               MM
             </span>
-            <span className="font-semibold text-white">MergeMint</span>
+            <span className="font-semibold text-[var(--text)]">MergeMint</span>
             <span>- Requirement-to-release proof platform.</span>
           </div>
           <div className="flex gap-6">
-            <Link href="/" className="transition hover:text-white">
+            <Link href="/" className="transition hover:text-[var(--text)]">
               Home
             </Link>
-            <Link href="/pricing" className="transition hover:text-white">
+            <Link href="/pricing" className="transition hover:text-[var(--text)]">
               Pricing
             </Link>
-            <Link href="/login" className="transition hover:text-white">
+            <Link href="/login" className="transition hover:text-[var(--text)]">
               Sign in
             </Link>
           </div>
