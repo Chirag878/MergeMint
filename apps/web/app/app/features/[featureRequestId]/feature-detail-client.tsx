@@ -708,7 +708,7 @@ export function FeatureDetailClient({
 
     if (markdown) {
       await navigator.clipboard.writeText(markdown);
-      setTaskCopyMessage("Developer brief copied.");
+      setTaskCopyMessage("Developer handoff copied.");
     }
   }
 
@@ -719,7 +719,7 @@ export function FeatureDetailClient({
 
     if (payload) {
       await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      setTaskCopyMessage("AI coding agent payload copied.");
+      setTaskCopyMessage("Coding agent prompt copied.");
     }
   }
 
@@ -1411,7 +1411,11 @@ export function FeatureDetailClient({
             prNumber
           })
         }
-        isSelecting={linkSelectedPullRequest.isPending}
+        selectingPrNumber={
+          linkSelectedPullRequest.isPending
+            ? linkSelectedPullRequest.variables?.prNumber ?? null
+            : null
+        }
         selectError={linkSelectedPullRequest.error?.message}
         prUrl={prUrl}
         setPrUrl={setPrUrl}
@@ -1668,7 +1672,7 @@ function EngineeringTasksCommandCenter({
               disabled={tasks.length === 0 || isCopying}
               className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Copy developer brief
+              Copy Developer Handoff
             </button>
             <button
               type="button"
@@ -1676,8 +1680,13 @@ function EngineeringTasksCommandCenter({
               disabled={tasks.length === 0 || isCopying}
               className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Copy for AI agent
+              Copy Coding Agent Prompt
             </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-neutral-400 border-t border-neutral-800/60 pt-2.5">
+            <p><span className="font-semibold text-neutral-300">Developer Handoff:</span> plain-language task brief for a human engineer.</p>
+            <p><span className="font-semibold text-neutral-300">Coding Agent Prompt:</span> structured prompt for Codex, Cursor, Copilot, or Antigravity.</p>
           </div>
         </div>
 
@@ -1934,7 +1943,7 @@ function FeatureWorkflowGuide({
 
       <div className="mt-5">
         <div className="flex items-center justify-between text-xs text-neutral-400">
-          <span>Release progress</span>
+          <span>Release Checklist progress</span>
           <span>{workflow.completionPercentage}%</span>
         </div>
         <div className="mt-2 h-2 rounded-full bg-black/40">
@@ -2132,6 +2141,86 @@ function ReleaseControlRoom({
     : undefined;
   const prdStep = data.progress.find((step) => step.id === "prd");
 
+  const hasPrd = Boolean(
+    data.progress.find((s) => s.id === "prd" && s.status === "complete")
+  );
+  const hasPr = Boolean(
+    data.prEvidence?.pullRequestId ||
+      data.progress.find((s) => s.id === "pr" && s.status === "complete")
+  );
+  const hasQa = Boolean(
+    data.qaReview ||
+      data.progress.find((s) => s.id === "qa_review" && s.status === "complete")
+  );
+  const hasApproval = Boolean(
+    data.humanApproval?.decision === "approved" ||
+      data.humanApproval?.decision === "approved_with_risk"
+  );
+  const hasReport = Boolean(
+    data.releaseReport ||
+      data.progress.find(
+        (s) => s.id === "release_report" && s.status === "complete"
+      )
+  );
+
+  const releaseChecklistGroups = [
+    {
+      title: "Setup",
+      items: [
+        {
+          label: "Repository connected",
+          complete: Boolean(data.prEvidence?.repo || data.project.name)
+        },
+        { label: "Repository analyzed", complete: true }
+      ]
+    },
+    {
+      title: "Requirement",
+      items: [
+        {
+          label: "Requirement Review complete",
+          complete:
+            !prdStep?.blockedReason?.includes("Requirement Review") &&
+            !prdMayBeOutdated
+        },
+        { label: "PRD generated", complete: hasPrd },
+        { label: "Acceptance criteria ready", complete: hasPrd }
+      ]
+    },
+    {
+      title: "Build",
+      items: [
+        { label: "Engineering tasks generated", complete: hasPrd },
+        { label: "PR linked", complete: hasPr }
+      ]
+    },
+    {
+      title: "Verify",
+      items: [
+        { label: "QA review complete", complete: hasQa },
+        {
+          label: "Risks resolved",
+          complete:
+            hasQa &&
+            data.riskSummary.unresolvedFindingsCount === 0 &&
+            !data.prEvidence?.rereviewRequired
+        }
+      ]
+    },
+    {
+      title: "Ship",
+      items: [
+        { label: "Human approval complete", complete: hasApproval },
+        { label: "Release report generated", complete: hasReport }
+      ]
+    }
+  ];
+
+  const totalChecklistItems = releaseChecklistGroups.flatMap((g) => g.items).length;
+  const readyChecklistItems = releaseChecklistGroups
+    .flatMap((g) => g.items)
+    .filter((i) => i.complete).length;
+
   return (
     <section className="space-y-5 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <div className="flex flex-wrap items-start justify-between gap-5">
@@ -2171,49 +2260,50 @@ function ReleaseControlRoom({
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-          <h3 className="text-base font-medium text-neutral-100">
-            Workflow Progress
-          </h3>
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {data.progress.map((step) => (
-              <article
-                key={step.id}
-                className="rounded-md border border-neutral-800 bg-neutral-900 p-4"
+          <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3">
+            <h3 className="text-base font-medium text-neutral-100">
+              Release Checklist
+            </h3>
+            <span className="rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-0.5 text-xs text-neutral-400 font-medium">
+              {readyChecklistItems} of {totalChecklistItems} ready
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {releaseChecklistGroups.map((group) => (
+              <div
+                key={group.title}
+                className="rounded-md border border-neutral-800 bg-neutral-900/80 p-3"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-neutral-100">{step.label}</p>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      {step.timestamp ? formatDate(step.timestamp) : "Not yet"}
-                    </p>
-                  </div>
-                  <WorkflowStatusBadge status={step.status} />
-                </div>
-                {step.blockedReason ? (
-                  <p className="mt-3 text-sm text-amber-300">
-                    {step.blockedReason}
-                  </p>
-                ) : null}
-                {step.actionKind ? (
-                  <div className="mt-3">
-                    <InlineControlRoomAction
-                      action={step.actionKind}
-                      reportHref={reportHref}
-                      prdMayBeOutdated={prdMayBeOutdated}
-                      onGeneratePrd={onGeneratePrd}
-                      isGeneratingPrd={isGeneratingPrd}
-                      onLinkPr={onLinkPr}
-                      onRunQa={onRunQa}
-                      isRunningQa={isRunningQa}
-                      onSubmitApproval={onSubmitApproval}
-                      onGenerateReport={onGenerateReport}
-                      isGeneratingReport={isGeneratingReport}
-                    />
-                  </div>
-                ) : null}
-              </article>
+                <h4 className="border-b border-neutral-800/80 pb-2 text-xs font-semibold uppercase tracking-wider text-blue-400">
+                  {group.title}
+                </h4>
+                <ul className="mt-2.5 space-y-2">
+                  {group.items.map((item) => (
+                    <li key={item.label} className="flex items-start gap-1.5 text-xs">
+                      <span
+                        className={
+                          item.complete
+                            ? "font-bold text-emerald-400 shrink-0"
+                            : "font-bold text-neutral-600 shrink-0"
+                        }
+                      >
+                        {item.complete ? "✓" : "○"}
+                      </span>
+                      <span
+                        className={
+                          item.complete
+                            ? "text-neutral-200"
+                            : "text-neutral-400"
+                        }
+                      >
+                        {item.label}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
           </div>
         </section>
@@ -3034,7 +3124,7 @@ function GitHubPullRequestSection({
   setPrStateFilter,
   onRefreshPicker,
   onSelectPullRequest,
-  isSelecting,
+  selectingPrNumber,
   selectError,
   prUrl,
   setPrUrl,
@@ -3125,7 +3215,7 @@ function GitHubPullRequestSection({
   setPrStateFilter: (value: "open" | "closed" | "all") => void;
   onRefreshPicker: () => void;
   onSelectPullRequest: (prNumber: number) => void;
-  isSelecting: boolean;
+  selectingPrNumber?: number | null;
   selectError?: string;
   prUrl: string;
   setPrUrl: (value: string) => void;
@@ -3207,52 +3297,55 @@ function GitHubPullRequestSection({
           ) : null}
 
           <div className="space-y-3">
-            {pickerData?.pullRequests.map((pullRequest) => (
-              <article
-                key={pullRequest.number}
-                className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-medium text-neutral-100">
-                      #{pullRequest.number} {pullRequest.title}
-                    </h3>
-                    <p className="mt-1 text-sm text-neutral-500">
-                      {pullRequest.headBranch} {"->"} {pullRequest.baseBranch}
-                      {pullRequest.authorLogin ? ` by ${pullRequest.authorLogin}` : ""}
-                    </p>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      Updated{" "}
-                      {pullRequest.updatedAt
-                        ? formatDate(pullRequest.updatedAt)
-                        : "unknown"}
-                    </p>
+            {pickerData?.pullRequests.map((pullRequest) => {
+              const isThisCardSelecting = selectingPrNumber === pullRequest.number;
+              return (
+                <article
+                  key={pullRequest.number}
+                  className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-medium text-neutral-100">
+                        #{pullRequest.number} {pullRequest.title}
+                      </h3>
+                      <p className="mt-1 text-sm text-neutral-500">
+                        {pullRequest.headBranch} {"->"} {pullRequest.baseBranch}
+                        {pullRequest.authorLogin ? ` by ${pullRequest.authorLogin}` : ""}
+                      </p>
+                      <p className="mt-1 text-xs text-neutral-500">
+                        Updated{" "}
+                        {pullRequest.updatedAt
+                          ? formatDate(pullRequest.updatedAt)
+                          : "unknown"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge>{pullRequest.state}</Badge>
+                      {pullRequest.draft ? <Badge>draft</Badge> : null}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge>{pullRequest.state}</Badge>
-                    {pullRequest.draft ? <Badge>draft</Badge> : null}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onSelectPullRequest(pullRequest.number)}
+                      disabled={selectingPrNumber != null}
+                      className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isThisCardSelecting ? "Linking..." : "Link PR"}
+                    </button>
+                    <a
+                      href={pullRequest.htmlUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+                    >
+                      Open on GitHub
+                    </a>
                   </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onSelectPullRequest(pullRequest.number)}
-                    disabled={isSelecting}
-                    className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isSelecting ? "Linking..." : "Link PR"}
-                  </button>
-                  <a
-                    href={pullRequest.htmlUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
-                  >
-                    Open on GitHub
-                  </a>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
 
           <details className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
