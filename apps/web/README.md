@@ -15,6 +15,17 @@ Open [http://localhost:3000](http://localhost:3000).
 Deploy the web app on Vercel and set the server/client environment variables
 from the workspace `.env.example`.
 
+For the production MergeMint domain, set these without a trailing slash:
+
+```text
+BETTER_AUTH_URL=https://mergemint-eight.vercel.app
+NEXT_PUBLIC_APP_URL=https://mergemint-eight.vercel.app
+```
+
+Run the pricing checkout flow on the same production domain configured in
+Better Auth. Testing OAuth on a Vercel preview URL while `BETTER_AUTH_URL`
+points at production can make the post-login session appear missing.
+
 ## GitHub Webhook Setup
 
 MergeMint accepts GitHub webhook events at:

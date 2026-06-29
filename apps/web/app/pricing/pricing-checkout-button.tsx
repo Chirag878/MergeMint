@@ -56,7 +56,7 @@ function loadRazorpayScript() {
 }
 
 function checkoutLoginPath(planKey: string) {
-  return `/login?next=${encodeURIComponent(`/pricing?checkoutPlan=${planKey}`)}`;
+  return `/login?callbackURL=${encodeURIComponent(`/pricing?checkoutPlan=${planKey}`)}`;
 }
 
 export function PricingCheckoutButton({
@@ -97,7 +97,15 @@ export function PricingCheckoutButton({
     }
 
     if (!isSignedIn) {
-      router.push(checkoutLoginPath(plan.key));
+      const redirectTarget = checkoutLoginPath(plan.key);
+      if (process.env.NODE_ENV === "development") {
+        console.info("[billing] Redirecting signed-out checkout.", {
+          hasSession: false,
+          planKey: plan.key,
+          redirectTarget
+        });
+      }
+      router.push(redirectTarget);
       return;
     }
 
@@ -141,7 +149,15 @@ export function PricingCheckoutButton({
         message.toLowerCase().includes("logged in") ||
         message.toLowerCase().includes("unauthorized")
       ) {
-        router.push(checkoutLoginPath(plan.key));
+        const redirectTarget = checkoutLoginPath(plan.key);
+        if (process.env.NODE_ENV === "development") {
+          console.info("[billing] Checkout auth required.", {
+            hasSession: false,
+            planKey: plan.key,
+            redirectTarget
+          });
+        }
+        router.push(redirectTarget);
         return;
       }
       setMessage(message);

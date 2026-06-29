@@ -355,6 +355,13 @@ export async function createCheckoutOrder(
 
   const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
   await ensureFreeEntitlement(workspace.activeOrganization.id);
+  if (process.env.NODE_ENV === "development") {
+    console.info("[billing] Creating Razorpay checkout order.", {
+      hasUser: Boolean(ctx.user.id),
+      hasWorkspace: Boolean(workspace.activeOrganization.id),
+      planKey
+    });
+  }
 
   const billingPaymentId = randomUUID();
   const receipt = `mm_${workspace.activeOrganization.id.slice(0, 8)}_${Date.now()}`;
