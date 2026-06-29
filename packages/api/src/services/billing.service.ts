@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import {
@@ -356,7 +356,20 @@ export async function createCheckoutOrder(
   const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
   await ensureFreeEntitlement(workspace.activeOrganization.id);
 
+  const billingPaymentId = randomUUID();
   const receipt = `mm_${workspace.activeOrganization.id.slice(0, 8)}_${Date.now()}`;
+
+  await db.insert(billingPayments).values({
+    id: billingPaymentId,
+    organizationId: workspace.activeOrganization.id,
+    userId: workspace.appUser.id,
+    planKey: plan.key,
+    amount: plan.checkoutAmountPaise,
+    currency: "INR",
+    status: "creating",
+    razorpayOrderId: `pending:${billingPaymentId}`
+  });
+
   const response = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: {
@@ -370,13 +383,24 @@ export async function createCheckoutOrder(
       currency: "INR",
       receipt,
       notes: {
-        plan_key: plan.key,
-        organization_id: workspace.activeOrganization.id
+        workspaceId: workspace.activeOrganization.id,
+        userId: workspace.appUser.id,
+        planKey: plan.key,
+        billingPaymentId,
+        environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "unknown"
       }
     })
   });
 
   if (!response.ok) {
+    await db
+      .update(billingPayments)
+      .set({
+        status: "failed",
+        updatedAt: new Date()
+      })
+      .where(eq(billingPayments.id, billingPaymentId));
+
     throw new TRPCError({
       code: "BAD_GATEWAY",
       message: "Could not create Razorpay order. Please try again."
@@ -389,20 +413,22 @@ export async function createCheckoutOrder(
     currency: string;
   };
 
-  await db.insert(billingPayments).values({
-    organizationId: workspace.activeOrganization.id,
-    userId: workspace.appUser.id,
-    planKey: plan.key,
-    amount: order.amount,
-    currency: order.currency,
-    status: "created",
-    razorpayOrderId: order.id
-  });
+  await db
+    .update(billingPayments)
+    .set({
+      amount: order.amount,
+      currency: order.currency,
+      status: "created",
+      razorpayOrderId: order.id,
+      updatedAt: new Date()
+    })
+    .where(eq(billingPayments.id, billingPaymentId));
 
   return {
     orderId: order.id,
     amount: order.amount,
     currency: order.currency,
+    billingPaymentId,
     keyId: publicKeyId,
     plan,
     prefill: {
@@ -557,16 +583,6 @@ async function ensurePaidPaymentActivated(input: {
     .from(workspaceEntitlements)
     .where(eq(workspaceEntitlements.organizationId, input.payment.organizationId))
     .limit(1);
-
-  if (
-    currentEntitlement?.planKey === planKey &&
-    currentEntitlement.status === "active" &&
-    currentEntitlement.source === "razorpay" &&
-    currentEntitlement.currentPeriodEnd &&
-    currentEntitlement.currentPeriodEnd > new Date()
-  ) {
-    return currentEntitlement;
-  }
 
   if (existingEvent) {
     if (currentEntitlement) {
@@ -918,6 +934,15 @@ function safeRazorpaySummary(payload: unknown): JsonObject {
       : undefined;
   const payment = paymentEntity?.entity as Record<string, unknown> | undefined;
   const order = orderEntity?.entity as Record<string, unknown> | undefined;
+  const paymentNotes =
+    payment?.notes && typeof payment.notes === "object"
+      ? (payment.notes as Record<string, unknown>)
+      : undefined;
+  const orderNotes =
+    order?.notes && typeof order.notes === "object"
+      ? (order.notes as Record<string, unknown>)
+      : undefined;
+  const notes = paymentNotes ?? orderNotes;
 
   return toJsonObject({
     event,
@@ -945,7 +970,14 @@ function safeRazorpaySummary(payload: unknown): JsonObject {
         ? payment.currency
         : typeof order?.currency === "string"
           ? order.currency
-          : undefined
+          : undefined,
+    billingPaymentId:
+      typeof notes?.billingPaymentId === "string"
+        ? notes.billingPaymentId
+        : undefined,
+    workspaceId:
+      typeof notes?.workspaceId === "string" ? notes.workspaceId : undefined,
+    planKey: typeof notes?.planKey === "string" ? notes.planKey : undefined
   });
 }
 
@@ -978,27 +1010,53 @@ export async function processRazorpayWebhook(input: {
 
   const orderId = summary.orderId as string | undefined;
   const paymentId = summary.paymentId as string | undefined;
-  if (!orderId) {
+  const billingPaymentId = summary.billingPaymentId as string | undefined;
+  const safeBillingPaymentId =
+    billingPaymentId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      billingPaymentId
+    )
+      ? billingPaymentId
+      : undefined;
+
+  if (!orderId && !safeBillingPaymentId) {
     return { ok: true, status: 200, body: { ok: true, ignored: true } };
   }
 
   await db.transaction(async (tx) => {
+    const paymentLookup =
+      orderId && safeBillingPaymentId
+        ? or(
+            eq(billingPayments.razorpayOrderId, orderId),
+            eq(billingPayments.id, safeBillingPaymentId)
+          )
+        : orderId
+          ? eq(billingPayments.razorpayOrderId, orderId)
+          : eq(billingPayments.id, safeBillingPaymentId as string);
+
     const [payment] = await tx
       .select()
       .from(billingPayments)
-      .where(eq(billingPayments.razorpayOrderId, orderId))
+      .where(paymentLookup)
       .limit(1);
 
-    if (!payment || payment.status === "paid") {
-      if (payment?.status === "paid") {
-        const planKey = assertPaidPlan(payment.planKey);
-        await ensurePaidPaymentActivated({
-          payment,
-          userId: payment.userId,
-          reason: `Razorpay webhook activated ${BILLING_PLANS[planKey].displayName}.`,
-          tx
-        });
-      }
+    if (!payment) {
+      console.warn("[billing] Ignored Razorpay webhook for unknown order.", {
+        event,
+        orderId,
+        billingPaymentId: safeBillingPaymentId
+      });
+      return;
+    }
+
+    if (payment.status === "paid") {
+      const planKey = assertPaidPlan(payment.planKey);
+      await ensurePaidPaymentActivated({
+        payment,
+        userId: payment.userId,
+        reason: `Razorpay webhook activated ${BILLING_PLANS[planKey].displayName}.`,
+        tx
+      });
       return;
     }
 
@@ -1008,6 +1066,7 @@ export async function processRazorpayWebhook(input: {
       .update(billingPayments)
       .set({
         status: "paid",
+        razorpayOrderId: orderId ?? payment.razorpayOrderId,
         razorpayPaymentId: paymentId ?? payment.razorpayPaymentId,
         safeEventSummary: summary,
         paidAt: now,
@@ -1022,6 +1081,7 @@ export async function processRazorpayWebhook(input: {
       payment: updatedPayment ?? {
         ...payment,
         status: "paid",
+        razorpayOrderId: orderId ?? payment.razorpayOrderId,
         razorpayPaymentId: paymentId ?? payment.razorpayPaymentId,
         safeEventSummary: summary,
         paidAt: now,

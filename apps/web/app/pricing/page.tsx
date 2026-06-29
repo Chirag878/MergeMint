@@ -5,6 +5,12 @@ import { PricingCheckoutButton } from "./pricing-checkout-button";
 
 const pricingPlans = PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]);
 
+type PricingPageProps = {
+  searchParams?:
+    | Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>;
+};
+
 const bestFor: Record<(typeof PAID_BILLING_PLAN_KEYS)[number], string> = {
   launch_pack: "Trying MergeMint on a real project",
   pilot: "Freelancers and solo builders",
@@ -51,7 +57,16 @@ const faqs = [
   }
 ];
 
-export default function PricingPage() {
+export default async function PricingPage({ searchParams }: PricingPageProps) {
+  const params = await Promise.resolve(searchParams ?? {});
+  const selectedPlanKey =
+    typeof params.checkoutPlan === "string" ? params.checkoutPlan : undefined;
+  const selectedPlan = PAID_BILLING_PLAN_KEYS.includes(
+    selectedPlanKey as (typeof PAID_BILLING_PLAN_KEYS)[number]
+  )
+    ? BILLING_PLANS[selectedPlanKey as (typeof PAID_BILLING_PLAN_KEYS)[number]]
+    : null;
+
   return (
     <div className="min-h-screen bg-[var(--bg)] font-sans text-[var(--text)] transition-colors duration-200">
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/85 backdrop-blur-md">
@@ -104,6 +119,16 @@ export default function PricingPage() {
             Free workspaces include 1 PR review credit. Exploration is not gated.
           </p>
         </div>
+
+        {selectedPlan ? (
+          <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-[var(--mint)]/35 bg-[var(--mint)]/10 px-4 py-3 text-sm text-[var(--text)]">
+            You selected{" "}
+            <span className="font-semibold text-[var(--mint)]">
+              {selectedPlan.displayName}
+            </span>
+            . Continue checkout to activate your plan.
+          </div>
+        ) : null}
 
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4 xl:gap-6">
           {pricingPlans.map((plan) => {
@@ -169,15 +194,29 @@ export default function PricingPage() {
                         : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] hover:border-[var(--mint)]/40"
                     }`}
                   >
-                    {plan.key === "launch_pack"
-                      ? "Get launch offer"
-                      : `Choose ${plan.displayName}`}
+                    Start checkout
                   </PricingCheckoutButton>
                 </div>
               </div>
             );
           })}
         </div>
+
+        <p className="mx-auto mt-6 max-w-3xl text-center text-xs leading-5 text-[var(--text-muted)]">
+          By continuing, you agree to the{" "}
+          <Link href="/terms" className="font-semibold text-[var(--text)] underline-offset-4 hover:underline">
+            Terms & Conditions
+          </Link>
+          ,{" "}
+          <Link href="/privacy" className="font-semibold text-[var(--text)] underline-offset-4 hover:underline">
+            Privacy Policy
+          </Link>
+          , and{" "}
+          <Link href="/refund-policy" className="font-semibold text-[var(--text)] underline-offset-4 hover:underline">
+            Refund Policy
+          </Link>
+          .
+        </p>
 
         <section className="mt-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-xs lg:p-10">
           <div className="mx-auto max-w-3xl text-center">

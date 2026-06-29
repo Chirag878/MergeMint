@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { authClient } from "@veriflow/auth/client";
 import type { BillingPlan } from "@veriflow/shared";
 import { trpc } from "@/trpc/react";
 
@@ -54,17 +55,25 @@ function loadRazorpayScript() {
   });
 }
 
+function checkoutLoginPath(planKey: string) {
+  return `/login?next=${encodeURIComponent(`/pricing?checkoutPlan=${planKey}`)}`;
+}
+
 export function PricingCheckoutButton({
   plan,
   className,
-  children
+  children,
+  signedOutChildren = "Sign in to start"
 }: {
   plan: BillingPlan;
   className: string;
   children: React.ReactNode;
+  signedOutChildren?: React.ReactNode;
 }) {
   const router = useRouter();
   const utils = trpc.useUtils();
+  const session = authClient.useSession();
+  const isSignedIn = Boolean(session.data?.user);
   const [message, setMessage] = useState<string | null>(null);
   const createOrder = trpc.billing.createCheckoutOrder.useMutation();
   const verifyPayment = trpc.billing.verifyCheckoutPayment.useMutation({
@@ -75,7 +84,7 @@ export function PricingCheckoutButton({
         utils.billing.getPaymentHistory.invalidate(),
         utils.billing.getCreditEvents.invalidate()
       ]);
-      router.push("/app/billing");
+      router.push("/app/welcome?payment=success");
       router.refresh();
     },
     onError: (error) => setMessage(error.message)
@@ -83,6 +92,15 @@ export function PricingCheckoutButton({
 
   async function startCheckout() {
     setMessage(null);
+    if (session.isPending) {
+      return;
+    }
+
+    if (!isSignedIn) {
+      router.push(checkoutLoginPath(plan.key));
+      return;
+    }
+
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded || !window.Razorpay) {
       setMessage("Could not load Razorpay checkout. Please try again.");
@@ -119,8 +137,11 @@ export function PricingCheckoutButton({
         error instanceof Error
           ? error.message
           : "Sign in before choosing a plan.";
-      if (message.toLowerCase().includes("logged in")) {
-        router.push(`/login?returnTo=${encodeURIComponent(`/pricing?plan=${plan.key}`)}`);
+      if (
+        message.toLowerCase().includes("logged in") ||
+        message.toLowerCase().includes("unauthorized")
+      ) {
+        router.push(checkoutLoginPath(plan.key));
         return;
       }
       setMessage(message);
@@ -132,10 +153,14 @@ export function PricingCheckoutButton({
       <button
         type="button"
         onClick={startCheckout}
-        disabled={createOrder.isPending || verifyPayment.isPending}
+        disabled={session.isPending || createOrder.isPending || verifyPayment.isPending}
         className={className}
       >
-        {createOrder.isPending || verifyPayment.isPending ? "Processing..." : children}
+        {session.isPending || createOrder.isPending || verifyPayment.isPending
+          ? "Processing..."
+          : isSignedIn
+            ? children
+            : signedOutChildren}
       </button>
       {message ? <p className="mt-2 text-xs text-[var(--text-muted)]">{message}</p> : null}
     </div>
