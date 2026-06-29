@@ -340,6 +340,21 @@ export async function createCheckoutOrder(
   ctx: ProtectedContext,
   input: { planKey: string }
 ) {
+  if (!ctx.session || !ctx.user) {
+    if (process.env.NODE_ENV === "development") {
+      console.info("[billing] Blocked checkout order.", {
+        hasUser: Boolean(ctx.user),
+        hasWorkspace: false,
+        planKey: input.planKey,
+        action: "blocked_unauthorized"
+      });
+    }
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Sign in before starting checkout."
+    });
+  }
+
   const planKey = assertPaidPlan(input.planKey);
   const plan = BILLING_PLANS[planKey];
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -359,7 +374,8 @@ export async function createCheckoutOrder(
     console.info("[billing] Creating Razorpay checkout order.", {
       hasUser: Boolean(ctx.user.id),
       hasWorkspace: Boolean(workspace.activeOrganization.id),
-      planKey
+      planKey,
+      action: "order_created"
     });
   }
 

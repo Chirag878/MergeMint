@@ -63,17 +63,20 @@ export function PricingCheckoutButton({
   plan,
   className,
   children,
-  signedOutChildren = "Sign in to start"
+  signedOutChildren = "Sign in to start",
+  initialIsSignedIn = false
 }: {
   plan: BillingPlan;
   className: string;
   children: React.ReactNode;
   signedOutChildren?: React.ReactNode;
+  initialIsSignedIn?: boolean;
 }) {
   const router = useRouter();
   const utils = trpc.useUtils();
   const session = authClient.useSession();
-  const isSignedIn = Boolean(session.data?.user);
+  const isCheckingSession = !initialIsSignedIn && session.isPending;
+  const isSignedIn = initialIsSignedIn || Boolean(session.data?.user);
   const [message, setMessage] = useState<string | null>(null);
   const createOrder = trpc.billing.createCheckoutOrder.useMutation();
   const verifyPayment = trpc.billing.verifyCheckoutPayment.useMutation({
@@ -92,7 +95,12 @@ export function PricingCheckoutButton({
 
   async function startCheckout() {
     setMessage(null);
-    if (session.isPending) {
+    const route =
+      typeof window === "undefined"
+        ? "unknown"
+        : `${window.location.pathname}${window.location.search}`;
+
+    if (isCheckingSession) {
       return;
     }
 
@@ -100,8 +108,10 @@ export function PricingCheckoutButton({
       const redirectTarget = checkoutLoginPath(plan.key);
       if (process.env.NODE_ENV === "development") {
         console.info("[billing] Redirecting signed-out checkout.", {
+          route,
           hasSession: false,
           planKey: plan.key,
+          action: "redirect_to_login",
           redirectTarget
         });
       }
@@ -109,14 +119,23 @@ export function PricingCheckoutButton({
       return;
     }
 
-    const scriptLoaded = await loadRazorpayScript();
-    if (!scriptLoaded || !window.Razorpay) {
-      setMessage("Could not load Razorpay checkout. Please try again.");
-      return;
-    }
-
     try {
+      if (process.env.NODE_ENV === "development") {
+        console.info("[billing] Starting authenticated checkout.", {
+          route,
+          hasSession: true,
+          planKey: plan.key,
+          action: "create_order"
+        });
+      }
+
       const order = await createOrder.mutateAsync({ planKey: plan.key });
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded || !window.Razorpay) {
+        setMessage("Could not load Razorpay checkout. Please try again.");
+        return;
+      }
+
       const checkout = new window.Razorpay({
         key: order.keyId,
         amount: order.amount,
@@ -152,8 +171,10 @@ export function PricingCheckoutButton({
         const redirectTarget = checkoutLoginPath(plan.key);
         if (process.env.NODE_ENV === "development") {
           console.info("[billing] Checkout auth required.", {
+            route,
             hasSession: false,
             planKey: plan.key,
+            action: "redirect_to_login",
             redirectTarget
           });
         }
@@ -169,11 +190,13 @@ export function PricingCheckoutButton({
       <button
         type="button"
         onClick={startCheckout}
-        disabled={session.isPending || createOrder.isPending || verifyPayment.isPending}
+        disabled={isCheckingSession || createOrder.isPending || verifyPayment.isPending}
         className={className}
       >
-        {session.isPending || createOrder.isPending || verifyPayment.isPending
-          ? "Processing..."
+        {isCheckingSession
+          ? "Checking session..."
+          : createOrder.isPending || verifyPayment.isPending
+            ? "Processing..."
           : isSignedIn
             ? children
             : signedOutChildren}

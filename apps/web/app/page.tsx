@@ -483,9 +483,9 @@ export default function LandingPage() {
 
           <div className="mt-14 grid gap-6 sm:grid-cols-3">
             {[
-              { name: "Launch Pack", price: "₹199", detail: "3 verified PRs", note: "Valid until 30 June" },
-              { name: "Studio", price: "$51/mo", detail: "90 verified PRs/month", note: "Recommended for agencies", highlight: true },
-              { name: "Scale", price: "$99/mo", detail: "220 verified PRs/month", note: "Product teams & studios" }
+              { key: "launch_pack", name: "Launch Pack", price: "₹199", detail: "3 verified PRs", note: "Valid until 30 June" },
+              { key: "studio", name: "Studio", price: "$51/mo", detail: "90 verified PRs/month", note: "Recommended for agencies", highlight: true },
+              { key: "scale", name: "Scale", price: "$99/mo", detail: "220 verified PRs/month", note: "Product teams & studios" }
             ].map((p) => (
               <div
                 key={p.name}
@@ -500,7 +500,7 @@ export default function LandingPage() {
                   <p className="mt-1 text-[11px] text-[var(--text-muted)]">{p.note}</p>
                 </div>
                 <Link
-                  href="/pricing"
+                  href={`/pricing?checkoutPlan=${p.key}`}
                   className="mt-6 block w-full rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] py-2 text-center text-xs font-semibold text-[var(--text)] transition hover:border-[var(--mint)]/40"
                 >
                   View details

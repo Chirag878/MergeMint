@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { getSessionFromHeaders } from "@veriflow/auth/server";
 import { BILLING_PLANS, PAID_BILLING_PLAN_KEYS } from "@veriflow/shared";
 import { ThemeToggle } from "../components/theme-provider";
 import { PricingCheckoutButton } from "./pricing-checkout-button";
@@ -58,6 +60,8 @@ const faqs = [
 ];
 
 export default async function PricingPage({ searchParams }: PricingPageProps) {
+  const session = await getSessionFromHeaders(await headers());
+  const isSignedIn = Boolean(session?.user);
   const params = await Promise.resolve(searchParams ?? {});
   const selectedPlanKey =
     typeof params.checkoutPlan === "string" ? params.checkoutPlan : undefined;
@@ -122,11 +126,11 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
 
         {selectedPlan ? (
           <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-[var(--mint)]/35 bg-[var(--mint)]/10 px-4 py-3 text-sm text-[var(--text)]">
-            You selected{" "}
+            {isSignedIn ? "You selected " : "Sign in to continue checkout for "}
             <span className="font-semibold text-[var(--mint)]">
               {selectedPlan.displayName}
             </span>
-            . Continue checkout to activate your plan.
+            {isSignedIn ? ". Continue checkout to activate your plan." : "."}
           </div>
         ) : null}
 
@@ -188,6 +192,7 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
                 <div className="mt-8">
                   <PricingCheckoutButton
                     plan={plan}
+                    initialIsSignedIn={isSignedIn}
                     className={`block w-full rounded-md px-4 py-2 text-center text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                       isHighlight
                         ? "gradient-btn-mint-pink"
