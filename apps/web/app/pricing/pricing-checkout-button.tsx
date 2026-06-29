@@ -64,11 +64,17 @@ export function PricingCheckoutButton({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const utils = trpc.useUtils();
   const [message, setMessage] = useState<string | null>(null);
   const createOrder = trpc.billing.createCheckoutOrder.useMutation();
   const verifyPayment = trpc.billing.verifyCheckoutPayment.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       setMessage("Payment verified. Redirecting...");
+      await Promise.all([
+        utils.billing.getCurrentEntitlement.invalidate(),
+        utils.billing.getPaymentHistory.invalidate(),
+        utils.billing.getCreditEvents.invalidate()
+      ]);
       router.push("/app/billing");
       router.refresh();
     },
