@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { BILLING_PLANS, PAID_BILLING_PLAN_KEYS } from "@veriflow/shared";
 import { trpc } from "@/trpc/react";
-import { PricingCheckoutButton } from "../../pricing/pricing-checkout-button";
+import { ProtectedCheckoutButton } from "./protected-checkout-button";
 
 function formatDate(value?: Date | string | null) {
   if (!value) {
@@ -29,14 +29,24 @@ function formatLabel(value: string) {
   return value.replaceAll("_", " ");
 }
 
-export function BillingClient() {
+export function BillingClient({ selectedPlanKey }: { selectedPlanKey?: string }) {
   const entitlement = trpc.billing.getCurrentEntitlement.useQuery();
   const paymentHistory = trpc.billing.getPaymentHistory.useQuery();
   const creditEvents = trpc.billing.getCreditEvents.useQuery();
   const paidPlans = PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]);
+  const selectedPlan = PAID_BILLING_PLAN_KEYS.includes(
+    selectedPlanKey as (typeof PAID_BILLING_PLAN_KEYS)[number]
+  )
+    ? BILLING_PLANS[selectedPlanKey as (typeof PAID_BILLING_PLAN_KEYS)[number]]
+    : null;
   const currentPlan = entitlement.data
     ? BILLING_PLANS[entitlement.data.planKey as keyof typeof BILLING_PLANS]
     : null;
+  const latestPaidPayment = paymentHistory.data?.find(
+    (payment) => payment.status === "paid"
+  );
+  const activationPending =
+    Boolean(latestPaidPayment) && entitlement.data?.source !== "razorpay";
 
   if (entitlement.isLoading) {
     return (
@@ -58,6 +68,33 @@ export function BillingClient() {
 
   return (
     <div className="space-y-8">
+      {selectedPlan ? (
+        <section className="rounded-lg border border-[var(--mint)]/35 bg-[var(--mint)]/10 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="text-sm text-[var(--text)]">
+              You selected{" "}
+              <span className="font-semibold text-[var(--mint)]">
+                {selectedPlan.displayName}
+              </span>
+              . Continue checkout to activate your plan.
+            </p>
+            <ProtectedCheckoutButton
+              plan={selectedPlan}
+              className="rounded-md bg-[var(--mint)] px-4 py-2 text-sm font-semibold text-[#070A09] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Continue checkout
+            </ProtectedCheckoutButton>
+          </div>
+        </section>
+      ) : null}
+
+      {activationPending ? (
+        <section className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-4 text-sm text-[var(--warning)]">
+          Payment received. Activation is being verified. If this does not
+          update in a minute, contact admin.
+        </section>
+      ) : null}
+
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -135,13 +172,12 @@ export function BillingClient() {
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {plan.credits} PR reviews / {plan.validityDays} days
               </p>
-              <PricingCheckoutButton
+              <ProtectedCheckoutButton
                 plan={plan}
-                initialIsSignedIn
                 className="mt-4 w-full rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold transition hover:border-[var(--mint)]/50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Choose {plan.displayName}
-              </PricingCheckoutButton>
+              </ProtectedCheckoutButton>
             </article>
           ))}
         </div>

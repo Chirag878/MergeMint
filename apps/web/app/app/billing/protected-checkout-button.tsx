@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { authClient } from "@veriflow/auth/client";
 import type { BillingPlan } from "@veriflow/shared";
 import { trpc } from "@/trpc/react";
 
@@ -55,29 +54,17 @@ function loadRazorpayScript() {
   });
 }
 
-function checkoutLoginPath(planKey: string) {
-  return `/login?callbackURL=${encodeURIComponent(`/pricing?checkoutPlan=${planKey}`)}`;
-}
-
-export function PricingCheckoutButton({
+export function ProtectedCheckoutButton({
   plan,
   className,
-  children,
-  signedOutChildren = "Sign in to start",
-  initialIsSignedIn = false
+  children
 }: {
   plan: BillingPlan;
   className: string;
   children: React.ReactNode;
-  signedOutChildren?: React.ReactNode;
-  initialIsSignedIn?: boolean;
 }) {
   const router = useRouter();
   const utils = trpc.useUtils();
-  const session = authClient.useSession();
-  const clientHasSession = Boolean(session.data?.user);
-  const isCheckingSession = session.isPending && !initialIsSignedIn;
-  const isSignedIn = session.isPending ? initialIsSignedIn : clientHasSession;
   const [message, setMessage] = useState<string | null>(null);
   const createOrder = trpc.billing.createCheckoutOrder.useMutation();
   const verifyPayment = trpc.billing.verifyCheckoutPayment.useMutation({
@@ -94,64 +81,10 @@ export function PricingCheckoutButton({
     onError: (error) => setMessage(error.message)
   });
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") {
-      return;
-    }
-
-    console.info("[billing] Checkout session state.", {
-      initialIsSignedIn,
-      clientSessionLoading: session.isPending,
-      clientHasSession,
-      resolvedIsSignedIn: isSignedIn,
-      planKey: plan.key
-    });
-  }, [clientHasSession, initialIsSignedIn, isSignedIn, plan.key, session.isPending]);
-
   async function startCheckout() {
     setMessage(null);
-    const route =
-      typeof window === "undefined"
-        ? "unknown"
-        : `${window.location.pathname}${window.location.search}`;
-
-    if (isCheckingSession) {
-      return;
-    }
-
-    if (!isSignedIn) {
-      const redirectTarget = checkoutLoginPath(plan.key);
-      if (process.env.NODE_ENV === "development") {
-        console.info("[billing] Redirecting signed-out checkout.", {
-          route,
-          initialIsSignedIn,
-          clientSessionLoading: session.isPending,
-          clientHasSession,
-          resolvedIsSignedIn: isSignedIn,
-          hasSession: false,
-          planKey: plan.key,
-          action: "redirect_to_login",
-          redirectTarget
-        });
-      }
-      router.push(redirectTarget);
-      return;
-    }
 
     try {
-      if (process.env.NODE_ENV === "development") {
-        console.info("[billing] Starting authenticated checkout.", {
-          route,
-          initialIsSignedIn,
-          clientSessionLoading: session.isPending,
-          clientHasSession,
-          resolvedIsSignedIn: isSignedIn,
-          hasSession: true,
-          planKey: plan.key,
-          action: "create_order"
-        });
-      }
-
       const order = await createOrder.mutateAsync({ planKey: plan.key });
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded || !window.Razorpay) {
@@ -186,26 +119,14 @@ export function PricingCheckoutButton({
       const message =
         error instanceof Error
           ? error.message
-          : "Sign in before choosing a plan.";
+          : "Could not start checkout. Please sign in and try again.";
       if (
         message.toLowerCase().includes("logged in") ||
         message.toLowerCase().includes("unauthorized")
       ) {
-        const redirectTarget = checkoutLoginPath(plan.key);
-        if (process.env.NODE_ENV === "development") {
-          console.info("[billing] Checkout auth required.", {
-            route,
-            initialIsSignedIn,
-            clientSessionLoading: session.isPending,
-            clientHasSession,
-            resolvedIsSignedIn: false,
-            hasSession: false,
-            planKey: plan.key,
-            action: "redirect_to_login",
-            redirectTarget
-          });
-        }
-        router.push(redirectTarget);
+        router.push(
+          `/login?callbackURL=${encodeURIComponent(`/app/billing?checkoutPlan=${plan.key}`)}`
+        );
         return;
       }
       setMessage(message);
@@ -217,16 +138,10 @@ export function PricingCheckoutButton({
       <button
         type="button"
         onClick={startCheckout}
-        disabled={isCheckingSession || createOrder.isPending || verifyPayment.isPending}
+        disabled={createOrder.isPending || verifyPayment.isPending}
         className={className}
       >
-        {isCheckingSession
-          ? "Checking session..."
-          : createOrder.isPending || verifyPayment.isPending
-            ? "Processing..."
-          : isSignedIn
-            ? children
-            : signedOutChildren}
+        {createOrder.isPending || verifyPayment.isPending ? "Processing..." : children}
       </button>
       {message ? <p className="mt-2 text-xs text-[var(--text-muted)]">{message}</p> : null}
     </div>

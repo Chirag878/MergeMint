@@ -2,8 +2,19 @@ import { ensureUserWorkspace } from "@veriflow/api";
 import { requireWebSession } from "../../server-auth";
 import { BillingClient } from "./billing-client";
 
-export default async function AppBillingPage() {
-  const session = await requireWebSession();
+export default async function AppBillingPage({
+  searchParams
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params: Record<string, string | string[] | undefined> =
+    await Promise.resolve(searchParams ?? {});
+  const checkoutPlan =
+    typeof params.checkoutPlan === "string" ? params.checkoutPlan : undefined;
+  const callbackURL = checkoutPlan
+    ? `/app/billing?checkoutPlan=${encodeURIComponent(checkoutPlan)}`
+    : "/app/billing";
+  const session = await requireWebSession(callbackURL);
   const workspace = await ensureUserWorkspace({
     user: session.user,
     session: session.session
@@ -22,7 +33,7 @@ export default async function AppBillingPage() {
             credits; the rest of the workflow remains open.
           </p>
         </div>
-        <BillingClient />
+        <BillingClient selectedPlanKey={checkoutPlan} />
       </section>
     </main>
   );

@@ -1,19 +1,8 @@
 import Link from "next/link";
-import { headers } from "next/headers";
-import { getSessionFromHeaders } from "@veriflow/auth/server";
 import { BILLING_PLANS, PAID_BILLING_PLAN_KEYS } from "@veriflow/shared";
 import { ThemeToggle } from "../components/theme-provider";
-import { PricingCheckoutButton } from "./pricing-checkout-button";
-
-export const dynamic = "force-dynamic";
 
 const pricingPlans = PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]);
-
-type PricingPageProps = {
-  searchParams?:
-    | Promise<Record<string, string | string[] | undefined>>
-    | Record<string, string | string[] | undefined>;
-};
 
 const bestFor: Record<(typeof PAID_BILLING_PLAN_KEYS)[number], string> = {
   launch_pack: "Trying MergeMint on a real project",
@@ -61,24 +50,7 @@ const faqs = [
   }
 ];
 
-export default async function PricingPage({ searchParams }: PricingPageProps) {
-  const session = await getSessionFromHeaders(await headers());
-  const isSignedIn = Boolean(session?.user);
-  const params = await Promise.resolve(searchParams ?? {});
-  const selectedPlanKey =
-    typeof params.checkoutPlan === "string" ? params.checkoutPlan : undefined;
-  const selectedPlan = PAID_BILLING_PLAN_KEYS.includes(
-    selectedPlanKey as (typeof PAID_BILLING_PLAN_KEYS)[number]
-  )
-    ? BILLING_PLANS[selectedPlanKey as (typeof PAID_BILLING_PLAN_KEYS)[number]]
-    : null;
-  if (process.env.NODE_ENV === "development") {
-    console.info("[billing] Pricing page render.", {
-      serverHasSession: isSignedIn,
-      checkoutPlan: selectedPlan?.key ?? null
-    });
-  }
-
+export default function PricingPage() {
   return (
     <div className="min-h-screen bg-[var(--bg)] font-sans text-[var(--text)] transition-colors duration-200">
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/85 backdrop-blur-md">
@@ -131,16 +103,6 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
             Free workspaces include 1 PR review credit. Exploration is not gated.
           </p>
         </div>
-
-        {selectedPlan ? (
-          <div className="mx-auto mt-8 max-w-3xl rounded-lg border border-[var(--mint)]/35 bg-[var(--mint)]/10 px-4 py-3 text-sm text-[var(--text)]">
-            {isSignedIn ? "You selected " : "Sign in to continue checkout for "}
-            <span className="font-semibold text-[var(--mint)]">
-              {selectedPlan.displayName}
-            </span>
-            {isSignedIn ? ". Continue checkout to activate your plan." : "."}
-          </div>
-        ) : null}
 
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4 xl:gap-6">
           {pricingPlans.map((plan) => {
@@ -198,17 +160,16 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
                 </div>
 
                 <div className="mt-8">
-                  <PricingCheckoutButton
-                    plan={plan}
-                    initialIsSignedIn={isSignedIn}
+                  <Link
+                    href={`/app/billing?checkoutPlan=${plan.key}`}
                     className={`block w-full rounded-md px-4 py-2 text-center text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                       isHighlight
                         ? "gradient-btn-mint-pink"
                         : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] hover:border-[var(--mint)]/40"
                     }`}
                   >
-                    Start checkout
-                  </PricingCheckoutButton>
+                    Continue in app
+                  </Link>
                 </div>
               </div>
             );

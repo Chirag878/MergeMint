@@ -500,7 +500,7 @@ export default function LandingPage() {
                   <p className="mt-1 text-[11px] text-[var(--text-muted)]">{p.note}</p>
                 </div>
                 <Link
-                  href={`/pricing?checkoutPlan=${p.key}`}
+                  href={`/app/billing?checkoutPlan=${p.key}`}
                   className="mt-6 block w-full rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] py-2 text-center text-xs font-semibold text-[var(--text)] transition hover:border-[var(--mint)]/40"
                 >
                   View details

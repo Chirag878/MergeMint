@@ -144,6 +144,7 @@ export function AdminAccessClient() {
       <section className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
         <h2 className="text-lg font-semibold">Grant access</h2>
         <p className="mt-2 rounded-md border border-[var(--border)] bg-[var(--bg)] p-3 text-xs leading-5 text-[var(--text-muted)]">
+          Use this only for verified captured payments or early pilot access.
           For captured Razorpay payments that are not linked to a workspace,
           verify the payment in Razorpay first, then manually grant the exact
           matching plan here. Do not infer a workspace unless the customer

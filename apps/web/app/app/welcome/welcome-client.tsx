@@ -18,13 +18,26 @@ const nextSteps = [
 
 export function WelcomeClient({ payment }: { payment?: string }) {
   const entitlement = trpc.billing.getCurrentEntitlement.useQuery();
+  const paymentHistory = trpc.billing.getPaymentHistory.useQuery();
   const planKey = entitlement.data?.planKey as keyof typeof BILLING_PLANS | undefined;
   const plan = planKey ? BILLING_PLANS[planKey] : null;
   const paymentSuccess = payment === "success";
+  const latestPaidPayment = paymentHistory.data?.find(
+    (billingPayment) => billingPayment.status === "paid"
+  );
+  const activationPending =
+    paymentSuccess &&
+    Boolean(latestPaidPayment) &&
+    entitlement.data?.source !== "razorpay";
 
   return (
     <div className="space-y-6">
-      {paymentSuccess ? (
+      {activationPending ? (
+        <section className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-4 text-sm text-[var(--warning)]">
+          Payment received. Activation is being verified. If this does not
+          update in a minute, contact admin.
+        </section>
+      ) : paymentSuccess ? (
         <section className="rounded-lg border border-[var(--mint)]/35 bg-[var(--mint)]/10 p-4 text-sm text-[var(--mint)]">
           Payment verified. Your workspace plan is active.
         </section>
