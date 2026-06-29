@@ -5,6 +5,8 @@ import { BILLING_PLANS, PAID_BILLING_PLAN_KEYS } from "@veriflow/shared";
 import { ThemeToggle } from "../components/theme-provider";
 import { PricingCheckoutButton } from "./pricing-checkout-button";
 
+export const dynamic = "force-dynamic";
+
 const pricingPlans = PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]);
 
 type PricingPageProps = {
@@ -70,6 +72,12 @@ export default async function PricingPage({ searchParams }: PricingPageProps) {
   )
     ? BILLING_PLANS[selectedPlanKey as (typeof PAID_BILLING_PLAN_KEYS)[number]]
     : null;
+  if (process.env.NODE_ENV === "development") {
+    console.info("[billing] Pricing page render.", {
+      serverHasSession: isSignedIn,
+      checkoutPlan: selectedPlan?.key ?? null
+    });
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg)] font-sans text-[var(--text)] transition-colors duration-200">

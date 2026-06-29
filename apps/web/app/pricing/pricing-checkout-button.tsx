@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@veriflow/auth/client";
 import type { BillingPlan } from "@veriflow/shared";
@@ -75,8 +75,9 @@ export function PricingCheckoutButton({
   const router = useRouter();
   const utils = trpc.useUtils();
   const session = authClient.useSession();
-  const isCheckingSession = !initialIsSignedIn && session.isPending;
-  const isSignedIn = initialIsSignedIn || Boolean(session.data?.user);
+  const clientHasSession = Boolean(session.data?.user);
+  const isCheckingSession = session.isPending && !initialIsSignedIn;
+  const isSignedIn = session.isPending ? initialIsSignedIn : clientHasSession;
   const [message, setMessage] = useState<string | null>(null);
   const createOrder = trpc.billing.createCheckoutOrder.useMutation();
   const verifyPayment = trpc.billing.verifyCheckoutPayment.useMutation({
@@ -92,6 +93,20 @@ export function PricingCheckoutButton({
     },
     onError: (error) => setMessage(error.message)
   });
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") {
+      return;
+    }
+
+    console.info("[billing] Checkout session state.", {
+      initialIsSignedIn,
+      clientSessionLoading: session.isPending,
+      clientHasSession,
+      resolvedIsSignedIn: isSignedIn,
+      planKey: plan.key
+    });
+  }, [clientHasSession, initialIsSignedIn, isSignedIn, plan.key, session.isPending]);
 
   async function startCheckout() {
     setMessage(null);
@@ -109,6 +124,10 @@ export function PricingCheckoutButton({
       if (process.env.NODE_ENV === "development") {
         console.info("[billing] Redirecting signed-out checkout.", {
           route,
+          initialIsSignedIn,
+          clientSessionLoading: session.isPending,
+          clientHasSession,
+          resolvedIsSignedIn: isSignedIn,
           hasSession: false,
           planKey: plan.key,
           action: "redirect_to_login",
@@ -123,6 +142,10 @@ export function PricingCheckoutButton({
       if (process.env.NODE_ENV === "development") {
         console.info("[billing] Starting authenticated checkout.", {
           route,
+          initialIsSignedIn,
+          clientSessionLoading: session.isPending,
+          clientHasSession,
+          resolvedIsSignedIn: isSignedIn,
           hasSession: true,
           planKey: plan.key,
           action: "create_order"
@@ -172,6 +195,10 @@ export function PricingCheckoutButton({
         if (process.env.NODE_ENV === "development") {
           console.info("[billing] Checkout auth required.", {
             route,
+            initialIsSignedIn,
+            clientSessionLoading: session.isPending,
+            clientHasSession,
+            resolvedIsSignedIn: false,
             hasSession: false,
             planKey: plan.key,
             action: "redirect_to_login",
