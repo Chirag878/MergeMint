@@ -181,6 +181,10 @@ export const prCreditEvents = pgTable(
     qaReviewId: uuid("qa_review_id").references(() => qaReviews.id, {
       onDelete: "set null"
     }),
+    billingPaymentId: uuid("billing_payment_id").references(
+      () => billingPayments.id,
+      { onDelete: "set null" }
+    ),
     eventType: text("event_type").notNull(),
     creditsDelta: integer("credits_delta").notNull(),
     reason: text("reason"),
@@ -196,6 +200,9 @@ export const prCreditEvents = pgTable(
     index("pr_credit_events_feature_request_id_idx").on(table.featureRequestId),
     index("pr_credit_events_pull_request_id_idx").on(table.pullRequestId),
     index("pr_credit_events_qa_review_id_idx").on(table.qaReviewId),
+    uniqueIndex("pr_credit_events_billing_payment_id_unique").on(
+      table.billingPaymentId
+    ),
     index("pr_credit_events_event_type_idx").on(table.eventType),
     index("pr_credit_events_created_at_idx").on(table.createdAt)
   ]

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import {
   BILLING_PLANS,
   PAID_BILLING_PLAN_KEYS,
@@ -162,6 +162,7 @@ export async function ensureFreeEntitlement(
 }
 
 async function activatePlanForPayment(input: {
+  billingPaymentId?: string | null;
   organizationId: string;
   userId?: string | null;
   planKey: PaidBillingPlanKey;
@@ -212,13 +213,22 @@ async function activatePlanForPayment(input: {
     })
     .returning();
 
-  await tx.insert(prCreditEvents).values({
+  const creditEvent = tx.insert(prCreditEvents).values({
     organizationId: input.organizationId,
+    billingPaymentId: input.billingPaymentId ?? null,
     eventType: "plan_activated",
     creditsDelta: credits,
     reason: input.reason,
     createdByUserId: input.userId ?? null
   });
+
+  if (input.billingPaymentId) {
+    await creditEvent.onConflictDoNothing({
+      target: prCreditEvents.billingPaymentId
+    });
+  } else {
+    await creditEvent;
+  }
 
   if (!entitlement) {
     throw new Error("Unable to activate entitlement.");
@@ -257,6 +267,62 @@ function verifyRazorpaySignature(input: {
   );
 }
 
+async function verifyCapturedRazorpayPayment(input: {
+  orderId: string;
+  paymentId: string;
+  amount: number;
+  currency: string;
+}) {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Razorpay verification is not configured yet."
+    });
+  }
+
+  const response = await fetch(
+    `https://api.razorpay.com/v1/payments/${encodeURIComponent(input.paymentId)}`,
+    {
+      method: "GET",
+      headers: {
+        authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString(
+          "base64"
+        )}`
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new TRPCError({
+      code: "BAD_GATEWAY",
+      message: "Could not confirm Razorpay payment status."
+    });
+  }
+
+  const payment = (await response.json()) as {
+    id?: string;
+    order_id?: string;
+    status?: string;
+    amount?: number;
+    currency?: string;
+  };
+
+  if (
+    payment.id !== input.paymentId ||
+    payment.order_id !== input.orderId ||
+    payment.status !== "captured" ||
+    payment.amount !== input.amount ||
+    payment.currency !== input.currency
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Razorpay payment is not captured for this order."
+    });
+  }
+}
+
 export async function getPlans() {
   return {
     plans: PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]),
@@ -278,8 +344,9 @@ export async function createCheckoutOrder(
   const plan = BILLING_PLANS[planKey];
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  const publicKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? keyId;
 
-  if (!keyId || !keySecret) {
+  if (!keyId || !keySecret || !publicKeyId) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: "Razorpay checkout is not configured yet."
@@ -336,7 +403,7 @@ export async function createCheckoutOrder(
     orderId: order.id,
     amount: order.amount,
     currency: order.currency,
-    keyId,
+    keyId: publicKeyId,
     plan,
     prefill: {
       name: ctx.user.name ?? undefined,
@@ -396,12 +463,24 @@ export async function verifyCheckoutPayment(
       });
     }
 
+    await verifyCapturedRazorpayPayment({
+      orderId: input.razorpayOrderId,
+      paymentId: input.razorpayPaymentId,
+      amount: payment.amount,
+      currency: payment.currency
+    });
+
     if (payment.status === "paid") {
+      const entitlement = await ensurePaidPaymentActivated({
+        payment,
+        userId: workspace.appUser.id,
+        reason: `Razorpay payment verified for ${BILLING_PLANS[assertPaidPlan(payment.planKey)].displayName}.`,
+        tx
+      });
+
       return {
         payment: sanitizePayment(payment),
-        entitlement: summarizeEntitlement(
-          await ensureFreeEntitlement(payment.organizationId, tx)
-        )
+        entitlement: summarizeEntitlement(entitlement)
       };
     }
 
@@ -417,10 +496,34 @@ export async function verifyCheckoutPayment(
         paidAt: now,
         updatedAt: now
       })
-      .where(eq(billingPayments.id, payment.id))
+      .where(
+        and(eq(billingPayments.id, payment.id), ne(billingPayments.status, "paid"))
+      )
       .returning();
 
+    if (!updatedPayment) {
+      const entitlement = await ensurePaidPaymentActivated({
+        payment: {
+          ...payment,
+          status: "paid",
+          razorpayPaymentId: input.razorpayPaymentId,
+          razorpaySignature: input.razorpaySignature,
+          paidAt: now,
+          updatedAt: now
+        },
+        userId: workspace.appUser.id,
+        reason: `Razorpay payment verified for ${BILLING_PLANS[planKey].displayName}.`,
+        tx
+      });
+
+      return {
+        payment: sanitizePayment({ ...payment, status: "paid" }),
+        entitlement: summarizeEntitlement(entitlement)
+      };
+    }
+
     const entitlement = await activatePlanForPayment({
+      billingPaymentId: payment.id,
       organizationId: payment.organizationId,
       userId: workspace.appUser.id,
       planKey,
@@ -433,6 +536,85 @@ export async function verifyCheckoutPayment(
       payment: sanitizePayment(updatedPayment ?? payment),
       entitlement: summarizeEntitlement(entitlement)
     };
+  });
+}
+
+async function ensurePaidPaymentActivated(input: {
+  payment: typeof billingPayments.$inferSelect;
+  userId?: string | null;
+  reason: string;
+  tx: BillingDb;
+}) {
+  const planKey = assertPaidPlan(input.payment.planKey);
+  const [existingEvent] = await input.tx
+    .select({ id: prCreditEvents.id })
+    .from(prCreditEvents)
+    .where(eq(prCreditEvents.billingPaymentId, input.payment.id))
+    .limit(1);
+
+  const [currentEntitlement] = await input.tx
+    .select()
+    .from(workspaceEntitlements)
+    .where(eq(workspaceEntitlements.organizationId, input.payment.organizationId))
+    .limit(1);
+
+  if (
+    currentEntitlement?.planKey === planKey &&
+    currentEntitlement.status === "active" &&
+    currentEntitlement.source === "razorpay" &&
+    currentEntitlement.currentPeriodEnd &&
+    currentEntitlement.currentPeriodEnd > new Date()
+  ) {
+    return currentEntitlement;
+  }
+
+  if (existingEvent) {
+    if (currentEntitlement) {
+      return currentEntitlement;
+    }
+
+    const now = new Date();
+    const [restoredEntitlement] = await input.tx
+      .insert(workspaceEntitlements)
+      .values({
+        organizationId: input.payment.organizationId,
+        planKey,
+        status: "active",
+        prLimit: BILLING_PLANS[planKey].credits,
+        prUsed: 0,
+        currentPeriodStart: now,
+        currentPeriodEnd: addDays(now, BILLING_PLANS[planKey].validityDays),
+        source: "razorpay",
+        updatedAt: now
+      })
+      .onConflictDoUpdate({
+        target: workspaceEntitlements.organizationId,
+        set: {
+          planKey,
+          status: "active",
+          prLimit: BILLING_PLANS[planKey].credits,
+          prUsed: 0,
+          currentPeriodStart: now,
+          currentPeriodEnd: addDays(now, BILLING_PLANS[planKey].validityDays),
+          source: "razorpay",
+          updatedAt: now
+        }
+      })
+      .returning();
+
+    if (restoredEntitlement) {
+      return restoredEntitlement;
+    }
+  }
+
+  return activatePlanForPayment({
+    billingPaymentId: input.payment.id,
+    organizationId: input.payment.organizationId,
+    userId: input.userId,
+    planKey,
+    source: "razorpay",
+    reason: input.reason,
+    tx: input.tx
   });
 }
 
@@ -808,12 +990,21 @@ export async function processRazorpayWebhook(input: {
       .limit(1);
 
     if (!payment || payment.status === "paid") {
+      if (payment?.status === "paid") {
+        const planKey = assertPaidPlan(payment.planKey);
+        await ensurePaidPaymentActivated({
+          payment,
+          userId: payment.userId,
+          reason: `Razorpay webhook activated ${BILLING_PLANS[planKey].displayName}.`,
+          tx
+        });
+      }
       return;
     }
 
     const planKey = assertPaidPlan(payment.planKey);
     const now = new Date();
-    await tx
+    const [updatedPayment] = await tx
       .update(billingPayments)
       .set({
         status: "paid",
@@ -822,13 +1013,21 @@ export async function processRazorpayWebhook(input: {
         paidAt: now,
         updatedAt: now
       })
-      .where(eq(billingPayments.id, payment.id));
+      .where(
+        and(eq(billingPayments.id, payment.id), ne(billingPayments.status, "paid"))
+      )
+      .returning();
 
-    await activatePlanForPayment({
-      organizationId: payment.organizationId,
+    await ensurePaidPaymentActivated({
+      payment: updatedPayment ?? {
+        ...payment,
+        status: "paid",
+        razorpayPaymentId: paymentId ?? payment.razorpayPaymentId,
+        safeEventSummary: summary,
+        paidAt: now,
+        updatedAt: now
+      },
       userId: payment.userId,
-      planKey,
-      source: "razorpay",
       reason: `Razorpay webhook activated ${BILLING_PLANS[planKey].displayName}.`,
       tx
     });
