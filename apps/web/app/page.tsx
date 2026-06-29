@@ -590,12 +590,24 @@ export default function LandingPage() {
             <span className="font-semibold text-[var(--text)]">MergeMint</span>
             <span>- Requirement-to-release proof platform.</span>
           </div>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap justify-center gap-6">
             <Link href="/" className="transition hover:text-[var(--text)]">
               Home
             </Link>
             <Link href="/pricing" className="transition hover:text-[var(--text)]">
               Pricing
+            </Link>
+            <Link href="/terms" className="transition hover:text-[var(--text)]">
+              Terms
+            </Link>
+            <Link href="/privacy" className="transition hover:text-[var(--text)]">
+              Privacy
+            </Link>
+            <Link
+              href="/refund-policy"
+              className="transition hover:text-[var(--text)]"
+            >
+              Refund Policy
             </Link>
             <Link href="/login" className="transition hover:text-[var(--text)]">
               Sign in

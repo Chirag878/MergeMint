@@ -28,6 +28,11 @@ import {
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
+import {
+  assertQaReviewCreditAvailable,
+  consumeQaReviewCredit,
+  hasSuccessfulQaReviewForFeaturePr
+} from "./billing.service";
 import { normalizeDbTimestamp } from "./prd-staleness";
 import { getLatestRepositoryContextForProject } from "./repository-intelligence.service";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
@@ -381,6 +386,18 @@ export async function runQaReviewForFeatureRequest(
     });
   }
 
+  const priorSuccessfulReview = await hasSuccessfulQaReviewForFeaturePr({
+    organizationId: workspace.activeOrganization.id,
+    featureRequestId: featureRequest.id,
+    pullRequestId: pullRequest.id
+  });
+
+  if (!priorSuccessfulReview) {
+    await assertQaReviewCreditAvailable({
+      organizationId: workspace.activeOrganization.id
+    });
+  }
+
   const tasks = await db
     .select()
     .from(engineeringTasks)
@@ -561,6 +578,14 @@ export async function runQaReviewForFeatureRequest(
         coverage,
         findings
       };
+    });
+
+    await consumeQaReviewCredit({
+      organizationId: workspace.activeOrganization.id,
+      featureRequestId: featureRequest.id,
+      pullRequestId: pullRequest.id,
+      qaReviewId: created.review.id,
+      createdByUserId: workspace.appUser.id
     });
 
     await writeAuditLog({

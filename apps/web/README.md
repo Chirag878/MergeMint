@@ -236,3 +236,56 @@ Task generation uses the latest PRD, requirements, acceptance criteria, and safe
 Repo Intelligence summary when available. QA review also receives the task plan
 and returns compact task coverage evidence. Reports summarize engineering scope
 without exposing prompts, tokens, raw repo files, or internal errors.
+
+## Billing and Razorpay Checkout
+
+MergeMint bills by verified PR reviews, not developer seats. A verified PR
+review is counted only when AI QA Review successfully runs against a linked
+GitHub PR, PRD, REQ IDs, acceptance criteria, engineering tasks, and repository
+context.
+
+Required billing environment variables:
+
+```text
+RAZORPAY_KEY_ID=""
+RAZORPAY_KEY_SECRET=""
+RAZORPAY_WEBHOOK_SECRET=""
+NEXT_PUBLIC_RAZORPAY_KEY_ID=""
+ADMIN_EMAILS="founder@example.com"
+```
+
+`RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` are server-only. Never expose
+them in frontend code. `ADMIN_EMAILS` is a comma-separated allowlist of signed-in
+user emails that can use `/app/admin/access` to manually grant pilot credits.
+
+Razorpay webhook URL:
+
+```text
+https://your-domain.com/api/webhooks/razorpay
+```
+
+Configure the webhook secret in Razorpay and subscribe to payment/order events
+such as `payment.captured` and `order.paid`. The webhook verifies the
+`x-razorpay-signature`, stores only a safe event summary, marks matching
+payments paid idempotently, and activates the workspace entitlement.
+
+Manual billing tests:
+
+1. Set `ADMIN_EMAILS` to your signed-in email.
+2. Open `/app/admin/access`.
+3. Search for a customer email.
+4. Select the customer and grant `Launch Pack`, `Pilot`, or a demo/manual credit
+   amount.
+5. Open `/app/billing` as the customer and confirm entitlement and credit event
+   history.
+
+Free-credit and exhausted-credit tests:
+
+1. Create or sign into a fresh workspace.
+2. Open `/app/billing`; a free entitlement with 1 PR review credit should be
+   initialized.
+3. Complete a feature through PRD, tasks, PR link, and PR snapshot.
+4. Run AI QA Review once. The credit should be consumed only after success.
+5. Try a new feature + PR after the free credit is exhausted. Only AI QA Review
+   should be blocked with an upgrade message; project, repo, PRD, task, PR link,
+   approval, and report surfaces should remain accessible where otherwise valid.

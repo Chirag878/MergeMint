@@ -10,7 +10,8 @@ const navItems = [
   ["Projects", "/app/projects"],
   ["Features", "/app/features"],
   ["Release Board", "/app/board"],
-  ["GitHub", "/app/settings/github"]
+  ["GitHub", "/app/settings/github"],
+  ["Billing", "/app/billing"]
 ] as const;
 
 export function AppNav() {

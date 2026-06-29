@@ -320,6 +320,9 @@ export function FeatureDetailClient({
       activeTab === "approval" ||
       activeTab === "report"
   });
+  const billingEntitlement = trpc.billing.getCurrentEntitlement.useQuery(undefined, {
+    enabled: activeTab === "qa"
+  });
   const latestApproval = trpc.approval.getLatest.useQuery({
     featureRequestId
   }, {
@@ -445,6 +448,7 @@ export function FeatureDetailClient({
   const runQaReview = trpc.qaReview.run.useMutation({
     onSuccess: async () => {
       await utils.qaReview.getLatest.invalidate({ featureRequestId });
+      await utils.billing.getCurrentEntitlement.invalidate();
       await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
       await invalidateReleaseControlRoom();
     }
@@ -1449,6 +1453,7 @@ export function FeatureDetailClient({
         onRun={() => runQaReview.mutate({ featureRequestId })}
         isRunning={runQaReview.isPending}
         runError={getFriendlyQaRunError(runQaReview.error?.message)}
+        entitlement={billingEntitlement.data}
       />
       ) : null}
 
@@ -3664,7 +3669,8 @@ function AIQAReviewSection({
   error,
   onRun,
   isRunning,
-  runError
+  runError,
+  entitlement
 }: {
   hasPrd: boolean;
   prdMayBeOutdated: boolean;
@@ -3676,9 +3682,20 @@ function AIQAReviewSection({
   onRun: () => void;
   isRunning: boolean;
   runError?: string;
+  entitlement?: {
+    planKey: string;
+    status: string;
+    prLimit: number;
+    prUsed: number;
+    remainingCredits: number;
+    upgradeRequired: boolean;
+  };
 }) {
   const ready =
     hasPrd && !prdMayBeOutdated && requirementsCount > 0 && hasPullRequestSnapshot;
+  const hasExistingReview = Boolean(reviewBundle);
+  const creditsExhausted = Boolean(entitlement?.upgradeRequired && !hasExistingReview);
+  const canRun = ready && !isRunning && !prdMayBeOutdated && !creditsExhausted;
 
   return (
     <section
@@ -3692,16 +3709,28 @@ function AIQAReviewSection({
             Compare the latest PR snapshot against the PRD requirement set.
           </p>
         </div>
+        {entitlement ? (
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-right text-xs text-neutral-400">
+            <p className="font-semibold text-neutral-100">
+              {entitlement.remainingCredits} PR review credits remaining
+            </p>
+            <p>
+              {entitlement.planKey === "free"
+                ? "1 free PR review included"
+                : `${entitlement.prUsed}/${entitlement.prLimit} used`}
+            </p>
+          </div>
+        ) : null}
         {ready ? (
           <button
             type="button"
             onClick={onRun}
-            disabled={isRunning || prdMayBeOutdated}
+            disabled={!canRun}
             className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isRunning
               ? "Running..."
-              : reviewBundle
+              : hasExistingReview
                 ? "Run re-review"
                 : "Run AI QA Review"}
           </button>
@@ -3717,6 +3746,27 @@ function AIQAReviewSection({
         <EmptyText>Generate PRD and requirements before running QA review.</EmptyText>
       ) : !hasPullRequestSnapshot ? (
         <EmptyText>Link a GitHub pull request before running QA review.</EmptyText>
+      ) : creditsExhausted ? (
+        <div className="mt-4 rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-100">
+          <p>
+            You've used your available PR review credits. Upgrade your plan or
+            contact us for manual access.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href="/app/billing"
+              className="rounded-md bg-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-950"
+            >
+              Upgrade
+            </Link>
+            <Link
+              href="/pricing"
+              className="rounded-md border border-amber-700 px-3 py-1.5 text-xs font-semibold text-amber-100"
+            >
+              View pricing
+            </Link>
+          </div>
+        </div>
       ) : null}
 
       {isLoading ? <EmptyText>Loading latest QA review...</EmptyText> : null}

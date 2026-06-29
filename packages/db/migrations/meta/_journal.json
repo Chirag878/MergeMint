@@ -64,6 +64,13 @@
       "when": 1782633600000,
       "tag": "0008_release_board_project_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782675807575,
+      "tag": "0009_nosy_moondragon",
+      "breakpoints": true
     }
   ]
 }

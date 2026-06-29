@@ -48,6 +48,7 @@ export const env = createEnv({
     RAZORPAY_KEY_ID: z.string().optional(),
     RAZORPAY_KEY_SECRET: z.string().optional(),
     RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+    ADMIN_EMAILS: z.string().optional(),
 
     INNGEST_EVENT_KEY: z.string().optional(),
     INNGEST_SIGNING_KEY: z.string().optional(),
@@ -60,6 +61,7 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
     NEXT_PUBLIC_PAYMENT_LINK: z.string().url().optional(),
+    NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().optional(),
     NEXT_PUBLIC_SAMPLE_REPORT_URL: z.string().url().optional()
   },
 

@@ -1,75 +1,17 @@
 import Link from "next/link";
+import { BILLING_PLANS, PAID_BILLING_PLAN_KEYS } from "@veriflow/shared";
 import { ThemeToggle } from "../components/theme-provider";
+import { PricingCheckoutButton } from "./pricing-checkout-button";
 
-const pricingPlans = [
-  {
-    id: "launch-pack",
-    name: "Launch Pack",
-    price: "₹199",
-    billing: "one-time access",
-    prs: "3 verified PRs",
-    validity: "1 month access",
-    offerNote: "Valid until 30 June",
-    bestFor: "Trying MergeMint on a real project",
-    ctaText: "Get launch offer",
-    ctaHref: "mailto:hello@mergemint.com?subject=Launch%20Pack%20Offer",
-    isExternal: true,
-    highlight: false
-  },
-  {
-    id: "pilot",
-    name: "Pilot",
-    price: "$21",
-    billing: "/month",
-    prs: "30 verified PRs/month",
-    validity: "Monthly subscription",
-    bestFor: "Freelancers and solo builders",
-    ctaText: "Start pilot",
-    ctaHref: "/login",
-    isExternal: false,
-    highlight: false
-  },
-  {
-    id: "studio",
-    name: "Studio",
-    price: "$51",
-    billing: "/month",
-    prs: "90 verified PRs/month",
-    validity: "Monthly subscription",
-    bestFor: "Agencies shipping client work",
-    ctaText: "Choose Studio",
-    ctaHref: "/login",
-    isExternal: false,
-    badge: "Recommended",
-    highlight: true
-  },
-  {
-    id: "scale",
-    name: "Scale",
-    price: "$99",
-    billing: "/month",
-    prs: "220 verified PRs/month",
-    validity: "Monthly subscription",
-    bestFor: "Product teams and AI studios",
-    ctaText: "Choose Scale",
-    ctaHref: "/login",
-    isExternal: false,
-    highlight: false
-  },
-  {
-    id: "agency-max",
-    name: "Agency Max",
-    price: "$199",
-    billing: "/month",
-    prs: "Fair-use 600 verified PRs/month",
-    validity: "Monthly subscription",
-    bestFor: "High-volume agencies",
-    ctaText: "Talk to us",
-    ctaHref: "mailto:hello@mergemint.com?subject=Agency%20Max%20Inquiry",
-    isExternal: true,
-    highlight: false
-  }
-];
+const pricingPlans = PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]);
+
+const bestFor: Record<(typeof PAID_BILLING_PLAN_KEYS)[number], string> = {
+  launch_pack: "Trying MergeMint on a real project",
+  pilot: "Freelancers and solo builders",
+  studio: "Agencies shipping client work",
+  scale: "Product teams and AI studios",
+  agency_max: "High-volume agencies"
+};
 
 const includedFeatures = [
   "GitHub App connection",
@@ -90,29 +32,28 @@ const faqs = [
   {
     question: "Do you charge per developer?",
     answer:
-      "No. MergeMint is priced around verified PRs, so agencies and teams pay based on release volume instead of team size."
+      "No. MergeMint is priced around verified PR reviews, so agencies and teams pay based on release volume instead of team size."
   },
   {
-    question: "What happens if I exceed my PR limit?",
+    question: "What happens if I exceed my PR review credits?",
     answer:
-      "You can upgrade to the next plan or contact us for additional usage."
+      "Only AI QA Review is gated. You can keep exploring projects, repos, requirements, PRDs, tasks, and PR links, then upgrade or contact us for manual access."
   },
   {
     question: "Is the Launch Pack recurring?",
     answer:
-      "No. It is an early access launch offer with 1 month access."
+      "No. Phase 1 uses Razorpay Standard Checkout for one-off 30-day credit packs. Recurring subscriptions are not enabled yet."
   },
   {
-    question: "What is the best plan for agencies?",
+    question: "Do international customers have a fallback?",
     answer:
-      "Studio is best for small agencies. Scale or Agency Max is better for teams shipping many client releases every month."
+      "Yes. Razorpay international payments can require account activation, so early pilots can be onboarded manually by an admin."
   }
 ];
 
 export default function PricingPage() {
   return (
     <div className="min-h-screen bg-[var(--bg)] font-sans text-[var(--text)] transition-colors duration-200">
-      {/* Navigation Header */}
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-6 lg:px-8">
           <Link href="/" className="flex items-center gap-2.5">
@@ -134,9 +75,6 @@ export default function PricingPage() {
             <Link href="/pricing" className="font-semibold text-[var(--mint)]">
               Pricing
             </Link>
-            <Link href="/#proof-map" className="transition hover:text-[var(--text)]">
-              Resources
-            </Link>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -146,56 +84,51 @@ export default function PricingPage() {
             >
               Sign in
             </Link>
-            <Link
-              href="/login"
-              className="gradient-btn-mint-pink rounded-md px-3.5 py-1.5 text-xs font-bold shadow-xs"
-            >
-              Start verifying
-            </Link>
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
       <main className="mx-auto max-w-7xl px-5 py-14 sm:px-6 lg:px-8 lg:py-20">
         <div className="mx-auto max-w-3xl text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--mint)]/30 bg-[var(--mint)]/10 px-3 py-1 text-xs font-medium text-[var(--mint)]">
             Transparent Delivery Pricing
           </div>
           <h1 className="mt-5 text-4xl font-bold tracking-tight text-[var(--text)] sm:text-5xl">
-            Pricing built around verified PRs.
+            Pricing built around verified PR reviews.
           </h1>
           <p className="mt-5 text-base leading-7 text-[var(--text-muted)] sm:text-lg">
             Pay for release proof, not another developer seat. MergeMint verifies pull requests against requirements, repo context, QA evidence, and approval state before you ship.
           </p>
           <p className="mt-3 text-xs font-semibold text-[var(--blue)]">
-            Built for agencies, AI studios, freelancers, and product teams that need proof before delivery.
+            Free workspaces include 1 PR review credit. Exploration is not gated.
           </p>
         </div>
 
-        {/* Pricing Cards Grid */}
         <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-5 lg:gap-4 xl:gap-6">
           {pricingPlans.map((plan) => {
-            const isHighlight = plan.highlight;
+            const isHighlight = Boolean(plan.recommended);
+
             return (
               <div
-                key={plan.id}
+                key={plan.key}
                 className={`mint-card relative flex flex-col justify-between p-6 ${
                   isHighlight
                     ? "border-2 border-[var(--mint)] bg-[var(--surface-elevated)] shadow-md"
                     : ""
                 }`}
               >
-                {plan.badge ? (
+                {plan.recommended ? (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[var(--mint)] px-3 py-0.5 text-[10px] font-bold text-[#070A09] uppercase tracking-wider">
-                    {plan.badge}
+                    Recommended
                   </div>
                 ) : null}
 
                 <div>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-base font-bold text-[var(--text)]">{plan.name}</h3>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-base font-bold text-[var(--text)]">
+                      {plan.displayName}
+                    </h3>
                     {plan.offerNote ? (
                       <span className="rounded bg-[var(--warning)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--warning)]">
                         {plan.offerNote}
@@ -203,106 +136,67 @@ export default function PricingPage() {
                     ) : null}
                   </div>
 
-                  <div className="mt-4 flex items-baseline gap-1">
+                  <div className="mt-4">
                     <span className="text-3xl font-extrabold tracking-tight text-[var(--text)]">
-                      {plan.price}
+                      {plan.displayPrice}
                     </span>
-                    <span className="text-xs text-[var(--text-muted)]">{plan.billing}</span>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Razorpay checkout: Rs. {plan.checkoutAmountInr.toLocaleString("en-IN")}
+                    </p>
                   </div>
 
                   <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--bg)] p-3 text-xs">
-                    <p className="font-bold text-[var(--mint)]">{plan.prs}</p>
-                    <p className="mt-0.5 text-[var(--text-muted)]">{plan.validity}</p>
+                    <p className="font-bold text-[var(--mint)]">
+                      {plan.credits} verified PR reviews
+                    </p>
+                    <p className="mt-0.5 text-[var(--text-muted)]">
+                      Valid for {plan.validityDays} days
+                    </p>
                   </div>
 
                   <p className="mt-4 text-xs leading-5 text-[var(--text-muted)]">
-                    <span className="font-semibold text-[var(--text)]">Best for:</span> {plan.bestFor}
+                    <span className="font-semibold text-[var(--text)]">Best for:</span>{" "}
+                    {bestFor[plan.key as keyof typeof bestFor]}
                   </p>
                 </div>
 
                 <div className="mt-8">
-                  {plan.isExternal ? (
-                    <a
-                      href={plan.ctaHref}
-                      className={`block w-full rounded-md px-4 py-2 text-center text-xs font-semibold transition ${
-                        isHighlight
-                          ? "gradient-btn-mint-pink"
-                          : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] hover:border-[var(--mint)]/40"
-                      }`}
-                    >
-                      {plan.ctaText}
-                    </a>
-                  ) : (
-                    <Link
-                      href={plan.ctaHref}
-                      className={`block w-full rounded-md px-4 py-2 text-center text-xs font-semibold transition ${
-                        isHighlight
-                          ? "gradient-btn-mint-pink"
-                          : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] hover:border-[var(--mint)]/40"
-                      }`}
-                    >
-                      {plan.ctaText}
-                    </Link>
-                  )}
+                  <PricingCheckoutButton
+                    plan={plan}
+                    className={`block w-full rounded-md px-4 py-2 text-center text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      isHighlight
+                        ? "gradient-btn-mint-pink"
+                        : "border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] hover:border-[var(--mint)]/40"
+                    }`}
+                  >
+                    {plan.key === "launch_pack"
+                      ? "Get launch offer"
+                      : `Choose ${plan.displayName}`}
+                  </PricingCheckoutButton>
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* What counts as a verified PR section */}
         <section className="mt-20 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 shadow-xs lg:p-10">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
-              What counts as a verified PR?
+              What counts as a verified PR review?
             </h2>
             <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
-              A verified PR means MergeMint links a pull request, reviews the diff against the PRD, REQ-IDs, acceptance criteria, engineering tasks, and repository context, then produces QA evidence for approval.
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { step: "01", title: "Link PR", desc: "Attach pull request from your connected GitHub repository." },
-              { step: "02", title: "Analyze Diff", desc: "Compare code changes against PRD and REQ-ID mapped criteria." },
-              { step: "03", title: "Generate Evidence", desc: "Produce structured QA review and risk finding summary." },
-              { step: "04", title: "Release Approval", desc: "Record human approval and publish shareable release report." }
-            ].map((item) => (
-              <div
-                key={item.step}
-                className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4 text-left"
-              >
-                <span className="text-xs font-mono font-bold text-[var(--blue)]">{item.step}</span>
-                <h3 className="mt-1.5 text-sm font-semibold text-[var(--text)]">{item.title}</h3>
-                <p className="mt-1 text-xs text-[var(--text-muted)] leading-5">{item.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Value Comparison Section */}
-        <section className="mt-14 rounded-2xl border border-[var(--blue)]/20 bg-[var(--blue)]/5 p-8 text-center lg:p-10">
-          <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
-            Not another seat-based code review tool.
-          </h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
-            Most tools charge per developer seat. MergeMint is priced around release volume, so you pay for the PRs you actually verify and deliver.
-          </p>
-          <div className="mt-6 inline-block rounded-xl border border-[var(--mint)]/30 bg-[var(--surface)] px-6 py-3.5 shadow-xs">
-            <p className="text-sm font-bold tracking-wide text-[var(--mint)] sm:text-base">
-              GitHub shows what changed. MergeMint shows whether it is actually done.
+              A verified PR review means MergeMint links a pull request, reviews the diff against the PRD, REQ-IDs, acceptance criteria, engineering tasks, and repository context, then produces QA evidence for approval.
             </p>
           </div>
         </section>
 
-        {/* Included Features Section */}
         <section className="mt-16">
           <div className="text-center">
             <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
-              Everything included across all plans
+              Everything else stays open
             </h2>
             <p className="mt-2 text-xs text-[var(--text-muted)]">
-              Complete requirement-to-release proof pipeline out of the box.
+              Credits are enforced only at AI QA Review / Verify PR.
             </p>
           </div>
 
@@ -313,7 +207,7 @@ export default function PricingPage() {
                 className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3.5 text-xs font-medium text-[var(--text)] shadow-xs"
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--mint)]/15 text-[10px] font-bold text-[var(--mint)]">
-                  ✓
+                  OK
                 </span>
                 <span>{feature}</span>
               </div>
@@ -321,8 +215,7 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* FAQ Section */}
-        <section className="mt-20 max-w-3xl mx-auto">
+        <section className="mx-auto mt-20 max-w-3xl">
           <div className="text-center">
             <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
               Frequently asked questions
@@ -331,10 +224,7 @@ export default function PricingPage() {
 
           <div className="mt-8 space-y-4">
             {faqs.map((faq) => (
-              <div
-                key={faq.question}
-                className="mint-card p-5 text-left"
-              >
+              <div key={faq.question} className="mint-card p-5 text-left">
                 <h3 className="text-sm font-bold text-[var(--text)]">
                   {faq.question}
                 </h3>
@@ -345,29 +235,8 @@ export default function PricingPage() {
             ))}
           </div>
         </section>
-
-        {/* Bottom CTA */}
-        <section className="mt-20 text-center">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 lg:p-12 shadow-xs">
-            <h2 className="text-2xl font-bold tracking-tight text-[var(--text)] sm:text-3xl">
-              Ready to verify your next release?
-            </h2>
-            <p className="mx-auto mt-3 max-w-xl text-xs text-[var(--text-muted)] leading-5">
-              Get complete release proof for your pull requests with AI requirement verification and shareable client reports.
-            </p>
-            <div className="mt-6 flex justify-center">
-              <Link
-                href="/login"
-                className="gradient-btn-mint-pink rounded-md px-6 py-2.5 text-xs font-bold shadow-xs"
-              >
-                Start verifying now
-              </Link>
-            </div>
-          </div>
-        </section>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-[var(--border)] bg-[var(--surface)] py-8 text-xs text-[var(--text-muted)]">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 sm:flex-row sm:px-6 lg:px-8">
           <div className="flex items-center gap-2.5">
@@ -377,15 +246,18 @@ export default function PricingPage() {
             <span className="font-semibold text-[var(--text)]">MergeMint</span>
             <span>- Requirement-to-release proof platform.</span>
           </div>
-          <div className="flex gap-6">
-            <Link href="/" className="transition hover:text-[var(--text)]">
-              Home
-            </Link>
+          <div className="flex flex-wrap justify-center gap-6">
             <Link href="/pricing" className="transition hover:text-[var(--text)]">
               Pricing
             </Link>
-            <Link href="/login" className="transition hover:text-[var(--text)]">
-              Sign in
+            <Link href="/terms" className="transition hover:text-[var(--text)]">
+              Terms
+            </Link>
+            <Link href="/privacy" className="transition hover:text-[var(--text)]">
+              Privacy
+            </Link>
+            <Link href="/refund-policy" className="transition hover:text-[var(--text)]">
+              Refund Policy
             </Link>
           </div>
         </div>
