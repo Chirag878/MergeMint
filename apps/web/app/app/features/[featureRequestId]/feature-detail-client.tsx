@@ -249,6 +249,14 @@ export function FeatureDetailClient({
   const [showApprovalConfirmation, setShowApprovalConfirmation] =
     useState(false);
   const [taskCopyMessage, setTaskCopyMessage] = useState<string | null>(null);
+  const [requirementReviewMessage, setRequirementReviewMessage] = useState<
+    string | null
+  >(null);
+  const [requirementReviewError, setRequirementReviewError] = useState<
+    string | null
+  >(null);
+  const [isSavingRequirementReview, setIsSavingRequirementReview] =
+    useState(false);
   const [activeTab, setActiveTab] = useState<FeatureDetailTab>("overview");
   const [requirementsNestedTab, setRequirementsNestedTab] = useState<
     "review" | "prd" | "scope" | "acceptance_criteria"
@@ -535,6 +543,17 @@ export function FeatureDetailClient({
   const hasQuestions = clarificationQuestions.length > 0;
   const hasPrd = Boolean(prd) || controlRoomHasPrd;
   const hasTasks = engineeringTasks.length > 0;
+  const requirementReviewStarted = Boolean(
+    workflow.data?.requirementReview?.started || hasQuestions || hasPrd
+  );
+  const requirementReviewComplete = Boolean(
+    workflow.data?.requirementReview?.completed ||
+      hasPrd ||
+      (requirementReviewStarted &&
+        unansweredRequiredClarificationQuestions.length === 0)
+  );
+  const requirementReviewNotStarted =
+    !hasPrd && !requirementReviewStarted;
   const prdMayBeOutdated =
     controlRoom.data?.prdMayBeOutdated ?? workflow.data?.prdMayBeOutdated ?? false;
   const projectHasClient = Boolean(
@@ -544,6 +563,8 @@ export function FeatureDetailClient({
   );
   const prdBlockedByClarifications =
     !hasPrd && unansweredRequiredClarificationQuestions.length > 0;
+  const prdBlockedByRequirementReview =
+    !hasPrd && !requirementReviewComplete;
   const qaRequirementsCount =
     prdRequirements.length > 0 ? prdRequirements.length : controlRoomRequirementsCount;
 
@@ -565,6 +586,94 @@ export function FeatureDetailClient({
       questionId,
       answer
     });
+  }
+
+  async function startRequirementReview() {
+    setRequirementReviewError(null);
+    setRequirementReviewMessage(null);
+
+    try {
+      const questions = await generateClarifications.mutateAsync({
+        featureRequestId
+      });
+      await Promise.all([
+        utils.requirementEngine.getWorkflow.invalidate({ featureRequestId }),
+        invalidateReleaseControlRoom()
+      ]);
+      setRequirementReviewMessage(
+        questions.length > 0
+          ? "Answer these requirement questions before generating the PRD."
+          : "Requirement Review complete. No further clarifications are needed."
+      );
+    } catch (error) {
+      setRequirementReviewError(
+        error instanceof Error
+          ? error.message
+          : "Unable to start Requirement Review."
+      );
+    }
+  }
+
+  async function saveRequirementReviewAnswers() {
+    setRequirementReviewError(null);
+    setRequirementReviewMessage(null);
+
+    const pendingRequiredQuestions = clarificationQuestions.filter(
+      (question) =>
+        isRequiredQuestionPriority(question.priority) &&
+        !question.answer &&
+        answerDrafts[question.id]?.trim()
+    );
+
+    const stillMissingRequiredQuestions = clarificationQuestions.filter(
+      (question) =>
+        isRequiredQuestionPriority(question.priority) &&
+        !question.answer &&
+        !answerDrafts[question.id]?.trim()
+    );
+
+    if (stillMissingRequiredQuestions.length > 0) {
+      setRequirementReviewError(
+        "Answer required clarifications before generating the PRD."
+      );
+      return;
+    }
+
+    setIsSavingRequirementReview(true);
+    try {
+      await Promise.all(
+        pendingRequiredQuestions.map((question) =>
+          answerClarification.mutateAsync({
+            questionId: question.id,
+            answer: answerDrafts[question.id].trim()
+          })
+        )
+      );
+      setAnswerDrafts((current) => {
+        const next = { ...current };
+        for (const question of pendingRequiredQuestions) {
+          delete next[question.id];
+        }
+        return next;
+      });
+      setEditingQuestionId(null);
+      await Promise.all([
+        utils.requirementEngine.getWorkflow.invalidate({ featureRequestId }),
+        invalidateReleaseControlRoom()
+      ]);
+      setRequirementReviewMessage(
+        "Requirement Review complete. No further clarifications are needed."
+      );
+      setRequirementsNestedTab("prd");
+    } catch (error) {
+      setRequirementReviewError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save Requirement Review answers."
+      );
+    } finally {
+      setIsSavingRequirementReview(false);
+    }
   }
 
   function editAnswer(questionId: string, answer: string) {
@@ -793,9 +902,17 @@ export function FeatureDetailClient({
             data={controlRoom.data}
             prdMayBeOutdated={prdMayBeOutdated}
             onGeneratePrd={() => {
+              if (prdBlockedByRequirementReview) {
+                openTab("requirements", "clarifications-section");
+                return;
+              }
+
               openTab("requirements", "requirement-engine-section");
               generatePrd.mutate({ featureRequestId: feature.id });
           }}
+          onRequirementReview={() =>
+            openTab("requirements", "clarifications-section")
+          }
           isGeneratingPrd={generatePrd.isPending}
           onLinkPr={() => openTab("pr", "github-pr-section")}
           onRunQa={() => {
@@ -871,7 +988,7 @@ export function FeatureDetailClient({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 pb-3">
               <nav className="flex flex-wrap gap-2" aria-label="Requirements section tabs">
                 {[
-                  { id: "review", label: "1. Review" },
+                  { id: "review", label: "1. Requirement Review" },
                   { id: "prd", label: "2. PRD" },
                   { id: "scope", label: "3. Scope" },
                   { id: "acceptance_criteria", label: "4. Acceptance Criteria" }
@@ -900,17 +1017,17 @@ export function FeatureDetailClient({
 
               {/* Status Chips */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                {clarificationQuestions.length === 0 ? (
+                {requirementReviewComplete ? (
                   <span className="rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-0.5 font-medium text-emerald-300">
-                    Review complete
+                    Requirement Review complete
                   </span>
                 ) : unansweredRequiredClarificationQuestions.length > 0 ? (
                   <span className="rounded-full border border-amber-900/70 bg-amber-950/40 px-2.5 py-0.5 font-medium text-amber-300">
-                    Review needed
+                    Requirement Review needed
                   </span>
                 ) : (
-                  <span className="rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-0.5 font-medium text-emerald-300">
-                    Answers saved
+                  <span className="rounded-full border border-blue-900/70 bg-blue-950/40 px-2.5 py-0.5 font-medium text-blue-300">
+                    Requirement Review not started
                   </span>
                 )}
 
@@ -951,16 +1068,50 @@ export function FeatureDetailClient({
                   <div>
                     <h2 className="text-lg font-medium text-neutral-100">Requirement Review</h2>
                     <p className="mt-1 text-sm text-neutral-400">
-                      Review feature details and answer clarification questions before PRD generation.
+                      Answer requirement questions inline before PRD generation.
                     </p>
                   </div>
+                  {requirementReviewNotStarted ? (
+                    <button
+                      type="button"
+                      onClick={startRequirementReview}
+                      disabled={generateClarifications.isPending}
+                      className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {generateClarifications.isPending
+                        ? "Starting..."
+                        : "Start Requirement Review"}
+                    </button>
+                  ) : null}
                 </div>
 
-                {clarificationQuestions.length > 0 ? (
+                {requirementReviewMessage ? (
+                  <p className="rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3 text-sm text-emerald-200">
+                    {requirementReviewMessage}
+                  </p>
+                ) : null}
+                {requirementReviewError ? (
+                  <p className="rounded-md border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
+                    {requirementReviewError}
+                  </p>
+                ) : null}
+
+                {requirementReviewNotStarted ? (
+                  <div className="rounded-md border border-blue-900/60 bg-blue-950/20 p-4 text-sm text-blue-100">
+                    <p className="font-medium text-blue-200">
+                      Start Requirement Review before generating the PRD.
+                    </p>
+                    <p className="mt-1 text-xs text-blue-200/80">
+                      MergeMint will check whether clarifications are needed. If
+                      no questions are needed, PRD generation unlocks immediately.
+                    </p>
+                  </div>
+                ) : clarificationQuestions.length > 0 ? (
                   <div className="space-y-4">
                     {unansweredRequiredClarificationQuestions.length > 0 ? (
                       <div className="rounded-md border border-amber-900/60 bg-amber-950/30 p-3.5 text-sm text-amber-200">
-                        <span className="font-semibold text-amber-400">Requirement Review needed:</span> Complete required open questions below to unlock PRD generation.
+                        <span className="font-semibold text-amber-400">Answer these requirement questions before generating the PRD.</span>{" "}
+                        Required answers unlock PRD generation.
                       </div>
                     ) : (
                       <div className="rounded-md border border-emerald-900/60 bg-emerald-950/30 p-3.5 text-sm text-emerald-200 flex items-center justify-between">
@@ -998,7 +1149,14 @@ export function FeatureDetailClient({
                               <h4 className="font-medium text-neutral-100">
                                 {question.question}
                               </h4>
-                              <Badge>{formatQuestionPriority(question.priority)}</Badge>
+                              <div className="flex flex-wrap gap-2">
+                                <Badge>{formatQuestionPriority(question.priority)}</Badge>
+                                <Badge>
+                                  {isRequiredQuestionPriority(question.priority)
+                                    ? "Required"
+                                    : "Optional"}
+                                </Badge>
+                              </div>
                             </div>
                             {question.reason ? (
                               <p className="mt-2 text-sm text-neutral-400">
@@ -1081,22 +1239,43 @@ export function FeatureDetailClient({
                         );
                       })}
                     </div>
+                    {unansweredRequiredClarificationQuestions.length > 0 ? (
+                      <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+                        <button
+                          type="button"
+                          onClick={saveRequirementReviewAnswers}
+                          disabled={
+                            isSavingRequirementReview ||
+                            answerClarification.isPending
+                          }
+                          className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isSavingRequirementReview
+                            ? "Saving..."
+                            : "Save Answers & Complete Requirement Review"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="rounded-md border border-emerald-900/60 bg-emerald-950/20 p-4 text-sm text-emerald-200">
                     <p className="font-medium text-emerald-400">
-                      Requirement Review complete. MergeMint has enough context to generate the PRD.
+                      Requirement Review complete. No further clarifications are needed.
                     </p>
                     <p className="mt-1 text-xs text-emerald-300/80">
-                      No further clarification questions are needed for this feature request.
+                      MergeMint has enough context to generate the PRD.
                     </p>
                     <div className="mt-3">
                       <button
                         type="button"
-                        onClick={() => setRequirementsNestedTab("prd")}
+                        onClick={() => {
+                          setRequirementsNestedTab("prd");
+                          generatePrd.mutate({ featureRequestId: feature.id });
+                        }}
+                        disabled={generatePrd.isPending}
                         className="rounded bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 transition hover:bg-white"
                       >
-                        Proceed to PRD Generation &rarr;
+                        {generatePrd.isPending ? "Generating..." : "Generate PRD"}
                       </button>
                     </div>
                   </div>
@@ -1126,10 +1305,13 @@ export function FeatureDetailClient({
                   <div className="rounded-md border border-amber-800 bg-amber-950/30 p-3.5 text-sm text-amber-200">
                     PRD may be outdated because a clarification answer changed. Regenerate the PRD before running QA or generating release evidence.
                   </div>
-                ) : prdBlockedByClarifications ? (
+                ) : prdBlockedByRequirementReview ? (
                   <div className="rounded-md border border-red-900/70 bg-red-950/40 p-3.5 text-sm text-red-200 flex flex-wrap items-center justify-between gap-2">
                     <div>
-                      <span className="font-semibold text-red-300">Blocked by Requirement Review:</span> Complete Requirement Review before generating PRD.
+                      <span className="font-semibold text-red-300">Blocked by Requirement Review:</span>{" "}
+                      {requirementReviewNotStarted
+                        ? "Start Requirement Review before generating the PRD."
+                        : "Answer required clarifications before generating the PRD."}
                     </div>
                     <button
                       type="button"
@@ -1148,7 +1330,7 @@ export function FeatureDetailClient({
                     onClick={() => generatePrd.mutate({ featureRequestId: feature.id })}
                     disabled={
                       (hasPrd && !prdMayBeOutdated) ||
-                      prdBlockedByClarifications ||
+                      prdBlockedByRequirementReview ||
                       generatePrd.isPending
                     }
                     className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -1157,7 +1339,7 @@ export function FeatureDetailClient({
                       ? prdMayBeOutdated
                         ? "Regenerate PRD"
                         : "PRD generated"
-                      : prdBlockedByClarifications
+                      : prdBlockedByRequirementReview
                         ? "Blocked by Requirement Review"
                         : generatePrd.isPending
                           ? "Generating PRD..."
@@ -2142,6 +2324,7 @@ function ReleaseControlRoom({
   data,
   prdMayBeOutdated,
   onGeneratePrd,
+  onRequirementReview,
   isGeneratingPrd,
   onLinkPr,
   onRunQa,
@@ -2153,6 +2336,7 @@ function ReleaseControlRoom({
   data: ReleaseControlRoomView;
   prdMayBeOutdated: boolean;
   onGeneratePrd: () => void;
+  onRequirementReview: () => void;
   isGeneratingPrd: boolean;
   onLinkPr: () => void;
   onRunQa: () => void;
@@ -2206,9 +2390,7 @@ function ReleaseControlRoom({
       items: [
         {
           label: "Requirement Review complete",
-          complete:
-            !prdStep?.blockedReason?.includes("Requirement Review") &&
-            !prdMayBeOutdated
+          complete: hasPrd || Boolean(prdStep && prdStep.status !== "blocked")
         },
         { label: "PRD generated", complete: hasPrd },
         { label: "Acceptance criteria ready", complete: hasPrd }
@@ -2277,6 +2459,7 @@ function ReleaseControlRoom({
           prdBlocked={prdStep?.status === "blocked"}
           prdMayBeOutdated={prdMayBeOutdated}
           onGeneratePrd={onGeneratePrd}
+          onRequirementReview={onRequirementReview}
           isGeneratingPrd={isGeneratingPrd}
           onLinkPr={onLinkPr}
           onRunQa={onRunQa}
@@ -2350,6 +2533,7 @@ function ReleaseControlRoom({
               prdBlocked={prdStep?.status === "blocked"}
               prdMayBeOutdated={prdMayBeOutdated}
               onGeneratePrd={onGeneratePrd}
+              onRequirementReview={onRequirementReview}
               isGeneratingPrd={isGeneratingPrd}
               onLinkPr={onLinkPr}
               onRunQa={onRunQa}
@@ -2378,6 +2562,7 @@ function PrimaryControlRoomAction({
   prdMayBeOutdated,
   variant = "primary",
   onGeneratePrd,
+  onRequirementReview,
   isGeneratingPrd,
   onLinkPr,
   onRunQa,
@@ -2392,6 +2577,7 @@ function PrimaryControlRoomAction({
   prdMayBeOutdated?: boolean;
   variant?: "primary" | "subtle";
   onGeneratePrd: () => void;
+  onRequirementReview: () => void;
   isGeneratingPrd: boolean;
   onLinkPr: () => void;
   onRunQa: () => void;
@@ -2421,15 +2607,10 @@ function PrimaryControlRoomAction({
     return prdBlocked && !prdMayBeOutdated ? (
       <button
         type="button"
-        onClick={() =>
-          document.getElementById("requirement-engine-section")?.scrollIntoView({
-            behavior: "smooth",
-            block: "start"
-          })
-        }
+        onClick={onRequirementReview}
         className={buttonClass}
       >
-        Review clarifications
+        Requirement Review
       </button>
     ) : (
       <button

@@ -324,8 +324,8 @@ export async function generateClarificationsForFeatureRequest(
     await tx
       .update(featureRequests)
       .set({
-        status: "clarifying",
-        boardStage: "pending",
+        status: rows.length > 0 ? "clarifying" : featureRequest.status,
+        boardStage: rows.length > 0 ? "pending" : featureRequest.boardStage,
         updatedAt: new Date()
       })
       .where(eq(featureRequests.id, featureRequest.id));
@@ -723,7 +723,7 @@ export async function getFeatureWorkflow(
     workspace.activeOrganization.id
   );
 
-  const [questions, prdRows] = await Promise.all([
+  const [questions, prdRows, clarificationRunRows] = await Promise.all([
     db
       .select()
       .from(clarificationQuestions)
@@ -733,10 +733,34 @@ export async function getFeatureWorkflow(
       .select()
       .from(prds)
       .where(eq(prds.featureRequestId, featureRequest.id))
-      .orderBy(desc(prds.version))
+      .orderBy(desc(prds.version)),
+    db
+      .select({ id: aiRuns.id, createdAt: aiRuns.createdAt })
+      .from(aiRuns)
+      .where(
+        and(
+          eq(aiRuns.featureRequestId, featureRequest.id),
+          eq(aiRuns.agentType, "clarification"),
+          eq(aiRuns.status, "succeeded")
+        )
+      )
+      .orderBy(desc(aiRuns.createdAt))
+      .limit(1)
   ]);
 
   const latestPrd = prdRows[0] ?? null;
+  const latestClarificationRun = clarificationRunRows[0] ?? null;
+  const unansweredRequiredClarificationQuestions = questions.filter(
+    (question) => isRequiredClarification(question.priority) && !question.answer
+  );
+  const requirementReviewStarted = Boolean(
+    latestClarificationRun || questions.length > 0 || latestPrd
+  );
+  const requirementReviewComplete = Boolean(
+    latestPrd ||
+      (requirementReviewStarted &&
+        unansweredRequiredClarificationQuestions.length === 0)
+  );
   const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
     questions,
     latestPrd
@@ -760,9 +784,14 @@ export async function getFeatureWorkflow(
   return {
     featureRequest,
     clarificationQuestions: questions,
-    unansweredRequiredClarificationQuestions: questions.filter(
-      (question) => isRequiredClarification(question.priority) && !question.answer
-    ),
+    unansweredRequiredClarificationQuestions,
+    requirementReview: {
+      started: requirementReviewStarted,
+      completed: requirementReviewComplete,
+      noFurtherClarificationsNeeded:
+        Boolean(latestClarificationRun) && questions.length === 0,
+      latestRunAt: latestClarificationRun?.createdAt ?? null
+    },
     prd: latestPrd,
     prdMayBeOutdated,
     staleClarificationAnswerIds: prdMayBeOutdated

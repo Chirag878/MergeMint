@@ -307,6 +307,7 @@ export async function getReleaseControlRoom(
     qaReviewRows,
     approvalRows,
     releaseReportRows,
+    clarificationRunRows,
     safeAiRuns
   ] = await Promise.all([
     db
@@ -364,6 +365,19 @@ export async function getReleaseControlRoom(
         )
       )
       .orderBy(desc(releaseReports.createdAt)),
+    db
+      .select({ id: aiRuns.id, createdAt: aiRuns.createdAt })
+      .from(aiRuns)
+      .where(
+        and(
+          eq(aiRuns.featureRequestId, scoped.feature.id),
+          eq(aiRuns.organizationId, organizationId),
+          eq(aiRuns.agentType, "clarification"),
+          eq(aiRuns.status, "succeeded")
+        )
+      )
+      .orderBy(desc(aiRuns.createdAt))
+      .limit(1),
     options.includeTimeline
       ? db
           .select({
@@ -397,6 +411,10 @@ export async function getReleaseControlRoom(
   const latestApproval = approvalRows[0] ?? null;
   const latestReleaseReport =
     releaseReportRows.find(isClientDeliveryReport) ?? null;
+  const latestClarificationRun = clarificationRunRows[0] ?? null;
+  const requirementReviewStarted = Boolean(
+    latestClarificationRun || questions.length > 0 || latestPrd
+  );
   const prdMayBeOutdated = hasClarificationAnswerChangedAfterPrd(
     questions,
     latestPrd
@@ -531,6 +549,10 @@ export async function getReleaseControlRoom(
       (question.priority === "high" || question.priority === "urgent") &&
       !question.answer
   );
+  const requirementReviewBlocked = Boolean(
+    !latestPrd &&
+      (!requirementReviewStarted || unansweredRequiredQuestions.length > 0)
+  );
   const progress = [
     buildStep({
       id: "feature_request",
@@ -543,12 +565,12 @@ export async function getReleaseControlRoom(
       label: "PRD generated",
       completedAt: latestPrd?.createdAt ?? null,
       current: !latestPrd,
-      blocked:
-        (!latestPrd && unansweredRequiredQuestions.length > 0) ||
-        prdMayBeOutdated,
+      blocked: requirementReviewBlocked || prdMayBeOutdated,
       blockedReason: prdMayBeOutdated
         ? "Clarification answers changed after this PRD was generated."
-        : "Complete Requirement Review before generating PRD.",
+        : requirementReviewStarted
+          ? "Answer required clarifications before generating the PRD."
+          : "Start Requirement Review before generating the PRD.",
       actionKind: "generate_prd"
     }),
     buildStep({
