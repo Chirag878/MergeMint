@@ -1442,6 +1442,14 @@ html[data-theme="light"] .gradient-text-mint-pink {
   padding: 1rem;
 }
 
+.vf-demo-flow-card {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(255, 198, 157, 0.09), transparent 18rem),
+    radial-gradient(circle at 92% 0%, rgba(205, 44, 88, 0.09), transparent 18rem),
+    linear-gradient(180deg, rgba(248, 238, 223, 0.052), rgba(248, 238, 223, 0.018)),
+    rgba(8, 3, 3, 0.68) !important;
+}
+
 .vf-primary-cta {
   box-shadow:
     0 12px 28px rgba(232, 201, 153, 0.13),
@@ -1487,6 +1495,7 @@ html[data-theme="light"] .gradient-text-mint-pink {
 .vf-evidence-rail {
   position: sticky;
   top: 6.25rem;
+  min-width: 0;
 }
 
 .vf-evidence-card {
@@ -1501,17 +1510,21 @@ html[data-theme="light"] .gradient-text-mint-pink {
 
 .vf-evidence-row {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: flex-start;
+  gap: 0.85rem;
   border: 1px solid rgba(232, 201, 153, 0.1);
-  border-radius: 0.65rem;
-  background-color: rgba(5, 2, 2, 0.48);
-  padding: 0.7rem;
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(180deg, rgba(248, 238, 223, 0.035), rgba(248, 238, 223, 0.012)),
+    rgba(5, 2, 2, 0.48);
+  padding: 0.85rem;
 }
 
 .vf-evidence-dot {
+  flex: 0 0 auto;
   width: 0.62rem;
   height: 0.62rem;
+  margin-top: 0.32rem;
   border-radius: 999px;
   background: rgba(117, 138, 147, 0.65);
   box-shadow: 0 0 0 4px rgba(117, 138, 147, 0.08);
@@ -1530,6 +1543,38 @@ html[data-theme="light"] .gradient-text-mint-pink {
 .vf-evidence-row.is-blocked .vf-evidence-dot {
   background: #FFC69D;
   box-shadow: 0 0 0 4px rgba(255, 198, 157, 0.12);
+}
+
+.vf-release-checklist {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(232, 201, 153, 0.05), transparent 18rem),
+    rgba(5, 2, 2, 0.62) !important;
+}
+
+.vf-release-checklist-group {
+  background:
+    linear-gradient(180deg, rgba(248, 238, 223, 0.04), rgba(248, 238, 223, 0.014)),
+    rgba(8, 3, 3, 0.68) !important;
+}
+
+.vf-release-checklist-row {
+  min-width: 0;
+}
+
+.vf-release-checklist-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(117, 138, 147, 0.62);
+  box-shadow: 0 0 0 4px rgba(117, 138, 147, 0.08);
+}
+
+.vf-release-checklist-dot.is-ready {
+  background: #E8C999;
+  box-shadow:
+    0 0 0 4px rgba(232, 201, 153, 0.1),
+    0 0 16px rgba(232, 201, 153, 0.24);
 }
 
 .vf-board-stat {
@@ -1557,6 +1602,10 @@ html[data-theme="light"] .gradient-text-mint-pink {
 @media (max-width: 1279px) {
   .vf-evidence-rail {
     position: static;
+  }
+
+  .vf-release-cockpit-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { trpc } from "@/trpc/react";
 
 type WorkspaceUseCase = "agency" | "product_team" | "solo_builder";
@@ -36,7 +38,9 @@ export function DashboardClient({
 }: {
   userLabel: string;
 }) {
+  const router = useRouter();
   const utils = trpc.useUtils();
+  const [demoError, setDemoError] = useState<string | null>(null);
   const summary = trpc.dashboard.getSummary.useQuery();
   const workspaceSetup = trpc.guidedWorkflow.getWorkspaceSetup.useQuery();
   const setUseCase = trpc.workspace.setUseCase.useMutation({
@@ -48,6 +52,8 @@ export function DashboardClient({
       ]);
     }
   });
+  const createDemoProject = trpc.projects.create.useMutation();
+  const createDemoFeature = trpc.featureRequests.create.useMutation();
 
   if (summary.isLoading) {
     return (
@@ -99,6 +105,54 @@ export function DashboardClient({
       detail: data.stats.openFindings > 0 ? "Review before release" : "No open risks"
     }
   ] as const;
+  const isStartingDemo = createDemoProject.isPending || createDemoFeature.isPending;
+
+  async function startDemoFlow() {
+    setDemoError(null);
+
+    try {
+      const project = await createDemoProject.mutateAsync({
+        name: "Sample Project - Checkout Proof",
+        description:
+          "Demo data: a safe sample project for walking through MergeMint's proof chain. Not connected to a real GitHub repository.",
+        clientName: "Sample Client"
+      });
+      const feature = await createDemoFeature.mutateAsync({
+        projectId: project.id,
+        title: "Sample Feature - Role-based checkout approval",
+        description:
+          "Demo data: add an approval checkpoint before checkout changes can be marked ready for release.",
+        businessGoal:
+          "Help founders and CTOs verify that a delivered PR matches the original product request before shipping.",
+        expectedBehavior:
+          "A release owner can review requirements, inspect PR evidence, run QA, approve or request fixes, generate a report, and manually publish GitHub Proof.",
+        acceptanceCriteria: [
+          "Requirement Review can be completed before PRD generation.",
+          "PRD and Engineering Tasks can be generated from the sample feature.",
+          "GitHub PR evidence is clearly marked as not connected until a real PR is linked.",
+          "GitHub Proof remains manual-only and is not auto-published."
+        ],
+        priority: "high"
+      });
+
+      await Promise.all([
+        utils.dashboard.getSummary.invalidate(),
+        utils.guidedWorkflow.getWorkspaceSetup.invalidate(),
+        utils.projects.list.invalidate(),
+        utils.featureRequests.list.invalidate(),
+        utils.featureRequests.listByProject.invalidate({ projectId: project.id }),
+        utils.releaseBoard.getBoard.invalidate()
+      ]);
+
+      router.push(`/app/features/${feature.id}`);
+    } catch (error) {
+      setDemoError(
+        error instanceof Error
+          ? error.message
+          : "Unable to start the sample project."
+      );
+    }
+  }
 
   return (
     <main className="vf-app-page min-h-screen overflow-hidden px-5 py-8 text-neutral-100 sm:px-6 lg:px-8">
@@ -127,9 +181,17 @@ export function DashboardClient({
               </p>
               </div>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={startDemoFlow}
+                  disabled={isStartingDemo}
+                  className="vf-primary-cta rounded-md bg-white px-4 py-2.5 text-center text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isStartingDemo ? "Starting demo..." : "Start demo project"}
+                </button>
                 <Link
                   href={primarySecondary.primary.href}
-                  className="vf-primary-cta rounded-md bg-white px-4 py-2.5 text-center text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100"
+                  className="rounded-md border border-white/15 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:border-[#E8C999]/40"
                 >
                   {primarySecondary.primary.cta}
                 </Link>
@@ -140,6 +202,11 @@ export function DashboardClient({
                   Open release board
                 </Link>
               </div>
+              {demoError ? (
+                <p className="mt-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+                  {demoError}
+                </p>
+              ) : null}
             </div>
             <div className="vf-command-metric-deck grid gap-3 sm:grid-cols-2">
               {commandMetrics.map((metric) => (
@@ -184,6 +251,12 @@ export function DashboardClient({
         ) : null}
 
         {data.isEmpty ? <FirstTimeEmptyState /> : null}
+
+        <DemoFlowCard
+          isStarting={isStartingDemo}
+          error={demoError}
+          onStart={startDemoFlow}
+        />
 
         <section className="vf-dashboard-grid vf-section-reveal grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-5">
@@ -262,6 +335,71 @@ function CommandMetric({
       </p>
       <p className="mt-2 text-xs leading-5 text-neutral-400">{detail}</p>
     </div>
+  );
+}
+
+function DemoFlowCard({
+  isStarting,
+  error,
+  onStart
+}: {
+  isStarting: boolean;
+  error: string | null;
+  onStart: () => void;
+}) {
+  const steps = [
+    "Feature Request",
+    "Requirement Review",
+    "PRD",
+    "Engineering Tasks",
+    "GitHub PR",
+    "AI QA Review",
+    "Developer Fix Pack",
+    "Human Approval",
+    "Client Report",
+    "GitHub Proof"
+  ];
+
+  return (
+    <section className="vf-demo-flow-card vf-section-reveal rounded-lg border border-white/10 bg-white/[0.035] p-5">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+            Guided demo
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-white">
+            Try a safe sample project
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-400">
+            Creates clearly labeled sample data and opens the Release Control
+            Room. GitHub PR evidence stays disconnected until you link a real PR;
+            GitHub Proof remains manual-only.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={isStarting}
+          className="vf-primary-cta rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isStarting ? "Creating sample..." : "Start Demo"}
+        </button>
+      </div>
+      <div className="mt-5 grid gap-2 md:grid-cols-5">
+        {steps.map((step, index) => (
+          <div
+            key={step}
+            className="rounded-md border border-white/10 bg-black/20 p-3"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+              Step {index + 1}
+            </p>
+            <p className="mt-1 text-sm font-medium text-neutral-100">{step}</p>
+          </div>
+        ))}
+      </div>
+      {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+    </section>
   );
 }
 

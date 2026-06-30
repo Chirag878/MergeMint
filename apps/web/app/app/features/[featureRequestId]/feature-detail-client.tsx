@@ -914,7 +914,7 @@ export function FeatureDetailClient({
         </section>
       ) : null}
 
-      <section className="vf-release-cockpit-grid grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="vf-release-cockpit-grid grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-5">
           {controlRoom.data ? (
               <ReleaseControlRoom
@@ -2473,10 +2473,10 @@ function EvidenceRail({
           <div key={item.label} className={`vf-evidence-row is-${item.status}`}>
             <span className="vf-evidence-dot" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-neutral-100">
+              <p className="text-sm font-medium leading-5 text-neutral-100">
                 {item.label}
               </p>
-              <p className="mt-0.5 truncate text-xs text-neutral-500">
+              <p className="mt-0.5 text-xs leading-5 text-neutral-500">
                 {item.value}
               </p>
             </div>
@@ -2769,81 +2769,95 @@ function ReleaseControlRoom({
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-4">
-          <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3">
-            <h3 className="text-base font-medium text-neutral-100">
+      <section className="vf-release-checklist rounded-lg border border-neutral-800 bg-neutral-950 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+              Evidence progress
+            </p>
+            <h3 className="mt-1 text-lg font-semibold text-neutral-100">
               Release Checklist
             </h3>
-            <span className="rounded-full border border-neutral-800 bg-neutral-900 px-2.5 py-0.5 text-xs text-neutral-400 font-medium">
-              {readyChecklistItems} of {totalChecklistItems} ready
-            </span>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {releaseChecklistGroups.map((group) => (
-              <div
-                key={group.title}
-                className="rounded-md border border-neutral-800 bg-neutral-900/80 p-3"
-              >
-                <h4 className="border-b border-neutral-800/80 pb-2 text-xs font-semibold uppercase tracking-wider text-blue-400">
-                  {group.title}
-                </h4>
-                <ul className="mt-2.5 space-y-2">
-                  {group.items.map((item) => (
-                    <li key={item.label} className="flex items-start gap-1.5 text-xs">
-                      <span
-                        className={
-                          item.complete
-                            ? "font-bold text-emerald-400 shrink-0"
-                            : "font-bold text-neutral-600 shrink-0"
-                        }
-                      >
-                        {item.complete ? "✓" : "○"}
-                      </span>
-                      <span
-                        className={
-                          item.complete
-                            ? "text-neutral-200"
-                            : "text-neutral-400"
-                        }
-                      >
-                        {item.label}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
+          <span className="rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs font-medium text-neutral-300">
+            {readyChecklistItems} of {totalChecklistItems} ready
+          </span>
+        </div>
+        <div className="mt-4 space-y-3">
+          {releaseChecklistGroups.map((group) => (
+            <section
+              key={group.title}
+              className="vf-release-checklist-group rounded-md border border-neutral-800 bg-neutral-900/80 p-4"
+            >
+              <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E8C999]">
+                {group.title}
+              </h4>
+              <ul className="mt-3 divide-y divide-neutral-800/70">
+                {group.items.map((item) => (
+                  <li
+                    key={item.label}
+                    className="vf-release-checklist-row flex flex-wrap items-center gap-3 py-3"
+                  >
+                    <span
+                      className={
+                        item.complete
+                          ? "vf-release-checklist-dot is-ready"
+                          : "vf-release-checklist-dot"
+                      }
+                      aria-hidden="true"
+                    />
+                    <span
+                      className={
+                        item.complete
+                          ? "min-w-[12rem] flex-1 text-sm font-medium text-neutral-100"
+                          : "min-w-[12rem] flex-1 text-sm text-neutral-400"
+                      }
+                    >
+                      {item.label}
+                    </span>
+                    <span
+                      className={
+                        item.complete
+                          ? "shrink-0 rounded-full border border-[#E8C999]/30 bg-[#E8C999]/15 px-2.5 py-1 text-[11px] font-semibold text-[#E8C999]"
+                          : "shrink-0 rounded-full border border-neutral-700 bg-neutral-950 px-2.5 py-1 text-[11px] font-semibold text-neutral-500"
+                      }
+                    >
+                      {item.complete ? "Ready" : "Todo"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </section>
 
-        <section className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-4">
-          <p className="text-sm text-blue-300">Release Focus</p>
-          <h3 className="mt-2 text-xl font-semibold text-neutral-100">
-            {data.nextBestAction.title}
-          </h3>
-          <p className="mt-3 text-sm leading-6 text-neutral-300">
-            {data.nextBestAction.why}
-          </p>
-          <div className="mt-5">
-            <PrimaryControlRoomAction
-              action={data.nextBestAction.kind}
-              reportHref={reportHref}
-              prdBlocked={prdStep?.status === "blocked"}
-              prdMayBeOutdated={prdMayBeOutdated}
-              onGeneratePrd={onGeneratePrd}
-              onRequirementReview={onRequirementReview}
-              isGeneratingPrd={isGeneratingPrd}
-              onLinkPr={onLinkPr}
-              onRunQa={onRunQa}
-              isRunningQa={isRunningQa}
-              onSubmitApproval={onSubmitApproval}
-              onGenerateReport={onGenerateReport}
-              isGeneratingReport={isGeneratingReport}
-            />
-          </div>
-        </section>
-      </div>
+      <section className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-5">
+        <p className="text-sm text-blue-300">Release Focus</p>
+        <h3 className="mt-2 text-xl font-semibold text-neutral-100">
+          {data.nextBestAction.title}
+        </h3>
+        <p className="mt-3 text-sm leading-6 text-neutral-300">
+          {data.nextBestAction.why}
+        </p>
+        <div className="mt-5">
+          <PrimaryControlRoomAction
+            action={data.nextBestAction.kind}
+            reportHref={reportHref}
+            prdBlocked={prdStep?.status === "blocked"}
+            prdMayBeOutdated={prdMayBeOutdated}
+            onGeneratePrd={onGeneratePrd}
+            onRequirementReview={onRequirementReview}
+            isGeneratingPrd={isGeneratingPrd}
+            onLinkPr={onLinkPr}
+            onRunQa={onRunQa}
+            isRunningQa={isRunningQa}
+            onSubmitApproval={onSubmitApproval}
+            onGenerateReport={onGenerateReport}
+            isGeneratingReport={isGeneratingReport}
+          />
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <RiskSummaryPanel riskSummary={data.riskSummary} />
