@@ -7,6 +7,7 @@ import {
   clients,
   db,
   featureRequests,
+  githubProofPublications,
   githubWebhookEvents,
   prdRequirements,
   prds,
@@ -446,7 +447,14 @@ export async function getReleaseControlRoom(
     latestPrd
   );
 
-  const [requirements, latestSnapshotRows, coverageRows, findingRows, webhookEventRows] =
+  const [
+    requirements,
+    latestSnapshotRows,
+    coverageRows,
+    findingRows,
+    webhookEventRows,
+    proofPublicationRows
+  ] =
     await Promise.all([
       latestPrd
         ? db
@@ -484,11 +492,29 @@ export async function getReleaseControlRoom(
             .where(eq(githubWebhookEvents.matchedFeatureRequestId, scoped.feature.id))
             .orderBy(desc(githubWebhookEvents.receivedAt))
             .limit(1)
-        : Promise.resolve([] as Array<typeof githubWebhookEvents.$inferSelect>)
+        : Promise.resolve([] as Array<typeof githubWebhookEvents.$inferSelect>),
+      latestPullRequest
+        ? db
+            .select()
+            .from(githubProofPublications)
+            .where(
+              and(
+                eq(githubProofPublications.featureRequestId, scoped.feature.id),
+                eq(githubProofPublications.pullRequestId, latestPullRequest.id)
+              )
+            )
+            .orderBy(desc(githubProofPublications.updatedAt))
+            .limit(1)
+        : Promise.resolve([] as Array<typeof githubProofPublications.$inferSelect>)
     ]);
 
   const latestSnapshot = latestSnapshotRows[0] ?? null;
   const latestWebhookEvent = webhookEventRows[0] ?? null;
+  const latestProofPublication = proofPublicationRows[0] ?? null;
+  const latestProofPublished = Boolean(
+    latestProofPublication?.lastPublishStatus === "posted" ||
+      latestProofPublication?.lastPublishStatus === "updated"
+  );
   const prUpdatedAfterLastReview = Boolean(
     latestSnapshot && latestQaReview && latestSnapshot.createdAt > latestQaReview.createdAt
   );
@@ -626,6 +652,14 @@ export async function getReleaseControlRoom(
         ? "Regenerate the PRD before running QA."
         : "A PR snapshot is required before QA can run.",
       actionKind: "run_qa_review"
+    }),
+    buildStep({
+      id: "github_proof",
+      label: "GitHub Proof published",
+      completedAt: latestProofPublished
+        ? latestProofPublication?.lastPublishedAt ?? latestProofPublication?.updatedAt ?? null
+        : null,
+      current: Boolean(latestQaReview && !latestProofPublished)
     }),
     buildStep({
       id: "approval",

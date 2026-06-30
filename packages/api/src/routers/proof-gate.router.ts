@@ -10,6 +10,10 @@ const featureInput = z.object({
   featureRequestId: z.string().uuid()
 });
 
+const manualPublishInput = featureInput.extend({
+  source: z.literal("manual_user_action")
+});
+
 export const proofGateRouter = router({
   getProofGateStatus: protectedProcedure
     .input(featureInput)
@@ -22,6 +26,10 @@ export const proofGateRouter = router({
     ),
 
   publishGitHubProof: protectedProcedure
-    .input(featureInput)
-    .mutation(({ ctx, input }) => publishGitHubProof(ctx, input.featureRequestId))
+    .input(manualPublishInput)
+    .mutation(({ ctx, input }) =>
+      publishGitHubProof(ctx, input.featureRequestId, {
+        source: input.source
+      })
+    )
 });

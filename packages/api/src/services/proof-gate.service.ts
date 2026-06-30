@@ -948,7 +948,18 @@ export async function getProofGateStatus(ctx: ProtectedContext, featureRequestId
   return buildProofGateView(featureRequestId, workspace.activeOrganization.id);
 }
 
-export async function publishGitHubProof(ctx: ProtectedContext, featureRequestId: string) {
+export async function publishGitHubProof(
+  ctx: ProtectedContext,
+  featureRequestId: string,
+  input: { source: "manual_user_action" }
+) {
+  if (input.source !== "manual_user_action") {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "GitHub Proof must be manually published by the user."
+    });
+  }
+
   const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
   assertRoleCan(workspace.membership.role, "create_feature_request");
 

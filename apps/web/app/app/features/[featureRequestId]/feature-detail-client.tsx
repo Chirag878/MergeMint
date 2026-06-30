@@ -60,6 +60,7 @@ type FeatureDetailTab =
   | "qa"
   | "approval"
   | "report"
+  | "github_proof"
   | "timeline"
   | "token_usage";
 
@@ -212,21 +213,6 @@ const approvalOptions: Array<{
   { value: "rejected", label: "Reject" }
 ];
 
-const featureDetailTabs: Array<{
-  id: FeatureDetailTab;
-  label: string;
-}> = [
-  { id: "overview", label: "Overview" },
-  { id: "requirements", label: "Requirements" },
-  { id: "engineering_tasks", label: "Engineering Tasks" },
-  { id: "pr", label: "PR Evidence" },
-  { id: "qa", label: "QA Review" },
-  { id: "approval", label: "Approval" },
-  { id: "report", label: "Report" },
-  { id: "timeline", label: "Timeline" },
-  { id: "token_usage", label: "Token Usage" }
-];
-
 export function FeatureDetailClient({
   featureRequestId
 }: {
@@ -292,6 +278,8 @@ export function FeatureDetailClient({
   });
   const engineeringTaskCenter = trpc.engineeringTasks.listByFeature.useQuery({
     featureRequestId
+  }, {
+    enabled: activeTab === "engineering_tasks"
   });
   const developerBrief = trpc.engineeringTasks.getDeveloperBrief.useQuery(
     { featureRequestId },
@@ -304,7 +292,7 @@ export function FeatureDetailClient({
   const linkedPullRequest = trpc.github.getFeaturePullRequest.useQuery({
     featureRequestId
   }, {
-    enabled: activeTab === "pr" || activeTab === "qa"
+    enabled: activeTab === "pr"
   });
   const pullRequestPicker = trpc.pullRequests.listForProjectRepository.useQuery(
     {
@@ -331,7 +319,7 @@ export function FeatureDetailClient({
   const proofGate = trpc.proofGate.getProofGateStatus.useQuery({
     featureRequestId
   }, {
-    enabled: activeTab === "qa" || activeTab === "report"
+    enabled: activeTab === "github_proof"
   });
   const billingEntitlement = trpc.billing.getCurrentEntitlement.useQuery(undefined, {
     enabled: activeTab === "qa"
@@ -730,7 +718,15 @@ export function FeatureDetailClient({
   }
 
   function openGitHubProofPanel() {
-    openTab("qa", "github-proof-gate");
+    openTab("github_proof", "github-proof-gate");
+  }
+
+  function publishProofManually() {
+    // GitHub Proof must be manually published by the user. Do not auto-trigger after QA review.
+    publishGitHubProof.mutate({
+      featureRequestId,
+      source: "manual_user_action"
+    });
   }
 
   function submitApprovalDecision() {
@@ -979,10 +975,26 @@ export function FeatureDetailClient({
           verdict={controlRoom.data.qaReview.verdict}
           readinessScore={controlRoom.data.qaReview.readinessScore}
           onViewProof={openGitHubProofPanel}
+          canPublish={Boolean(controlRoom.data.prEvidence)}
+          onPublish={publishProofManually}
+          isPublishing={publishGitHubProof.isPending}
+          publishError={publishGitHubProof.error?.message}
         />
       ) : null}
 
-      <FeatureDetailTabs activeTab={activeTab} onChange={setActiveTab} />
+      <FeatureSectionNav
+        activeTab={activeTab}
+        requirementsNestedTab={requirementsNestedTab}
+        controlRoom={controlRoom.data}
+        hasPrd={hasPrd}
+        hasEngineeringTasks={engineeringTasks.length > 0}
+        onNavigate={(tab, nestedTab) => {
+          if (nestedTab) {
+            setRequirementsNestedTab(nestedTab);
+          }
+          setActiveTab(tab);
+        }}
+      />
 
       {activeTab === "overview" ? (
         <section
@@ -1677,7 +1689,7 @@ export function FeatureDetailClient({
             hasPrd={hasPrd}
             prdMayBeOutdated={prdMayBeOutdated}
             requirementsCount={qaRequirementsCount}
-            hasPullRequestSnapshot={Boolean(linkedPullRequest.data?.latestSnapshot)}
+            hasPullRequestSnapshot={Boolean(controlRoom.data?.prEvidence?.lastSnapshotAt)}
             reviewBundle={latestQaReview.data}
             isLoading={latestQaReview.isLoading}
             error={latestQaReview.error?.message}
@@ -1686,11 +1698,16 @@ export function FeatureDetailClient({
             runError={getFriendlyQaRunError(runQaReview.error?.message)}
             entitlement={billingEntitlement.data}
           />
+        </>
+      ) : null}
+
+      {activeTab === "github_proof" ? (
+        <>
           <ProofGatePanel
             data={proofGate.data}
             isLoading={proofGate.isLoading}
             error={proofGate.error?.message}
-            onPublish={() => publishGitHubProof.mutate({ featureRequestId })}
+            onPublish={publishProofManually}
             isPublishing={publishGitHubProof.isPending}
             publishError={publishGitHubProof.error?.message}
           />
@@ -2224,29 +2241,138 @@ function FeatureWorkflowGuide({
   );
 }
 
-function FeatureDetailTabs({
+function FeatureSectionNav({
   activeTab,
-  onChange
+  requirementsNestedTab,
+  controlRoom,
+  hasPrd,
+  hasEngineeringTasks,
+  onNavigate
 }: {
   activeTab: FeatureDetailTab;
-  onChange: (tab: FeatureDetailTab) => void;
+  requirementsNestedTab: "review" | "prd" | "scope" | "acceptance_criteria";
+  controlRoom?: ReleaseControlRoomView;
+  hasPrd: boolean;
+  hasEngineeringTasks: boolean;
+  onNavigate: (
+    tab: FeatureDetailTab,
+    nestedTab?: "review" | "prd" | "scope" | "acceptance_criteria"
+  ) => void;
 }) {
+  const hasPr = Boolean(controlRoom?.prEvidence);
+  const hasQa = Boolean(controlRoom?.qaReview);
+  const hasApproval = Boolean(controlRoom?.humanApproval.decision);
+  const hasReport = Boolean(controlRoom?.releaseReport);
+  const progressById = new Map(
+    controlRoom?.progress.map((step) => [step.id, step.status]) ?? []
+  );
+  const prdProgress = progressById.get("prd");
+  const items: Array<{
+    key: string;
+    label: string;
+    tab: FeatureDetailTab;
+    nestedTab?: "review" | "prd" | "scope" | "acceptance_criteria";
+    state: "done" | "current" | "blocked" | "pending";
+  }> = [
+    { key: "overview", label: "Overview", tab: "overview", state: "done" },
+    {
+      key: "requirement_review",
+      label: "Requirement Review",
+      tab: "requirements",
+      nestedTab: "review",
+      state: prdProgress === "blocked" ? "blocked" : hasPrd ? "done" : "current"
+    },
+    {
+      key: "prd",
+      label: "PRD",
+      tab: "requirements",
+      nestedTab: "prd",
+      state:
+        hasPrd ? "done" : prdProgress === "blocked" ? "blocked" : "current"
+    },
+    {
+      key: "engineering_tasks",
+      label: "Engineering Tasks",
+      tab: "engineering_tasks",
+      state: hasEngineeringTasks ? "done" : hasPrd ? "current" : "pending"
+    },
+    {
+      key: "github_pr",
+      label: "GitHub PR",
+      tab: "pr",
+      state: hasPr ? "done" : "pending"
+    },
+    {
+      key: "ai_qa_review",
+      label: "AI QA Review",
+      tab: "qa",
+      state: hasQa ? "done" : hasPr ? "current" : "pending"
+    },
+    {
+      key: "approval",
+      label: "Approval",
+      tab: "approval",
+      state: hasApproval ? "done" : hasQa ? "current" : "pending"
+    },
+    {
+      key: "report",
+      label: "Report",
+      tab: "report",
+      state: hasReport ? "done" : hasApproval ? "current" : "pending"
+    },
+    {
+      key: "github_proof",
+      label: "GitHub Proof",
+      tab: "github_proof",
+      state: hasQa ? "current" : "pending"
+    },
+    {
+      key: "timeline",
+      label: "Timeline",
+      tab: "timeline",
+      state: "pending"
+    },
+    {
+      key: "token_usage",
+      label: "Token Usage",
+      tab: "token_usage",
+      state: "pending"
+    }
+  ];
+
   return (
     <nav className="sticky top-20 z-30 -mx-1 flex gap-2 overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950/90 p-2 backdrop-blur">
-      {featureDetailTabs.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          onClick={() => onChange(tab.id)}
-          className={
-            activeTab === tab.id
-              ? "whitespace-nowrap rounded-md border border-emerald-300/35 bg-emerald-300/10 px-3 py-2 text-sm font-semibold text-emerald-100"
-              : "whitespace-nowrap rounded-md border border-transparent px-3 py-2 text-sm font-semibold text-neutral-400 transition hover:border-neutral-700 hover:text-neutral-100"
-          }
-        >
-          {tab.label}
-        </button>
-      ))}
+      {items.map((item) => {
+        const isActive =
+          activeTab === item.tab &&
+          (item.tab !== "requirements" || requirementsNestedTab === item.nestedTab);
+        const marker =
+          item.state === "done"
+            ? "Done"
+            : item.state === "blocked"
+              ? "Blocked"
+              : item.state === "current"
+                ? "Now"
+                : "Locked";
+
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onNavigate(item.tab, item.nestedTab)}
+            className={
+              isActive
+                ? "whitespace-nowrap rounded-md border border-emerald-300/35 bg-emerald-300/10 px-3 py-2 text-left text-sm font-semibold text-emerald-100"
+                : "whitespace-nowrap rounded-md border border-transparent px-3 py-2 text-left text-sm font-semibold text-neutral-400 transition hover:border-neutral-700 hover:text-neutral-100"
+            }
+          >
+            <span>{item.label}</span>
+            <span className="ml-2 text-[10px] uppercase tracking-wide opacity-70">
+              {marker}
+            </span>
+          </button>
+        );
+      })}
     </nav>
   );
 }
@@ -4009,11 +4135,19 @@ function validateApprovalDecision(input: {
 function CompactProofGateSummary({
   verdict,
   readinessScore,
-  onViewProof
+  onViewProof,
+  canPublish,
+  onPublish,
+  isPublishing,
+  publishError
 }: {
   verdict: string;
   readinessScore: number | null;
   onViewProof: () => void;
+  canPublish: boolean;
+  onPublish: () => void;
+  isPublishing: boolean;
+  publishError?: string;
 }) {
   return (
     <section className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-4">
@@ -4025,14 +4159,27 @@ function CompactProofGateSummary({
             {readinessScore !== null ? ` - readiness ${readinessScore}` : ""}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onViewProof}
-          className="rounded-md border border-blue-700 px-3 py-2 text-sm font-medium text-blue-100 transition hover:bg-blue-900/40"
-        >
-          View GitHub Proof
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onViewProof}
+            className="rounded-md border border-blue-700 px-3 py-2 text-sm font-medium text-blue-100 transition hover:bg-blue-900/40"
+          >
+            View GitHub Proof
+          </button>
+          <button
+            type="button"
+            onClick={onPublish}
+            disabled={!canPublish || isPublishing}
+            className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPublishing ? "Publishing..." : "Publish Proof to GitHub"}
+          </button>
+        </div>
       </div>
+      {publishError ? (
+        <p className="mt-3 text-sm text-red-300">{publishError}</p>
+      ) : null}
     </section>
   );
 }
