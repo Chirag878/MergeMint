@@ -817,6 +817,72 @@ export async function generateEngineeringTasksForPrd(
   return created;
 }
 
+function getProductDiscoveryVerdict(input: {
+  featureRequest: typeof featureRequests.$inferSelect;
+  unansweredRequiredCount: number;
+  requirementReviewStarted: boolean;
+  requirementReviewComplete: boolean;
+}) {
+  const text = [
+    input.featureRequest.title,
+    input.featureRequest.description,
+    input.featureRequest.businessGoal,
+    input.featureRequest.expectedBehavior,
+    input.featureRequest.acceptanceCriteria
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (/\b(duplicate|same as|already requested)\b/.test(text)) {
+    return {
+      state: "duplicate_request" as const,
+      label: "Duplicate request",
+      rationale: "The request appears to duplicate an existing or repeated ask."
+    };
+  }
+
+  if (/\b(already exists|already built|existing feature|currently supported)\b/.test(text)) {
+    return {
+      state: "already_exists" as const,
+      label: "Already exists",
+      rationale: "The request appears to describe capability that may already exist."
+    };
+  }
+
+  if (/\b(out of scope|not in scope|unsupported|not supported)\b/.test(text)) {
+    return {
+      state: "out_of_scope" as const,
+      label: "Out of scope",
+      rationale: "The request includes language that marks it outside current scope."
+    };
+  }
+
+  if (/\b(low priority|not worth|nice to have|later|someday)\b/.test(text)) {
+    return {
+      state: "not_worth_building_now" as const,
+      label: "Not worth building now",
+      rationale: "The request looks low priority or better deferred."
+    };
+  }
+
+  if (input.unansweredRequiredCount > 0 || !input.requirementReviewComplete) {
+    return {
+      state: "needs_clarification" as const,
+      label: "Needs clarification",
+      rationale: "Required discovery questions must be answered before PRD generation."
+    };
+  }
+
+  return {
+    state: "proceed_to_prd" as const,
+    label: "Proceed to PRD",
+    rationale: input.requirementReviewStarted
+      ? "Requirement Review is complete and the request is ready for PRD."
+      : "No blocking clarification has been detected yet."
+  };
+}
+
 export async function getFeatureWorkflow(
   ctx: ProtectedContext,
   featureRequestId: string
@@ -871,6 +937,12 @@ export async function getFeatureWorkflow(
     questions,
     latestPrd
   );
+  const productDiscoveryVerdict = getProductDiscoveryVerdict({
+    featureRequest,
+    unansweredRequiredCount: unansweredRequiredClarificationQuestions.length,
+    requirementReviewStarted,
+    requirementReviewComplete
+  });
 
   const [requirements, tasks] = latestPrd
     ? await Promise.all([
@@ -898,6 +970,7 @@ export async function getFeatureWorkflow(
         Boolean(latestClarificationRun) && questions.length === 0,
       latestRunAt: latestClarificationRun?.createdAt ?? null
     },
+    productDiscoveryVerdict,
     prd: latestPrd,
     prdMayBeOutdated,
     staleClarificationAnswerIds: prdMayBeOutdated

@@ -1,5 +1,6 @@
 import { router } from "./trpc";
 import { approvalRouter } from "./routers/approval.router";
+import { asyncWorkflowRouter } from "./routers/async-workflow.router";
 import { billingRouter } from "./routers/billing.router";
 import { clientRouter } from "./routers/client.router";
 import { dashboardRouter } from "./routers/dashboard.router";
@@ -23,6 +24,7 @@ import { workspaceRouter } from "./routers/workspace.router";
 export const appRouter = router({
   health: healthRouter,
   approval: approvalRouter,
+  asyncWorkflow: asyncWorkflowRouter,
   billing: billingRouter,
   clients: clientRouter,
   dashboard: dashboardRouter,

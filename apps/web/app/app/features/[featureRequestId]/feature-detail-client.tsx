@@ -530,6 +530,7 @@ export function FeatureDetailClient({
     workflow.data?.prdRequirements ?? workflow.data?.requirements ?? [];
   const engineeringTasks =
     workflow.data?.engineeringTasks ?? workflow.data?.tasks ?? [];
+  const productDiscoveryVerdict = workflow.data?.productDiscoveryVerdict;
   const latestAiRuns = aiRunUsage.data ?? [];
   const controlRoomRequirementsCount = controlRoom.data
     ? Object.values(controlRoom.data.requirementEvidenceSummary).reduce(
@@ -1141,6 +1142,27 @@ export function FeatureDetailClient({
                     </button>
                   ) : null}
                 </div>
+
+                {productDiscoveryVerdict ? (
+                  <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                          Product Discovery verdict
+                        </p>
+                        <h3 className="mt-1 text-base font-semibold text-neutral-100">
+                          {productDiscoveryVerdict.label}
+                        </h3>
+                      </div>
+                      <span className="rounded-full border border-[#E8C999]/30 bg-[#E8C999]/10 px-3 py-1 text-xs font-semibold capitalize text-[#E8C999]">
+                        {productDiscoveryVerdict.state.replaceAll("_", " ")}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-neutral-400">
+                      {productDiscoveryVerdict.rationale}
+                    </p>
+                  </div>
+                ) : null}
 
                 {requirementReviewMessage ? (
                   <p className="rounded-md border border-emerald-900/60 bg-emerald-950/20 p-3 text-sm text-emerald-200">

@@ -22,9 +22,25 @@ Feature Request -> Requirement Review -> PRD -> Engineering Tasks -> GitHub PR -
 
 Key implemented surfaces include projects, project-level Verification Rules, feature requests, requirement clarification, PRD generation, engineering tasks, GitHub repo/PR linking, PR snapshots, AI QA review, human approval, release board, client/developer/internal release reports, public report sharing, billing, admin manual access, Terminal Mode preview, and the GitHub Proof Gate.
 
+MergeMint is the ShipFlow AI implementation for proof-led delivery: it turns product intent into an auditable release chain and shows whether a PR delivered the original promise.
+
+## Async Workflow Coverage
+
+Long-running product actions have a lightweight Inngest-ready async workflow layer in `packages/api/src/services/async-workflow.service.ts`.
+
+Covered jobs:
+
+- PRD generation
+- Engineering task generation
+- AI QA review / re-review
+- Release readiness check placeholder
+
+Each job exposes `queued`, `running`, `completed`, or `failed` status through the `asyncWorkflow` tRPC router. The current implementation keeps the queue minimal and reuses existing services; it can be swapped for hosted Inngest events without changing the product services.
+
 ## AI Features
 
 - Requirement clarification
+- Product Discovery verdict: Proceed to PRD, Needs clarification, Already exists, Duplicate request, Not worth building now, Out of scope
 - PRD generation
 - Engineering task generation
 - Repository intelligence summaries
@@ -124,6 +140,8 @@ git diff --check
 13. Record human approval.
 14. Generate and open client/developer/internal reports as appropriate.
 15. Show billing credits and admin/manual access safety.
+
+For a tighter judging flow, use `docs/DEMO_READINESS_CHECKLIST.md`.
 
 ## Scaling And Reliability Notes
 
