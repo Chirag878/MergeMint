@@ -80,8 +80,8 @@ export function ReleaseBoardClient() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+    <div className="vf-board-shell space-y-6">
+      <section className="vf-app-panel rounded-lg border border-neutral-800 bg-neutral-900 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-lg font-medium">Board filters</h2>
@@ -135,18 +135,21 @@ export function ReleaseBoardClient() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-4">
+      <section className="vf-kanban-lane grid gap-4 xl:grid-cols-4">
         {columns.map((column) => {
           const cards = board.data.columns[column.id];
 
           return (
             <div
               key={column.id}
-              className="rounded-lg border border-neutral-800 bg-neutral-900 p-4"
+              className="vf-kanban-column rounded-lg border border-neutral-800 bg-neutral-900 p-4"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-4">
                 <div>
-                  <h2 className="font-medium text-neutral-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+                    {column.id}
+                  </p>
+                  <h2 className="mt-1 font-semibold text-neutral-100">
                     {column.title}
                   </h2>
                   <p className="mt-1 text-xs leading-5 text-neutral-500">
@@ -160,33 +163,43 @@ export function ReleaseBoardClient() {
 
               <div className="mt-4 space-y-3">
                 {cards.length === 0 ? (
-                  <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-500">
-                    No features here.
+                  <div className="vf-kanban-empty rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-500">
+                    <p className="font-medium text-neutral-300">No features here.</p>
+                    <p className="mt-1 text-xs">Work appears here as proof stages advance.</p>
                   </div>
                 ) : null}
 
                 {cards.map((card) => (
                   <article
                     key={card.id}
-                    className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                    className="vf-kanban-card rounded-md border border-neutral-800 bg-neutral-950 p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="font-medium text-neutral-100">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
+                          {card.projectName}
+                        </p>
+                        <h3 className="mt-1 font-semibold leading-6 text-neutral-100">
                           {card.title}
                         </h3>
                         <p className="mt-1 text-sm text-neutral-500">
-                          {card.projectName}
-                          {card.clientName ? ` - ${card.clientName}` : ""}
+                          {card.clientName ?? card.repositoryFullName ?? "No client ledger"}
                         </p>
                       </div>
                       <StageChip stage={card.stage} />
                     </div>
 
-                    <div className="mt-3 space-y-2 text-sm text-neutral-400">
-                      <p>{card.workflowState}</p>
-                      <p>Next: {card.nextAction}</p>
-                      <p>Repo: {card.repositoryFullName ?? "Not connected"}</p>
+                    <div className="vf-board-proof-strip mt-4 grid grid-cols-4 gap-1.5">
+                      <ProofStep label="PR" done={Boolean(card.prNumber)} />
+                      <ProofStep label="QA" done={Boolean(card.qaVerdict)} />
+                      <ProofStep label="OK" done={Boolean(card.approvalDecision)} />
+                      <ProofStep label="Rpt" done={Boolean(card.reportState)} />
+                    </div>
+
+                    <div className="mt-4 rounded-md border border-white/10 bg-black/20 p-3 text-sm text-neutral-400">
+                      <p className="font-medium text-neutral-200">{card.workflowState}</p>
+                      <p className="mt-1 text-xs text-neutral-500">Next: {card.nextAction}</p>
+                      <p className="mt-1 text-xs text-neutral-500">Repo: {card.repositoryFullName ?? "Not connected"}</p>
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -243,9 +256,23 @@ export function ReleaseBoardClient() {
 
 function BoardStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3">
+    <div className="vf-board-stat rounded-md border border-neutral-800 bg-neutral-950 p-3">
       <p className="text-xs text-neutral-500">{label}</p>
       <p className="mt-1 text-xl font-semibold text-neutral-100">{value}</p>
+    </div>
+  );
+}
+
+function ProofStep({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div
+      className={
+        done
+          ? "rounded-full bg-[#E8C999] px-2 py-1 text-center text-[10px] font-bold text-[#120405]"
+          : "rounded-full border border-neutral-800 bg-neutral-950 px-2 py-1 text-center text-[10px] font-bold text-neutral-500"
+      }
+    >
+      {label}
     </div>
   );
 }

@@ -15,7 +15,7 @@ export default async function AdminAccessPage() {
 
   if (!isAdminEmail(session.user.email)) {
     return (
-      <main className="min-h-screen bg-[var(--bg)] px-6 py-10 text-[var(--text)]">
+      <main className="vf-app-page min-h-screen px-5 py-8 text-[var(--text)] sm:px-6 lg:px-8">
         <section className="mx-auto max-w-3xl rounded-lg border border-red-900/60 bg-red-950/30 p-6 text-red-100">
           <h1 className="text-2xl font-semibold">Billing admin access denied</h1>
           <p className="mt-3 text-sm leading-6">
@@ -27,19 +27,21 @@ export default async function AdminAccessPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[var(--bg)] px-6 py-10 text-[var(--text)]">
+    <main className="vf-app-page min-h-screen px-5 py-8 text-[var(--text)] sm:px-6 lg:px-8">
       <section className="mx-auto max-w-6xl space-y-8">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-[0.28em] text-[var(--mint)]">
+        <div className="vf-page-hero">
+          <p className="vf-page-eyebrow">
             Owner tools
           </p>
-          <h1 className="mt-4 text-3xl font-semibold tracking-tight">
-            Manual billing access
-          </h1>
-          <p className="mt-3 max-w-2xl text-[var(--text-muted)]">
-            Search a customer by email and grant one-off PR review credits for
-            manual pilots, demo accounts, or support cases.
-          </p>
+          <div>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Manual billing access
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)] sm:text-base">
+              Search a customer by email and grant one-off PR review credits for
+              manual pilots, demo accounts, or support cases.
+            </p>
+          </div>
         </div>
         <AdminAccessClient />
       </section>

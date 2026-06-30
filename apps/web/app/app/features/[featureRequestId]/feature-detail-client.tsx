@@ -914,73 +914,89 @@ export function FeatureDetailClient({
         </section>
       ) : null}
 
-      {controlRoom.data ? (
-          <ReleaseControlRoom
-            data={controlRoom.data}
+      <section className="vf-release-cockpit-grid grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-5">
+          {controlRoom.data ? (
+              <ReleaseControlRoom
+                data={controlRoom.data}
+                prdMayBeOutdated={prdMayBeOutdated}
+                onGeneratePrd={() => {
+                  if (prdBlockedByRequirementReview) {
+                    openTab("requirements", "clarifications-section");
+                    return;
+                  }
+
+                  openTab("requirements", "requirement-engine-section");
+                  generatePrd.mutate({ featureRequestId: feature.id });
+              }}
+              onRequirementReview={() =>
+                openTab("requirements", "clarifications-section")
+              }
+              isGeneratingPrd={generatePrd.isPending}
+              onLinkPr={() => openTab("pr", "github-pr-section")}
+              onRunQa={() => {
+                openTab("qa", "ai-qa-review");
+                if (!prdMayBeOutdated) {
+                  runQaReview.mutate({ featureRequestId });
+                }
+              }}
+              isRunningQa={runQaReview.isPending}
+              onSubmitApproval={() => openTab("approval", "human-approval")}
+              onGenerateReport={() => {
+                openTab("report", "release-report");
+                if (!prdMayBeOutdated) {
+                  if (projectHasClient) {
+                    generateReleaseReport.mutate({ featureRequestId });
+                  } else {
+                    generateInternalReleaseReport.mutate({ featureRequestId });
+                  }
+                }
+              }}
+              isGeneratingReport={
+                generateReleaseReport.isPending || generateInternalReleaseReport.isPending
+              }
+            />
+          ) : null}
+
+          {guidedWorkflow.data ? (
+            <FeatureWorkflowGuide
+              workflow={guidedWorkflow.data}
+              onAction={runGuidedAction}
+              isBusy={
+                generatePrd.isPending ||
+                generateTasks.isPending ||
+                runQaReview.isPending ||
+                generateReleaseReport.isPending ||
+                generateInternalReleaseReport.isPending
+              }
+            />
+          ) : null}
+        </div>
+
+        <aside className="vf-evidence-rail space-y-4">
+          <EvidenceRail
+            controlRoom={controlRoom.data}
+            hasPrd={hasPrd}
+            hasTasks={hasTasks}
             prdMayBeOutdated={prdMayBeOutdated}
-            onGeneratePrd={() => {
-              if (prdBlockedByRequirementReview) {
-                openTab("requirements", "clarifications-section");
-                return;
-              }
-
-              openTab("requirements", "requirement-engine-section");
-              generatePrd.mutate({ featureRequestId: feature.id });
-          }}
-          onRequirementReview={() =>
-            openTab("requirements", "clarifications-section")
-          }
-          isGeneratingPrd={generatePrd.isPending}
-          onLinkPr={() => openTab("pr", "github-pr-section")}
-          onRunQa={() => {
-            openTab("qa", "ai-qa-review");
-            if (!prdMayBeOutdated) {
-              runQaReview.mutate({ featureRequestId });
-            }
-          }}
-          isRunningQa={runQaReview.isPending}
-          onSubmitApproval={() => openTab("approval", "human-approval")}
-          onGenerateReport={() => {
-            openTab("report", "release-report");
-            if (!prdMayBeOutdated) {
-              if (projectHasClient) {
-                generateReleaseReport.mutate({ featureRequestId });
-              } else {
-                generateInternalReleaseReport.mutate({ featureRequestId });
-              }
-            }
-          }}
-          isGeneratingReport={
-            generateReleaseReport.isPending || generateInternalReleaseReport.isPending
-          }
-        />
-      ) : null}
-
-      {guidedWorkflow.data ? (
-        <FeatureWorkflowGuide
-          workflow={guidedWorkflow.data}
-          onAction={runGuidedAction}
-          isBusy={
-            generatePrd.isPending ||
-            generateTasks.isPending ||
-            runQaReview.isPending ||
-            generateReleaseReport.isPending ||
-            generateInternalReleaseReport.isPending
-          }
-        />
-      ) : null}
-
-      {controlRoom.data?.qaReview ? (
-        <CompactProofGateSummary
-          verdict={controlRoom.data.qaReview.verdict}
-          readinessScore={controlRoom.data.qaReview.readinessScore}
-          onViewProof={openGitHubProofPanel}
-          canPublish={Boolean(controlRoom.data.prEvidence)}
-          onPublish={publishProofManually}
-          isPublishing={publishGitHubProof.isPending}
-          publishError={publishGitHubProof.error?.message}
-        />
-      ) : null}
+            proofError={publishGitHubProof.error?.message}
+            isPublishing={publishGitHubProof.isPending}
+            onOpenProof={openGitHubProofPanel}
+            onPublishProof={publishProofManually}
+          />
+          {controlRoom.data?.qaReview ? (
+            <CompactProofGateSummary
+              verdict={controlRoom.data.qaReview.verdict}
+              readinessScore={controlRoom.data.qaReview.readinessScore}
+              onViewProof={openGitHubProofPanel}
+              canPublish={Boolean(controlRoom.data.prEvidence)}
+              onPublish={publishProofManually}
+              isPublishing={publishGitHubProof.isPending}
+              publishError={publishGitHubProof.error?.message}
+            />
+          ) : null}
+        </aside>
+      </section>
 
       <FeatureSectionNav
         activeTab={activeTab}
@@ -999,7 +1015,7 @@ export function FeatureDetailClient({
       {activeTab === "overview" ? (
         <section
           id="feature-overview-section"
-          className="space-y-4 scroll-mt-28"
+          className="vf-feature-overview space-y-4 scroll-mt-28"
         >
       <div className="grid gap-4 md:grid-cols-2">
         <DetailBlock title="Business goal" value={feature.businessGoal} />
@@ -1023,9 +1039,9 @@ export function FeatureDetailClient({
       ) : null}
 
       {activeTab === "requirements" ? (
-        <section id="requirements-section" className="space-y-4 scroll-mt-28">
+        <section id="requirements-section" className="vf-requirements-workbench space-y-4 scroll-mt-28">
           {/* Nested Tabs Header & Status Chips */}
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+          <div className="vf-app-panel rounded-lg border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 pb-3">
               <nav className="flex flex-wrap gap-2" aria-label="Requirements section tabs">
                 {[
@@ -1892,9 +1908,9 @@ function EngineeringTasksCommandCenter({
   return (
     <section
       id="engineering-tasks-command-center"
-      className="space-y-5 scroll-mt-28"
+      className="vf-engineering-command-center space-y-5 scroll-mt-28"
     >
-      <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div className="vf-app-panel rounded-lg border border-neutral-800 bg-neutral-900 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.24em] text-blue-300">
@@ -1992,7 +2008,7 @@ function EngineeringTasksCommandCenter({
         {groups.map((group) => (
           <section
             key={group.id}
-            className="rounded-lg border border-neutral-800 bg-neutral-900 p-4"
+            className="vf-task-column rounded-lg border border-neutral-800 bg-neutral-900 p-4"
           >
             <div className="flex items-center justify-between gap-3">
               <h3 className="font-medium text-neutral-100">{group.label}</h3>
@@ -2341,7 +2357,7 @@ function FeatureSectionNav({
   ];
 
   return (
-    <nav className="sticky top-20 z-30 -mx-1 flex gap-2 overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950/90 p-2 backdrop-blur">
+    <nav className="vf-feature-tabs sticky top-20 z-30 -mx-1 flex gap-2 overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950/90 p-2 backdrop-blur">
       {items.map((item) => {
         const isActive =
           activeTab === item.tab &&
@@ -2374,6 +2390,127 @@ function FeatureSectionNav({
         );
       })}
     </nav>
+  );
+}
+
+function EvidenceRail({
+  controlRoom,
+  hasPrd,
+  hasTasks,
+  prdMayBeOutdated,
+  proofError,
+  isPublishing,
+  onOpenProof,
+  onPublishProof
+}: {
+  controlRoom?: ReleaseControlRoomView;
+  hasPrd: boolean;
+  hasTasks: boolean;
+  prdMayBeOutdated: boolean;
+  proofError?: string;
+  isPublishing: boolean;
+  onOpenProof: () => void;
+  onPublishProof: () => void;
+}) {
+  const railItems = [
+    {
+      label: "Requirement Review",
+      value: hasPrd ? "Complete" : "Pending",
+      status: hasPrd ? "complete" : "current"
+    },
+    {
+      label: "PRD",
+      value: prdMayBeOutdated ? "Outdated" : hasPrd ? "Generated" : "Missing",
+      status: prdMayBeOutdated ? "blocked" : hasPrd ? "complete" : "pending"
+    },
+    {
+      label: "Engineering Tasks",
+      value: hasTasks ? "Ready" : "Not generated",
+      status: hasTasks ? "complete" : hasPrd ? "current" : "pending"
+    },
+    {
+      label: "GitHub PR",
+      value: controlRoom?.prEvidence
+        ? `#${controlRoom.prEvidence.prNumber}`
+        : "Not linked",
+      status: controlRoom?.prEvidence ? "complete" : "pending"
+    },
+    {
+      label: "AI QA Review",
+      value: controlRoom?.qaReview?.verdict ?? "Not run",
+      status: controlRoom?.qaReview ? "complete" : controlRoom?.prEvidence ? "current" : "pending"
+    },
+    {
+      label: "Human Approval",
+      value: controlRoom?.humanApproval.decision
+        ? formatApprovalDecision(controlRoom.humanApproval.decision)
+        : "Pending",
+      status: controlRoom?.humanApproval.decision ? "complete" : "pending"
+    },
+    {
+      label: "Client Report",
+      value: controlRoom?.releaseReport ? "Generated" : "Missing",
+      status: controlRoom?.releaseReport ? "complete" : "pending"
+    }
+  ] as const;
+
+  return (
+    <section className="vf-evidence-card rounded-lg border border-neutral-800 bg-neutral-900 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+            Evidence rail
+          </p>
+          <h2 className="mt-2 text-lg font-semibold text-neutral-100">
+            Proof chain health
+          </h2>
+        </div>
+        <StatusBadge status={controlRoom?.releaseReadinessStatus ?? "Preparing"} />
+      </div>
+
+      <div className="mt-4 space-y-2.5">
+        {railItems.map((item) => (
+          <div key={item.label} className={`vf-evidence-row is-${item.status}`}>
+            <span className="vf-evidence-dot" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-neutral-100">
+                {item.label}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-neutral-500">
+                {item.value}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-md border border-neutral-800 bg-neutral-950/70 p-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+          GitHub Proof
+        </p>
+        <p className="mt-2 text-sm text-neutral-300">
+          Publish stays manual. Use it when the proof chain is ready for the PR.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onOpenProof}
+            className="rounded-md border border-neutral-700 px-3 py-2 text-xs font-semibold text-neutral-100 transition hover:border-[#E8C999]/40"
+          >
+            View proof
+          </button>
+          <button
+            type="button"
+            onClick={onPublishProof}
+            disabled={!controlRoom?.prEvidence || isPublishing}
+            className="rounded-md bg-neutral-100 px-3 py-2 text-xs font-semibold text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPublishing ? "Publishing..." : "Publish proof"}
+          </button>
+        </div>
+        {proofError ? <p className="mt-3 text-xs text-red-300">{proofError}</p> : null}
+      </div>
+    </section>
   );
 }
 
@@ -2410,7 +2547,7 @@ function FeatureHierarchyHeader({
   const nextAction = controlRoom?.nextBestAction.title ?? "Load release workflow";
 
   return (
-    <header className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+    <header className="vf-feature-hero rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <nav className="flex flex-wrap items-center gap-2 text-sm text-neutral-500">
         <Link href="/app/projects" className="transition hover:text-neutral-300">
           Projects
@@ -2593,7 +2730,7 @@ function ReleaseControlRoom({
     .filter((i) => i.complete).length;
 
   return (
-    <section className="space-y-5 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+    <section className="vf-control-room space-y-5 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
           <p className="text-sm font-medium uppercase tracking-[0.24em] text-blue-400">

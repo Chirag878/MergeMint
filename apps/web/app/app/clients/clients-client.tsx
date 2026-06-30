@@ -65,10 +65,10 @@ export function ClientsClient() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+    <div className="vf-clients-screen grid gap-6 xl:grid-cols-[380px_1fr]">
       <form
         onSubmit={onSubmit}
-        className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+        className="vf-client-compose space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
       >
         <div>
           <h2 className="text-lg font-medium">Add Client</h2>

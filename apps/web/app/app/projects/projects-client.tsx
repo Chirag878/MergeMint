@@ -141,9 +141,12 @@ export function ProjectsClient({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="vf-projects-screen space-y-6">
+      <div className="vf-projects-command-bar flex flex-col gap-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+            Project cockpit
+          </p>
           <h1 className="text-3xl font-semibold tracking-tight text-white">
             Projects
           </h1>
@@ -325,7 +328,7 @@ function ProjectCard({
   );
 
   return (
-    <article className="group rounded-lg border border-neutral-800 bg-neutral-900 p-5 transition hover:border-neutral-700 hover:bg-neutral-900/80">
+    <article className="vf-project-card group rounded-lg border border-neutral-800 bg-neutral-900 p-5 transition hover:border-neutral-700 hover:bg-neutral-900/80">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -338,6 +341,9 @@ function ProjectCard({
             {[project.clientName, project.connectedRepository?.fullName ?? "No repository connected"]
               .filter(Boolean)
               .join(" - ")}
+          </p>
+          <p className="mt-3 inline-flex rounded-full border border-[#E8C999]/20 bg-[#E8C999]/10 px-2.5 py-1 text-xs font-semibold text-[#E8C999]">
+            Next: {primary.label}
           </p>
         </div>
         <details className="relative shrink-0">
@@ -369,6 +375,12 @@ function ProjectCard({
         qa={project.featuresNeedingAction === 0 && (project.activeFeatureCount ?? 0) > 0}
         report={reportsReady > 0}
       />
+
+      <div className="vf-project-proof-map mt-4 grid gap-2 sm:grid-cols-3">
+        <ProofTile label="Repository" value={project.connectedRepository?.fullName ?? "Not connected"} />
+        <ProofTile label="Release state" value={formatStatus(project.latestReleaseState)} />
+        <ProofTile label="Health" value={project.featuresNeedingAction > 0 ? "Needs review" : "Clear"} />
+      </div>
 
       <div className="mt-5 grid grid-cols-2 gap-2 lg:grid-cols-4">
         <Metric label="Active features" value={project.activeFeatureCount ?? 0} />
@@ -734,6 +746,17 @@ function Metric({ label, value }: { label: string; value: number | string }) {
     <div className="rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2">
       <p className="text-xs text-neutral-500">{label}</p>
       <p className="mt-1 text-sm font-medium text-neutral-100">{value}</p>
+    </div>
+  );
+}
+
+function ProofTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950/70 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-xs font-medium text-neutral-200">{value}</p>
     </div>
   );
 }

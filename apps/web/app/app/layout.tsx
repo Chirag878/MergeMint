@@ -6,9 +6,10 @@ export default function PrivateAppLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#060706] text-neutral-100">
+    <div className="vf-app-shell min-h-screen bg-[#050202] text-[#F8EEDF]">
+      <div className="vf-app-ambient" aria-hidden="true" />
       <AppNav />
-      {children}
+      <div className="relative z-10">{children}</div>
     </div>
   );
 }

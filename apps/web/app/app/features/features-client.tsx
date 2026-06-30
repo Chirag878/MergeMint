@@ -169,13 +169,16 @@ export function FeaturesClient({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+    <div className="vf-features-screen grid gap-6 xl:grid-cols-[420px_1fr]">
       <form
         onSubmit={onSubmit}
-        className="space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+        className="vf-feature-compose space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
       >
         <div>
-          <h2 className="text-lg font-medium">Create Feature Request</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+            Intake desk
+          </p>
+          <h2 className="mt-2 text-xl font-semibold">Create Feature Request</h2>
           <p className="mt-1 text-sm text-neutral-500">
             {selectedProject
               ? `Creating feature for: ${selectedProject.name}`
@@ -308,10 +311,20 @@ export function FeaturesClient({
         </button>
       </form>
 
-      <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
-        <h2 className="text-lg font-medium">
-          {selectedProject ? `${selectedProject.name} features` : "Feature request list"}
-        </h2>
+      <section className="vf-feature-list rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+              Release queue
+            </p>
+            <h2 className="mt-2 text-xl font-semibold">
+              {selectedProject ? `${selectedProject.name} features` : "Feature request list"}
+            </h2>
+          </div>
+          <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300">
+            {visibleFeatures?.length ?? 0} features
+          </span>
+        </div>
 
         {(projectId ? projectFeatures.isLoading : features.isLoading) ? (
           <p className="mt-6 text-sm text-neutral-400">Loading...</p>
@@ -338,15 +351,18 @@ export function FeaturesClient({
             <Link
               key={feature.id}
               href={`/app/features/${feature.id}`}
-              className="block rounded-md border border-neutral-800 bg-neutral-950 p-4 transition hover:border-neutral-600"
+              className="vf-feature-queue-card block rounded-md border border-neutral-800 bg-neutral-950 p-4 transition hover:border-neutral-600"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-medium text-neutral-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
+                    {projectNameById.get(feature.projectId) ?? "Project"}
+                  </p>
+                  <h3 className="mt-1 font-semibold text-neutral-100">
                     {feature.title}
                   </h3>
                   <p className="mt-1 text-sm text-neutral-500">
-                    {projectNameById.get(feature.projectId) ?? "Project"}
+                    Open the Release Control Room to generate PRD, tasks, QA, approvals, reports, and proof.
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -361,6 +377,12 @@ export function FeaturesClient({
               <p className="mt-3 line-clamp-2 text-sm text-neutral-400">
                 {feature.description}
               </p>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-800 pt-3">
+                <span className="text-xs font-semibold text-[#E8C999]">
+                  Next: Release Control Room
+                </span>
+                <span className="text-xs text-neutral-500">Open feature</span>
+              </div>
             </Link>
           ))}
         </div>

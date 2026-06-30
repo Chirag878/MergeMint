@@ -73,37 +73,94 @@ export function DashboardClient({
   const useCase = normalizeUseCase(data.workspace.useCase);
   const isOwner = data.workspace.isOwner;
   const primarySecondary = getPrimarySecondary(useCase);
+  const proofReadiness =
+    data.stats.featureRequests > 0
+      ? Math.round((data.stats.releaseReports / data.stats.featureRequests) * 100)
+      : 0;
+  const commandMetrics = [
+    {
+      label: "Active features",
+      value: data.stats.featureRequests,
+      detail: `${data.needsAttention.length} need attention`
+    },
+    {
+      label: "Proof readiness",
+      value: `${proofReadiness}%`,
+      detail: `${data.stats.releaseReports} reports generated`
+    },
+    {
+      label: "Linked PRs",
+      value: data.stats.linkedPullRequests,
+      detail: `${data.stats.qaReviews} AI QA reviews`
+    },
+    {
+      label: "Open risks",
+      value: data.stats.openFindings,
+      detail: data.stats.openFindings > 0 ? "Review before release" : "No open risks"
+    }
+  ] as const;
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#060706] px-5 py-8 text-neutral-100 sm:px-6 lg:px-8">
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-64 bg-[linear-gradient(90deg,rgba(16,185,129,0.16),rgba(14,165,233,0.12),rgba(245,158,11,0.08))] blur-3xl" />
+    <main className="vf-app-page min-h-screen overflow-hidden px-5 py-8 text-neutral-100 sm:px-6 lg:px-8">
+      <div className="vf-dashboard-aura pointer-events-none fixed inset-x-0 top-0 h-64" />
 
       <section className="relative mx-auto max-w-7xl space-y-8">
-        <header className="vf-fade-up rounded-lg border border-white/10 bg-white/[0.035] p-6 shadow-2xl shadow-black/30 lg:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div>
+        <header className="vf-dashboard-cockpit vf-app-hero-card vf-fade-up rounded-lg border border-white/10 bg-white/[0.035] p-6 shadow-2xl shadow-black/30 lg:p-8">
+          <div className="grid gap-8 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="flex min-h-[22rem] flex-col justify-between">
+              <div>
               <div className="flex flex-wrap items-center gap-2">
                 <StatusChip>{data.workspace.name}</StatusChip>
                 <StatusChip>{formatRole(data.workspace.role)}</StatusChip>
                 {useCase ? <StatusChip>{getPersonaLabel(useCase)}</StatusChip> : null}
               </div>
-              <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Release proof command center
+              <h1 className="mt-6 max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-6xl">
+                Command center for verified delivery
               </h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-neutral-300">
-                Verify feature PRs against agreed requirements, track risks,
-                approve releases, and share client-ready proof.
+                See what is ready, what is blocked, and which proof chain needs
+                attention before a PR ships.
               </p>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-500">
                 For agencies, founders, CTOs, PMs, and teams shipping with
                 outsourced or internal developers. Signed in as {userLabel}.
               </p>
+              </div>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  href={primarySecondary.primary.href}
+                  className="vf-primary-cta rounded-md bg-white px-4 py-2.5 text-center text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100"
+                >
+                  {primarySecondary.primary.cta}
+                </Link>
+                <Link
+                  href="/app/board"
+                  className="rounded-md border border-white/15 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:border-[#E8C999]/40"
+                >
+                  Open release board
+                </Link>
+              </div>
             </div>
-            {useCase ? (
-              <span className="rounded-md border border-white/10 px-3 py-2 text-sm text-neutral-500">
-                {isOwner ? "Workspace persona set" : "Owner controls persona"}
-              </span>
-            ) : null}
+            <div className="vf-command-metric-deck grid gap-3 sm:grid-cols-2">
+              {commandMetrics.map((metric) => (
+                <CommandMetric
+                  key={metric.label}
+                  label={metric.label}
+                  value={metric.value}
+                  detail={metric.detail}
+                />
+              ))}
+              <div className="vf-command-note sm:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#E8C999]">
+                  Current mode
+                </p>
+                <p className="mt-2 text-sm text-neutral-300">
+                  {useCase
+                    ? `${getPersonaLabel(useCase)}. ${isOwner ? "You can tune workspace focus." : "Owner controls persona."}`
+                    : "Choose a workspace mode to tailor the cockpit."}
+                </p>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -126,11 +183,23 @@ export function DashboardClient({
           />
         ) : null}
 
-        {workspaceSetup.data ? (
-          <NextBestActionCard workflow={workspaceSetup.data} />
-        ) : null}
+        {data.isEmpty ? <FirstTimeEmptyState /> : null}
 
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section className="vf-dashboard-grid vf-section-reveal grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-5">
+            {workspaceSetup.data ? (
+              <NextBestActionCard workflow={workspaceSetup.data} />
+            ) : null}
+            <NeedsAttention items={data.needsAttention} />
+          </div>
+          <div className="space-y-5">
+            <ReleaseBoardSummary summary={data.boardSummary} />
+            <RecentClients clients={data.recentClients} />
+            <RecentProjects projects={data.recentProjects} />
+          </div>
+        </section>
+
+        <section className="vf-section-reveal grid gap-4 lg:grid-cols-2">
           <PathCard
             title={primarySecondary.primary.title}
             copy={primarySecondary.primary.copy}
@@ -148,18 +217,7 @@ export function DashboardClient({
           />
         </section>
 
-        {data.isEmpty ? <FirstTimeEmptyState /> : null}
-
-        <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-          <NeedsAttention items={data.needsAttention} />
-          <div className="space-y-5">
-            <ReleaseBoardSummary summary={data.boardSummary} />
-            <RecentClients clients={data.recentClients} />
-            <RecentProjects projects={data.recentProjects} />
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-white/10 bg-white/[0.035] p-5">
+        <section className="vf-section-reveal rounded-lg border border-white/10 bg-white/[0.035] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-white">
@@ -182,6 +240,28 @@ export function DashboardClient({
         </section>
       </section>
     </main>
+  );
+}
+
+function CommandMetric({
+  label,
+  value,
+  detail
+}: {
+  label: string;
+  value: string | number;
+  detail: string;
+}) {
+  return (
+    <div className="vf-command-metric rounded-lg border border-white/10 bg-black/25 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-semibold tracking-tight text-white">
+        {value}
+      </p>
+      <p className="mt-2 text-xs leading-5 text-neutral-400">{detail}</p>
+    </div>
   );
 }
 
