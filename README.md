@@ -1,163 +1,355 @@
 # MergeMint
 
-MergeMint is an AI Product Delivery Pipeline SaaS. It connects the original feature request to requirement review, PRD, engineering tasks, GitHub PR evidence, AI QA review, human approval, release reports, and GitHub proof.
+MergeMint is our implementation of the ShipFlow AI challenge.
 
-GitHub shows what changed. MergeMint shows whether it is actually done.
+AI can help teams write code faster, but speed alone does not prove the shipped pull request actually satisfies the original feature request. MergeMint closes that gap by turning a product request into an auditable delivery chain: requirements, PRD, engineering tasks, GitHub PR evidence, AI QA review, human approval, client report, and GitHub proof.
+
+**GitHub shows what changed. MergeMint shows whether it is actually done.**
+
+Production URL placeholder: `https://mergemint-eight.vercel.app`
+
+## Project Overview
+
+MergeMint is an AI Product Delivery Pipeline SaaS for founders, CTOs, product teams, and engineers who need proof that implementation matches intent.
+
+The core workflow is:
+
+```text
+Feature Request -> Requirement Review -> PRD -> Engineering Tasks -> GitHub PR -> AI QA Review -> Developer Fix Pack -> Re-review -> Human Approval -> Client Release Report -> GitHub Proof
+```
+
+Instead of treating a merged PR as the finish line, MergeMint checks whether the PR covers the original promise, highlights gaps, guides the fix loop, and produces shareable release evidence.
+
+## Hackathon Scoring Coverage
+
+| Rubric category | Points | MergeMint coverage |
+| --- | ---: | --- |
+| Core Workflow Implementation | 20 | Implemented the full request-to-proof pipeline: feature intake, Requirement Review, PRD generation, engineering tasks, GitHub PR linking, AI QA Review, fix loop, approval, reports, and GitHub Proof. |
+| AI Agent Quality | 20 | Includes requirement clarification, Product Discovery verdicts, PRD generation, task generation, repository intelligence, AI QA review, requirement coverage, verification rules, and Developer Fix Pack generation. |
+| GitHub Integration | 15 | Supports GitHub App repository connection, installation-token access, PR linking/tracking, snapshot refresh, webhook handling, PR evidence, sticky proof comments, and commit statuses. |
+| Review Loop & Human Approval | 15 | AI QA produces blocking/non-blocking findings, coverage evidence, merge recommendations, fix guidance, re-review support, and human approval/rejection states. |
+| tRPC Monorepo & Engineering Quality | 15 | pnpm monorepo with typed tRPC routers, service boundaries, Drizzle schema/migrations, workspace isolation, idempotent webhook/payment/proof paths, and package separation. |
+| SaaS Product Experience | 10 | Protected app, onboarding/demo flow, dashboard, projects, release board, billing, settings, reports, share links, legal pages, and premium dark SaaS UI direction. |
+| Demo & Documentation | 5 | README, demo checklist, deployment notes, env table, demo script, and honest limitations are documented for judges and future maintainers. |
+
+## Features Implemented
+
+- Feature request intake
+- Product Discovery verdict: Proceed to PRD, Needs clarification, Already exists, Duplicate request, Not worth building now, Out of scope
+- Requirement clarification and inline Requirement Review
+- PRD generation
+- Engineering task generation
+- Kanban/release board
+- GitHub repository connection through GitHub App
+- Pull request linking and tracking
+- PR snapshot and diff evidence capture
+- AI QA review against requirements, PRD, tasks, verification rules, and PR evidence
+- Blocking and non-blocking findings
+- Requirement coverage map
+- Developer Fix Pack
+- Re-review loop
+- Human approval/rejection flow
+- Client, developer, and internal release reports
+- Public report sharing through share tokens
+- GitHub Proof publishing with sticky PR comment and commit status
+- Project-level Verification Rules
+- Billing with Razorpay
+- AI review credits
+- Workspace and multi-tenant structure
+- Guided demo/sample project flow
+- Inngest async workflow integration
 
 ## Tech Stack
 
-- Next.js app in `apps/web`
-- tRPC API in `packages/api`
-- Drizzle/PostgreSQL schema and migrations in `packages/db`
-- AI SDK/OpenAI prompt and agent logic in `packages/ai`
-- GitHub App/Octokit integration in `packages/github`
-- Environment validation/types in `packages/env`
-- BetterAuth authentication
-- Razorpay checkout and webhooks
-- Vercel deployment target
+| Layer | Technology |
+| --- | --- |
+| Web app | Next.js, React, TypeScript |
+| API | tRPC, TypeScript |
+| Database | Drizzle ORM, PostgreSQL/Neon |
+| Auth | BetterAuth |
+| AI | AI SDK/OpenAI |
+| GitHub | GitHub App, Octokit, GitHub Webhooks |
+| Billing | Razorpay checkout and webhooks |
+| Async workflows | Inngest |
+| Deployment | Vercel |
+| Monorepo | pnpm workspaces |
 
-## Core Workflow
+## Monorepo Architecture
 
-Feature Request -> Requirement Review -> PRD -> Engineering Tasks -> GitHub PR -> AI QA Review -> Fix Loop -> Human Approval -> Release Report -> GitHub Proof.
+```text
+apps/web          Next.js application, protected app, public pages, API routes, Inngest route
+packages/api      tRPC routers, product services, billing, reports, GitHub proof, workflow orchestration
+packages/db       Drizzle schema, migrations, database client
+packages/ai       AI agents and prompt logic for requirements, PRD, tasks, and QA
+packages/github   GitHub App and Octokit integration utilities
+packages/env      Environment validation and shared config helpers
+packages/shared   Shared plan definitions, types, constants, and cross-package helpers
+docs              Demo, deployment, and product readiness documentation
+```
 
-Key implemented surfaces include projects, project-level Verification Rules, feature requests, requirement clarification, PRD generation, engineering tasks, GitHub repo/PR linking, PR snapshots, AI QA review, human approval, release board, client/developer/internal release reports, public report sharing, billing, admin manual access, Terminal Mode preview, and the GitHub Proof Gate.
+## System Architecture
 
-MergeMint is the ShipFlow AI implementation for proof-led delivery: it turns product intent into an auditable release chain and shows whether a PR delivered the original promise.
+MergeMint is organized around a typed service layer:
 
-## Async Workflow Coverage
+1. The Next.js web app renders the landing page, protected app, billing, reports, and workflow UI.
+2. The tRPC API exposes typed product operations for projects, features, PRDs, tasks, PRs, QA, reports, proof, billing, and settings.
+3. Drizzle maps the workspace, product workflow, GitHub, QA, report, billing, and proof data into PostgreSQL/Neon.
+4. AI services generate requirement questions, PRDs, engineering tasks, QA findings, coverage maps, and fix guidance.
+5. GitHub App integration connects repositories, reads PR evidence, receives webhooks, and publishes proof.
+6. Billing and credit services enforce AI QA Review credits while keeping non-QA workflows open.
+7. Inngest functions provide async workflow coverage for long-running jobs.
+8. Report sharing creates client-safe release links.
+9. GitHub Proof publishing posts one manual sticky verification comment/status per feature/PR.
 
-Long-running product actions have a lightweight Inngest-ready async workflow layer in `packages/api/src/services/async-workflow.service.ts`.
+## AI Agents
 
-Covered jobs:
+| AI capability | What it does |
+| --- | --- |
+| Requirement clarification agent | Finds missing product context and generates required or optional clarification questions. |
+| Product Discovery verdict | Helps decide whether a request should proceed, needs clarification, already exists, is duplicate, is out of scope, or should be deferred. |
+| PRD generation agent | Converts the feature request and clarification answers into a structured PRD with requirements and acceptance criteria. |
+| Engineering task generation agent | Converts PRD requirements into implementation tasks, suggested files/modules, verification notes, and acceptance checklists. |
+| QA review agent | Compares PR evidence against PRD requirements, tasks, verification rules, and repository context. |
+| Release readiness/checklist | Summarizes delivery progress, evidence quality, risks, and next best action. |
+| Developer Fix Pack generation | Produces remediation guidance when QA finds missing requirements or risky implementation gaps. |
 
-- PRD generation
-- Engineering task generation
-- AI QA review / re-review
-- Release readiness check placeholder
+## Inngest Workflows
 
-Each job exposes `queued`, `running`, `completed`, or `failed` status through the `asyncWorkflow` tRPC router. The current implementation keeps the queue minimal and reuses existing services; it can be swapped for hosted Inngest events without changing the product services.
+MergeMint includes real Inngest SDK integration in the web app:
 
-## AI Features
+- Client: `apps/web/inngest/client.ts`
+- Functions: `apps/web/inngest/functions.ts`
+- Handler: `apps/web/app/api/inngest/route.ts`
+- Endpoint: `/api/inngest`
 
-- Requirement clarification
-- Product Discovery verdict: Proceed to PRD, Needs clarification, Already exists, Duplicate request, Not worth building now, Out of scope
-- PRD generation
-- Engineering task generation
-- Repository intelligence summaries
-- QA review against PRD requirements, tasks, project Verification Rules, PR files, and diff evidence
-- Requirement coverage mapping
-- Developer fix pack generation from latest QA evidence
-- Release readiness and report shaping
+Functions:
 
-Verification Rules are project-scoped QA guardrails such as “Billing changes must include regression tests” or “GitHub integration changes must mention permissions/webhook behavior.” Enabled rules are included inside the normal AI QA Review context and do not consume extra credits beyond the QA review itself.
+| Event | Purpose |
+| --- | --- |
+| `mergemint/prd.generate` | Generate PRD using the existing PRD service. |
+| `mergemint/engineering-tasks.generate` | Generate engineering tasks using the existing task service. |
+| `mergemint/qa-review.run` | Run AI QA Review using the existing QA service. |
+| `mergemint/release-readiness.check` | Run the release readiness/checklist workflow surface. |
 
-## GitHub Integration
+Required hosted Inngest environment variables:
 
-MergeMint uses the GitHub App installation-token path when available. It can connect repositories, link real pull requests, refresh PR snapshots, read changed file metadata, and publish proof back to GitHub.
+- `INNGEST_EVENT_KEY`
+- `INNGEST_SIGNING_KEY`
 
-The GitHub Proof Gate publishes one sticky `MergeMint Verification` PR comment per feature/PR and creates a commit status named `MergeMint Verification`. Publishing proof is manual-only, does not rerun AI, and does not consume PR review credits.
+The current product UI still keeps the existing tRPC mutations for demo safety. The Inngest functions wrap the same backend services so async execution can be enabled without rewriting product logic.
 
-## Reports And Sharing
+## GitHub Integration Setup
 
-MergeMint has three report types:
+MergeMint is designed for the GitHub App flow, not user-provided tokens.
 
-- Client Delivery Report: client-safe delivery evidence with promised vs shipped, requirement coverage, approval, known risks, final sign-off, share link, and GitHub Proof status. It avoids raw diffs, private repo internals, secrets, tokens, and developer-only fix instructions.
-- Developer Fix Report: technical remediation view with blocking/non-blocking issues, missing requirements, suggested tests, copyable fix prompt, re-review checklist, and verification rule failures.
-- Internal Release Report: operational view with PRD summary, engineering tasks, linked PR, QA evidence, requirement coverage, verification rule results, approval timeline, GitHub Proof status, known risks, final decision, and release checklist.
+Recommended GitHub App setup:
 
-Share-token report access remains the current client-safe sharing model. Future role-based `client_viewer` access can layer on top without changing report safety rules.
+1. Create a GitHub App for MergeMint.
+2. Set homepage/callback URLs to the deployed app, for example `https://mergemint-eight.vercel.app`.
+3. Configure the installation callback route in the app.
+4. Set webhook URL to:
 
-## Terminal Mode Preview
+```text
+https://mergemint-eight.vercel.app/api/webhooks/github
+```
 
-Feature Detail includes a Terminal Mode preview panel with copyable examples for future CLI, report, rules, and GitHub Action workflows. Today, GitHub App + web dashboard is the supported path. The preview does not publish an npm package, call fake backend endpoints, or consume credits.
+Required capabilities:
 
-## Billing
+- Repository metadata/read access
+- Pull request read access
+- Commit status write access
+- Issue/PR comment write access
+- Webhook events for installation/repository access changes and PR activity
 
-Billing is workspace-based. Free workspaces receive 1 verified PR review credit. Paid checkout happens only inside protected `/app/billing`; public pricing and landing pages link to `/app/billing?checkoutPlan=<planKey>` and must not open Razorpay or create payment rows.
+Supported GitHub behavior:
 
-Only successful AI QA Review creation consumes credits. Verification Rules, failed AI calls, report sharing, GitHub proof publishing, Terminal Mode preview, team invites, onboarding previews, CLI preview, and admin actions do not consume PR review credits.
+- User installs GitHub App.
+- User selects repository access.
+- MergeMint stores installation/repository mapping.
+- User links or selects a PR.
+- MergeMint fetches PR metadata, files, and diff evidence.
+- AI QA Review uses the PR snapshot as evidence.
+- GitHub Proof publishing remains manual-only.
+- Proof publishing updates one sticky `MergeMint Verification` PR comment.
+- Proof publishing creates/updates a commit status for the PR head SHA.
 
-Required Razorpay variables:
+`GITHUB_TOKEN` is only a local/dev/admin fallback and is not the normal SaaS path.
+
+## Razorpay Billing Setup
+
+Billing is workspace-based. Public pricing must not open Razorpay directly.
+
+Billing rules:
+
+- Public pricing buttons link only to `/app/billing?checkoutPlan=<planKey>`.
+- Checkout is protected and starts only after login.
+- Razorpay order creation happens server-side.
+- Direct checkout verification validates `razorpay_order_id`, `razorpay_payment_id`, and `razorpay_signature`.
+- Webhooks are a fallback activation path.
+- AI QA Review credits are activated after successful payment verification.
+- Duplicate verification/webhook paths are idempotent.
+- If activation verification ever fails after payment success, the UI shows a pending manual verification message and tells the user not to pay again.
+
+Webhook route:
+
+```text
+https://mergemint-eight.vercel.app/api/webhooks/razorpay
+```
+
+Webhook events:
+
+- `order.paid`
+- `payment.captured`
+
+Required billing/admin variables:
 
 - `RAZORPAY_KEY_ID`
 - `RAZORPAY_KEY_SECRET`
-- `RAZORPAY_WEBHOOK_SECRET`
 - `NEXT_PUBLIC_RAZORPAY_KEY_ID`
+- `RAZORPAY_WEBHOOK_SECRET`
+- `ADMIN_EMAILS`
 
 ## Environment Variables
 
-Common local variables include:
-
-- `DATABASE_URL`
-- `BETTER_AUTH_SECRET`
-- `BETTER_AUTH_URL`
-- `NEXT_PUBLIC_APP_URL`
-- `OPENAI_API_KEY`
-- `OPENAI_MODEL`
-- `GITHUB_APP_ID`
-- `GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_BASE64`
-- `GITHUB_APP_WEBHOOK_SECRET`
-- `GITHUB_APP_SLUG`
-- `GITHUB_TOKEN` only as an existing safe fallback
-- Razorpay variables listed above
-- `ADMIN_EMAILS`
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL/Neon connection string. |
+| `BETTER_AUTH_SECRET` | BetterAuth signing secret. |
+| `BETTER_AUTH_URL` | Canonical auth URL for the deployed/local app. |
+| `NEXT_PUBLIC_APP_URL` | Public app URL used by client-side links and callbacks. |
+| `GOOGLE_CLIENT_ID` | Google OAuth client id, if enabled. |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret, if enabled. |
+| `GITHUB_CLIENT_ID` | GitHub OAuth client id, if enabled. |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth client secret, if enabled. |
+| `OPENAI_API_KEY` | OpenAI API key for AI agents. |
+| `OPENAI_MODEL` | Model used by AI services. |
+| `AI_MOCK_MODE` | Enables safe mocked AI behavior for local/demo testing when configured. |
+| `GITHUB_WEBHOOK_SECRET` | Legacy/general GitHub webhook secret if used. |
+| `GITHUB_APP_ID` | GitHub App id. |
+| `GITHUB_APP_SLUG` | GitHub App slug for install/update links. |
+| `GITHUB_APP_PRIVATE_KEY_BASE64` | Base64 encoded GitHub App private key. |
+| `RAZORPAY_KEY_ID` | Server-side Razorpay key id. |
+| `RAZORPAY_KEY_SECRET` | Server-side Razorpay key secret. |
+| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | Browser-safe Razorpay key id. Must match the same mode as server keys. |
+| `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook signing secret. |
+| `INNGEST_EVENT_KEY` | Inngest event key for hosted execution. |
+| `INNGEST_SIGNING_KEY` | Inngest signing key for the `/api/inngest` endpoint. |
+| `ADMIN_EMAILS` | Comma-separated billing/admin allowlist. |
 
 Do not commit real secrets.
 
 ## Local Setup
 
+Install dependencies:
+
 ```bash
 pnpm install
-pnpm --filter @veriflow/db db:generate
-pnpm --filter web dev
 ```
 
-Run validation:
+Apply database schema:
 
 ```bash
-pnpm.cmd --filter @veriflow/db typecheck
-pnpm.cmd --filter @veriflow/api typecheck
-pnpm.cmd --filter @veriflow/ai typecheck
+pnpm.cmd --filter @veriflow/db db:push
+```
+
+Run the web app:
+
+```bash
+pnpm.cmd --filter web dev
+```
+
+Validation commands:
+
+```bash
 pnpm.cmd --filter web typecheck
+pnpm.cmd --filter @veriflow/api typecheck
+pnpm.cmd --filter @veriflow/db typecheck
 pnpm.cmd --filter web build
 git diff --check
 ```
 
-## Five-Minute Demo Script
+Windows build fallback if memory is tight:
 
-1. Create or select a project.
-2. Connect the GitHub App and pick a repository.
-3. Add a project Verification Rule.
+```powershell
+$env:NODE_OPTIONS="--max-old-space-size=4096"
+pnpm.cmd --filter web build
+```
+
+## Deployment Setup
+
+Recommended Vercel setup:
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | `apps/web` |
+| Install Command | `pnpm install` |
+| Build Command | `pnpm build` or `pnpm.cmd --filter web build` depending on Vercel workspace setup |
+| Output Directory | Next.js default (`.next`) |
+
+Deployment checklist:
+
+1. Add all required environment variables in Vercel.
+2. Configure database connection.
+3. Configure BetterAuth URLs to match the deployed domain.
+4. Configure GitHub App callback/webhook URLs.
+5. Configure Razorpay webhook URL and secrets.
+6. Configure Inngest keys if hosted async execution is enabled.
+7. Redeploy after every environment change.
+
+## Judge Demo Script
+
+1. Open the landing page and state the core line: GitHub shows what changed; MergeMint shows whether it is actually done.
+2. Log in.
+3. Start the guided demo/sample project or select an existing project.
 4. Create a feature request.
-5. Answer requirement clarification questions.
-6. Generate the PRD.
-7. Generate engineering tasks.
-8. Link a real GitHub PR and refresh its snapshot.
-9. Run AI QA Review.
-10. Show the Requirement Coverage Map, rule results, Developer Fix Pack, readiness score, and merge recommendation.
-11. Open Terminal Mode preview.
-12. Publish GitHub proof manually and confirm the sticky PR comment/status.
-13. Record human approval.
-14. Generate and open client/developer/internal reports as appropriate.
-15. Show billing credits and admin/manual access safety.
+5. Open the Release Control Room.
+6. Start Requirement Review.
+7. Show the Product Discovery verdict.
+8. Answer clarification questions.
+9. Generate the PRD.
+10. Generate engineering tasks.
+11. Open the Kanban/release board.
+12. Connect or show the GitHub App repository connection.
+13. Link/select a GitHub PR.
+14. Refresh/show PR evidence.
+15. Run AI QA Review.
+16. Show blocking/non-blocking findings, requirement coverage, verification rules, readiness score, and merge recommendation.
+17. Show the Developer Fix Pack.
+18. Explain the re-review loop after fixes.
+19. Submit human approval or rejection.
+20. Generate a client release report.
+21. Manually publish GitHub Proof.
+22. Show the sticky PR comment/commit status if using a real connected PR.
+23. Show billing/credits and explain that only successful AI QA Review consumes credits.
 
-For a tighter judging flow, use `docs/DEMO_READINESS_CHECKLIST.md`.
+## Demo Readiness Checklist
 
-## Scaling And Reliability Notes
+Use `docs/DEMO_READINESS_CHECKLIST.md` for the compact runbook:
 
-- Workspace isolation is enforced in protected tRPC services.
-- GitHub and Razorpay webhooks use idempotency records.
-- Billing activation is idempotent through payment-linked credit events.
-- List APIs use workspace filters and limits.
-- PR proof publishing updates one sticky comment instead of spamming PR threads.
-- Large PR diffs are snapshotted with truncation guards.
-- Future async processing can move expensive AI/GitHub work into background jobs.
+- Feature request
+- Requirement Review
+- PRD
+- Engineering tasks
+- GitHub PR
+- AI QA Review
+- Developer Fix Pack
+- Human approval
+- Report
+- GitHub Proof
 
-## Rubric Mapping
+## Known Limitations And Honest Notes
 
-- Core Workflow Implementation: intake, requirement review, PRD, tasks, PR, QA review, approval, reports, GitHub proof.
-- AI Agent Quality: requirement agent, PRD agent, task agent, repo analysis, QA review, Verification Rules, coverage map, fix pack, release readiness.
-- GitHub Integration: GitHub App, repo connect, PR tracking, snapshots, proof comment, commit status.
-- Review Loop & Human Approval: blocking/non-blocking findings, verification rule failures, re-review flow, approval decisions, client/developer/internal release reports.
-- tRPC Monorepo & Engineering Quality: typed routers/services, Drizzle schema/migrations, package boundaries, workspace isolation, idempotent billing/proof behavior.
-- SaaS Product Experience: auth, dashboard, projects, billing, legal pages, Terminal Mode preview, report sharing, report safety, onboarding/workflow guidance.
+- GitHub Proof is manual-only by design. MergeMint should not auto-post proof without the user choosing to publish it.
+- AI review credits are consumed only after a successful AI QA Review.
+- Public pricing links to protected billing and does not open Razorpay directly.
+- Payment activation has a pending manual verification fallback if verification ever fails after a successful Razorpay payment.
+- Some async workflow execution is prepared through real Inngest functions, while the product UI keeps existing tRPC mutations for demo stability.
+- Hosted Inngest execution requires production `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
+- GitHub Proof requires the GitHub App to be installed with repository access and required PR comment/status permissions.
+- Sample/demo data is labeled as sample data and should not be presented as real GitHub proof.
+
+## Why MergeMint Matters
+
+Modern teams can generate code quickly, but delivery still fails when nobody can prove that the final PR matches the original user need. MergeMint gives teams a proof-led release workflow: product intent, engineering execution, QA evidence, human approval, and client-facing proof in one place.
+
+That is the goal of MergeMint: make software delivery faster without losing accountability.

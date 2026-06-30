@@ -27,10 +27,11 @@ Use this checklist to demo the full ShipFlow AI / MergeMint proof chain without 
 
 ## Async Workflow Talking Points
 
-- PRD generation, task generation, AI QA review, and readiness check have async workflow wrappers.
+- PRD generation, task generation, AI QA review, and readiness check have real Inngest function definitions.
+- The Next.js Inngest endpoint is `/api/inngest`.
 - Status states are `queued`, `running`, `completed`, and `failed`.
 - The wrappers reuse existing services instead of forking logic.
-- The implementation is Inngest-ready: hosted events can replace the in-memory demo queue later.
+- Hosted Inngest needs `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`.
 
 ## Safety Notes
 
