@@ -159,6 +159,8 @@ function AmbientBackground() {
 
   return (
     <div className="mm-ambient" aria-hidden="true">
+      <div className="mm-hero-aura" />
+      <div className="mm-spotlight" />
       <div
         className="mm-grid"
         style={{ transform: `translate3d(0, ${scrollY * 0.05}px, 0)` }}
@@ -167,11 +169,33 @@ function AmbientBackground() {
         className="mm-grid mm-grid-fine"
         style={{ transform: `translate3d(0, ${scrollY * 0.11}px, 0)` }}
       />
+      <div
+        className="mm-mesh"
+        style={{ transform: `translate3d(${scrollY * -0.018}px, ${scrollY * 0.035}px, 0)` }}
+      />
+      <div
+        className="mm-orbit mm-orbit-one"
+        style={
+          {
+            "--drift-x": `${scrollY * 0.025}px`,
+            "--drift-y": `${scrollY * 0.018}px`
+          } as CSSProperties
+        }
+      />
+      <div
+        className="mm-orbit mm-orbit-two"
+        style={
+          {
+            "--drift-x": `${scrollY * -0.02}px`,
+            "--drift-y": `${scrollY * 0.024}px`
+          } as CSSProperties
+        }
+      />
       <div className="mm-blob mm-blob-one" />
       <div className="mm-blob mm-blob-two" />
       <div className="mm-blob mm-blob-three" />
       <div className="mm-particles">
-        {Array.from({ length: 18 }).map((_, index) => (
+        {Array.from({ length: 24 }).map((_, index) => (
           <span
             key={index}
             style={
@@ -189,6 +213,21 @@ function AmbientBackground() {
   );
 }
 
+function BrandMark() {
+  return (
+    <span className="mm-brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 40 40" role="img">
+        <path className="mm-brand-frame" d="M9 7.5H31L34.5 11V29L31 32.5H9L5.5 29V11L9 7.5Z" />
+        <path className="mm-brand-path" d="M12 14.5H17.8C19.5 14.5 20.5 15.4 20.5 17V23C20.5 24.6 21.5 25.5 23.2 25.5H28" />
+        <path className="mm-brand-path" d="M28 14.5H22.2C20.5 14.5 19.5 15.4 19.5 17V23C19.5 24.6 18.5 25.5 16.8 25.5H12" />
+        <path className="mm-brand-check" d="M15.2 20.4L18.1 23.2L24.9 16.8" />
+        <circle className="mm-brand-dot" cx="12" cy="14.5" r="1.6" />
+        <circle className="mm-brand-dot" cx="28" cy="25.5" r="1.6" />
+      </svg>
+    </span>
+  );
+}
+
 function Navbar() {
   const scrollY = useScrollY();
   const compact = scrollY > 32;
@@ -197,9 +236,7 @@ function Navbar() {
     <header className={`mm-nav ${compact ? "mm-nav-compact" : ""}`}>
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 sm:px-6 lg:px-8">
         <Link href="/" className="flex items-center gap-3">
-          <span className="grid size-8 place-items-center rounded-lg border border-white/10 bg-white/[0.03] text-[11px] font-semibold text-[#F8EEDF] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
-            MM
-          </span>
+          <BrandMark />
           <span className="text-sm font-semibold tracking-tight text-[#F8EEDF]">
             MergeMint
           </span>
@@ -226,6 +263,7 @@ function Navbar() {
 function ProductPreview() {
   return (
     <div className="mm-product-preview" data-reveal>
+      <div className="mm-preview-depth" aria-hidden="true" />
       <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="size-2.5 rounded-full bg-[#8E1616]" />
@@ -463,7 +501,7 @@ export default function LandingPage() {
   const capabilityCards = useMemo(() => capabilities, []);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#050202] text-[#F8EEDF]">
+    <div className="mm-landing min-h-screen overflow-x-hidden bg-[#050202] text-[#F8EEDF]">
       <AmbientBackground />
       <Navbar />
       <main className="relative z-10">

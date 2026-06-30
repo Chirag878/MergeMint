@@ -39,7 +39,7 @@ export default async function PublicReleaseReportPage({
   );
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
+    <main className="vf-report-shell min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
       <article className="mx-auto max-w-6xl space-y-6">
         <header className="rounded-lg border border-neutral-800 bg-neutral-900 p-6 shadow-2xl shadow-black/20 print:border-neutral-300 print:bg-white print:shadow-none md:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5">
@@ -339,7 +339,7 @@ function InternalReleaseReportPage({
   const coverageSummary = getCoverageSummary(data.coverage, data.findings);
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
+    <main className="vf-report-shell min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
       <article className="mx-auto max-w-6xl space-y-6">
         <header className="rounded-lg border border-sky-800 bg-neutral-900 p-6 shadow-2xl shadow-black/20 print:border-neutral-300 print:bg-white print:shadow-none md:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5">
@@ -578,7 +578,7 @@ function DeveloperFixReportPage({ data }: { data: DeveloperFixReportData }) {
   );
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
+    <main className="vf-report-shell min-h-screen bg-neutral-950 px-5 py-8 text-neutral-100 print:bg-white print:text-neutral-950 md:px-8">
       <article className="mx-auto max-w-6xl space-y-6">
         <header className="rounded-lg border border-amber-800 bg-neutral-900 p-6 shadow-2xl shadow-black/20 print:border-neutral-300 print:bg-white print:shadow-none md:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5">
