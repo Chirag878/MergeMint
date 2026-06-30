@@ -16,6 +16,7 @@ import { appUsers } from "./auth";
 import { featureRequests } from "./feature-requests";
 import { organizations } from "./organizations";
 import { projects } from "./projects";
+import { qaReviews } from "./qa";
 import type {
   ChangedFile,
   GitHubCheckSnapshot,
@@ -360,5 +361,60 @@ export const githubWebhookEvents = pgTable(
     index("github_webhook_events_received_at_idx").on(table.receivedAt),
     index("github_webhook_events_processed_at_idx").on(table.processedAt),
     index("github_webhook_events_created_at_idx").on(table.createdAt)
+  ]
+);
+
+export const githubProofPublications = pgTable(
+  "github_proof_publications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    featureRequestId: uuid("feature_request_id")
+      .notNull()
+      .references(() => featureRequests.id, { onDelete: "cascade" }),
+    pullRequestId: uuid("pull_request_id")
+      .notNull()
+      .references(() => pullRequests.id, { onDelete: "cascade" }),
+    qaReviewId: uuid("qa_review_id").references(() => qaReviews.id, {
+      onDelete: "set null"
+    }),
+    githubCommentId: bigint("github_comment_id", { mode: "number" }),
+    githubStatusContext: text("github_status_context"),
+    lastPublishedCommitSha: text("last_published_commit_sha"),
+    lastPublishStatus: text("last_publish_status").notNull().default("not_posted"),
+    lastPublishError: text("last_publish_error"),
+    coverageSnapshot:
+      jsonb("coverage_snapshot").$type<JsonObject>().default({}).notNull(),
+    publishedBy: uuid("published_by").references(() => appUsers.id, {
+      onDelete: "set null"
+    }),
+    lastPublishedAt: timestamp("last_published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull()
+  },
+  (table) => [
+    uniqueIndex("github_proof_publications_feature_pr_unique").on(
+      table.featureRequestId,
+      table.pullRequestId
+    ),
+    index("github_proof_publications_organization_id_idx").on(
+      table.organizationId
+    ),
+    index("github_proof_publications_feature_request_id_idx").on(
+      table.featureRequestId
+    ),
+    index("github_proof_publications_pull_request_id_idx").on(
+      table.pullRequestId
+    ),
+    index("github_proof_publications_qa_review_id_idx").on(table.qaReviewId),
+    index("github_proof_publications_last_publish_status_idx").on(
+      table.lastPublishStatus
+    )
   ]
 );

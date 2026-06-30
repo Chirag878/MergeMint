@@ -78,6 +78,13 @@
       "when": 1782702600000,
       "tag": "0010_billing_payment_activation_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782777600000,
+      "tag": "0011_github_proof_publications",
+      "breakpoints": true
     }
   ]
 }

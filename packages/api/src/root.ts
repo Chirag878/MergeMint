@@ -10,6 +10,7 @@ import { githubRouter } from "./routers/github.router";
 import { guidedWorkflowRouter } from "./routers/guided-workflow.router";
 import { healthRouter } from "./routers/health.router";
 import { projectsRouter } from "./routers/projects.router";
+import { proofGateRouter } from "./routers/proof-gate.router";
 import { pullRequestsRouter } from "./routers/pull-requests.router";
 import { qaReviewRouter } from "./routers/qa-review.router";
 import { releaseReportRouter } from "./routers/release-report.router";
@@ -33,6 +34,7 @@ export const appRouter = router({
   github: githubRouter,
   guidedWorkflow: guidedWorkflowRouter,
   repositoryIntelligence: repositoryIntelligenceRouter,
+  proofGate: proofGateRouter,
   qaReview: qaReviewRouter,
   releaseBoard: releaseBoardRouter,
   releaseReport: releaseReportRouter,

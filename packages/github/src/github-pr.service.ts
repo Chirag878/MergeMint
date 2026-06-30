@@ -247,6 +247,107 @@ export async function fetchPullRequestSnapshot(
   };
 }
 
+export async function upsertPullRequestComment(input: GitHubPullRequestInput & {
+  body: string;
+  marker: string;
+  commentId?: number | null;
+}): Promise<{ commentId: number; htmlUrl: string | null; updated: boolean }> {
+  const octokit = await getGitHubClient({
+    installationId: input.installationId
+  });
+
+  try {
+    if (input.commentId) {
+      const { data } = await octokit.issues.updateComment({
+        owner: input.owner,
+        repo: input.repo,
+        comment_id: input.commentId,
+        body: input.body
+      });
+
+      return {
+        commentId: data.id,
+        htmlUrl: data.html_url ?? null,
+        updated: true
+      };
+    }
+
+    const comments = await octokit.paginate(octokit.issues.listComments, {
+      owner: input.owner,
+      repo: input.repo,
+      issue_number: input.pullNumber,
+      per_page: 100
+    });
+    const existing = comments.find((comment) => comment.body?.includes(input.marker));
+
+    if (existing) {
+      const { data } = await octokit.issues.updateComment({
+        owner: input.owner,
+        repo: input.repo,
+        comment_id: existing.id,
+        body: input.body
+      });
+
+      return {
+        commentId: data.id,
+        htmlUrl: data.html_url ?? null,
+        updated: true
+      };
+    }
+
+    const { data } = await octokit.issues.createComment({
+      owner: input.owner,
+      repo: input.repo,
+      issue_number: input.pullNumber,
+      body: input.body
+    });
+
+    return {
+      commentId: data.id,
+      htmlUrl: data.html_url ?? null,
+      updated: false
+    };
+  } catch (error) {
+    throw toGitHubError(error);
+  }
+}
+
+export async function createCommitStatus(input: {
+  owner: string;
+  repo: string;
+  sha: string;
+  installationId?: number | null;
+  state: "error" | "failure" | "pending" | "success";
+  context: string;
+  description: string;
+  targetUrl?: string | null;
+}) {
+  const octokit = await getGitHubClient({
+    installationId: input.installationId
+  });
+
+  try {
+    const { data } = await octokit.repos.createCommitStatus({
+      owner: input.owner,
+      repo: input.repo,
+      sha: input.sha,
+      state: input.state,
+      context: input.context,
+      description: input.description.slice(0, 140),
+      target_url: input.targetUrl ?? undefined
+    });
+
+    return {
+      id: data.id,
+      context: data.context,
+      state: data.state,
+      targetUrl: data.target_url ?? null
+    };
+  } catch (error) {
+    throw toGitHubError(error);
+  }
+}
+
 function buildDiffText(changedFiles: GitHubChangedFile[]) {
   let diffText = "";
 

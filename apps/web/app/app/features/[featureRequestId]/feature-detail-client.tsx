@@ -320,6 +320,11 @@ export function FeatureDetailClient({
       activeTab === "approval" ||
       activeTab === "report"
   });
+  const proofGate = trpc.proofGate.getProofGateStatus.useQuery({
+    featureRequestId
+  }, {
+    enabled: activeTab === "qa" || activeTab === "report"
+  });
   const billingEntitlement = trpc.billing.getCurrentEntitlement.useQuery(undefined, {
     enabled: activeTab === "qa"
   });
@@ -448,8 +453,15 @@ export function FeatureDetailClient({
   const runQaReview = trpc.qaReview.run.useMutation({
     onSuccess: async () => {
       await utils.qaReview.getLatest.invalidate({ featureRequestId });
+      await utils.proofGate.getProofGateStatus.invalidate({ featureRequestId });
       await utils.billing.getCurrentEntitlement.invalidate();
       await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
+      await invalidateReleaseControlRoom();
+    }
+  });
+  const publishGitHubProof = trpc.proofGate.publishGitHubProof.useMutation({
+    onSuccess: async () => {
+      await utils.proofGate.getProofGateStatus.invalidate({ featureRequestId });
       await invalidateReleaseControlRoom();
     }
   });
@@ -1442,19 +1454,29 @@ export function FeatureDetailClient({
       ) : null}
 
       {activeTab === "qa" ? (
-      <AIQAReviewSection
-        hasPrd={hasPrd}
-        prdMayBeOutdated={prdMayBeOutdated}
-        requirementsCount={qaRequirementsCount}
-        hasPullRequestSnapshot={Boolean(linkedPullRequest.data?.latestSnapshot)}
-        reviewBundle={latestQaReview.data}
-        isLoading={latestQaReview.isLoading}
-        error={latestQaReview.error?.message}
-        onRun={() => runQaReview.mutate({ featureRequestId })}
-        isRunning={runQaReview.isPending}
-        runError={getFriendlyQaRunError(runQaReview.error?.message)}
-        entitlement={billingEntitlement.data}
-      />
+        <>
+          <AIQAReviewSection
+            hasPrd={hasPrd}
+            prdMayBeOutdated={prdMayBeOutdated}
+            requirementsCount={qaRequirementsCount}
+            hasPullRequestSnapshot={Boolean(linkedPullRequest.data?.latestSnapshot)}
+            reviewBundle={latestQaReview.data}
+            isLoading={latestQaReview.isLoading}
+            error={latestQaReview.error?.message}
+            onRun={() => runQaReview.mutate({ featureRequestId })}
+            isRunning={runQaReview.isPending}
+            runError={getFriendlyQaRunError(runQaReview.error?.message)}
+            entitlement={billingEntitlement.data}
+          />
+          <ProofGatePanel
+            data={proofGate.data}
+            isLoading={proofGate.isLoading}
+            error={proofGate.error?.message}
+            onPublish={() => publishGitHubProof.mutate({ featureRequestId })}
+            isPublishing={publishGitHubProof.isPending}
+            publishError={publishGitHubProof.error?.message}
+          />
+        </>
       ) : null}
 
       {activeTab === "approval" ? (
@@ -3571,6 +3593,98 @@ type ReleaseReportView = {
   };
 };
 
+type ProofGateView = {
+  pullRequest: {
+    number: number;
+    title: string;
+    url: string;
+    latestCommitSha: string | null;
+    repository: string | null;
+  } | null;
+  latestQaReview: {
+    id: string;
+    overallStatus: string;
+    readinessScore: number | null;
+    confidenceScore: number | null;
+    reviewVersion: number;
+    createdAt: Date | string;
+  } | null;
+  coverageMap: {
+    summary: {
+      total: number;
+      covered: number;
+      partial: number;
+      missing: number;
+      notApplicable: number;
+      needsHumanApproval: number;
+    };
+    rows: Array<{
+      requirementId: string;
+      requirementText: string;
+      status: string;
+      evidenceSummary: string;
+      relatedEngineeringTask: {
+        id: string;
+        title: string;
+        status: string;
+      } | null;
+      relatedFiles: string[];
+      severity: string;
+      suggestedNextAction: string;
+      confidence: number | null;
+    }>;
+  };
+  developerFixPack: {
+    summary: string;
+    whyItMatters: string;
+    impactedRequirements: string[];
+    likelyFiles: string[];
+    blocking: Array<{
+      title: string;
+      requirementKey: string | null;
+      description: string;
+      suggestedFix: string | null;
+      file: string | null;
+      line: number | null;
+    }>;
+    nonBlocking: Array<{
+      title: string;
+      requirementKey: string | null;
+      description: string;
+      suggestedFix: string | null;
+      file: string | null;
+      line: number | null;
+    }>;
+    suggestedTests: string[];
+    fixPrompt: string;
+    reReviewChecklist: string[];
+  };
+  evidenceGraph: Array<{
+    id: string;
+    label: string;
+    status: string;
+    timestamp: Date | string | null;
+    href: string | null;
+  }>;
+  findingCounts: {
+    blocking: number;
+    nonBlocking: number;
+    open: number;
+  };
+  mergeRecommendation: string;
+  verdict: string;
+  stale: boolean;
+  reportUrl: string | null;
+  proof: {
+    commentId: number | null;
+    statusContext: string | null;
+    lastPublishStatus: string;
+    lastPublishError: string | null;
+    lastPublishedCommitSha: string | null;
+    lastPublishedAt: Date | string | null;
+  } | null;
+};
+
 type ApprovalRiskSummary = {
   readinessScore: number | null;
   highCriticalFindings: number;
@@ -3657,6 +3771,247 @@ function validateApprovalDecision(input: {
   }
 
   return null;
+}
+
+function ProofGatePanel({
+  data,
+  isLoading,
+  error,
+  onPublish,
+  isPublishing,
+  publishError
+}: {
+  data: ProofGateView | null | undefined;
+  isLoading: boolean;
+  error?: string;
+  onPublish: () => void;
+  isPublishing: boolean;
+  publishError?: string;
+}) {
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
+
+  async function copyFixPrompt() {
+    if (!data?.developerFixPack.fixPrompt) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(data.developerFixPack.fixPrompt);
+    setCopyMessage("Fix prompt copied");
+    window.setTimeout(() => setCopyMessage(null), 1800);
+  }
+
+  const canPublish = Boolean(data?.pullRequest && data.latestQaReview && !isPublishing);
+  const publishLabel = data?.proof?.commentId
+    ? "Update GitHub Proof"
+    : "Publish Proof to GitHub";
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-medium">GitHub Proof Gate</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Publish the latest MergeMint verification as one sticky GitHub PR
+            comment and commit status.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onPublish}
+          disabled={!canPublish}
+          className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isPublishing ? "Publishing..." : publishLabel}
+        </button>
+      </div>
+
+      {isLoading ? <EmptyText>Loading proof gate...</EmptyText> : null}
+      {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+      {publishError ? (
+        <p className="mt-3 text-sm text-red-300">{publishError}</p>
+      ) : null}
+
+      {data ? (
+        <div className="mt-5 space-y-5">
+          {data.stale ? (
+            <p className="rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
+              This PR changed after the latest MergeMint review. Re-run QA
+              before publishing proof.
+            </p>
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <Score label="Readiness" value={data.latestQaReview?.readinessScore ?? null} />
+            <MetricCard label="Verdict" value={data.verdict} />
+            <MetricCard label="Merge" value={data.mergeRecommendation} />
+            <MetricCard
+              label="Proof"
+              value={data.proof?.lastPublishStatus ?? "Not posted"}
+            />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <article className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-medium text-neutral-100">
+                    Requirement Coverage Map
+                  </h3>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    REQ-ID to task, PR evidence, status, and next action.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge>{data.coverageMap.summary.covered} covered</Badge>
+                  <Badge>{data.coverageMap.summary.partial} partial</Badge>
+                  <Badge>{data.coverageMap.summary.missing} missing</Badge>
+                </div>
+              </div>
+              <div className="mt-4 space-y-3">
+                {data.coverageMap.rows.length > 0 ? (
+                  data.coverageMap.rows.map((row) => (
+                    <div
+                      key={row.requirementId}
+                      className="rounded-md border border-neutral-800 bg-neutral-900/70 p-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-blue-300">
+                            {row.requirementId}
+                          </p>
+                          <p className="mt-1 text-sm text-neutral-300">
+                            {row.requirementText}
+                          </p>
+                        </div>
+                        <StatusBadge status={row.status} />
+                      </div>
+                      <p className="mt-3 text-sm text-neutral-400">
+                        Evidence: {row.evidenceSummary}
+                      </p>
+                      {row.relatedEngineeringTask ? (
+                        <p className="mt-2 text-xs text-neutral-500">
+                          Task: {row.relatedEngineeringTask.title}
+                        </p>
+                      ) : null}
+                      {row.relatedFiles.length > 0 ? (
+                        <p className="mt-2 text-xs text-neutral-500">
+                          Files: {row.relatedFiles.slice(0, 4).join(", ")}
+                        </p>
+                      ) : null}
+                      <p className="mt-2 text-xs text-amber-200">
+                        Next: {row.suggestedNextAction}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <EmptyText>No PRD requirements found for coverage mapping.</EmptyText>
+                )}
+              </div>
+            </article>
+
+            <div className="space-y-4">
+              <article className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+                <h3 className="font-medium text-neutral-100">Developer Fix Pack</h3>
+                <p className="mt-2 text-sm text-neutral-400">
+                  {data.developerFixPack.summary}
+                </p>
+                <div className="mt-3 grid gap-2 text-sm text-neutral-400">
+                  <p>Blocking: {data.developerFixPack.blocking.length}</p>
+                  <p>Non-blocking: {data.developerFixPack.nonBlocking.length}</p>
+                  <p>
+                    Impacted requirements:{" "}
+                    {data.developerFixPack.impactedRequirements.join(", ") ||
+                      "None"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyFixPrompt}
+                  className="mt-4 rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:bg-neutral-800"
+                >
+                  Copy Fix Prompt
+                </button>
+                {copyMessage ? (
+                  <p className="mt-2 text-xs text-emerald-300">{copyMessage}</p>
+                ) : null}
+                <StringList
+                  title="Suggested tests"
+                  items={data.developerFixPack.suggestedTests}
+                  emptyText="No suggested tests recorded."
+                />
+              </article>
+
+              <article className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+                <h3 className="font-medium text-neutral-100">
+                  Release Evidence Graph
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {data.evidenceGraph.map((node) => (
+                    <div
+                      key={node.id}
+                      className="flex items-center justify-between gap-3 rounded-md bg-neutral-900 px-3 py-2 text-sm"
+                    >
+                      <span className="text-neutral-200">{node.label}</span>
+                      <Badge>{node.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
+            <div className="grid gap-2 md:grid-cols-2">
+              <p>
+                Linked PR:{" "}
+                {data.pullRequest ? (
+                  <Link
+                    href={data.pullRequest.url}
+                    target="_blank"
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    #{data.pullRequest.number} {data.pullRequest.title}
+                  </Link>
+                ) : (
+                  "Not linked"
+                )}
+              </p>
+              <p>
+                GitHub check/status:{" "}
+                {data.proof?.statusContext
+                  ? `${data.proof.statusContext} (${data.proof.lastPublishStatus})`
+                  : "Not created"}
+              </p>
+              <p>
+                Last published:{" "}
+                {data.proof?.lastPublishedAt
+                  ? formatDate(data.proof.lastPublishedAt)
+                  : "Never"}
+              </p>
+              <p>
+                Report:{" "}
+                {data.reportUrl ? (
+                  <Link
+                    href={data.reportUrl}
+                    className="text-blue-300 hover:text-blue-200"
+                  >
+                    Open report
+                  </Link>
+                ) : (
+                  "Not generated"
+                )}
+              </p>
+            </div>
+            {data.proof?.lastPublishError ? (
+              <p className="mt-3 text-red-300">{data.proof.lastPublishError}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : !isLoading ? (
+        <EmptyText>Run QA review to prepare GitHub proof.</EmptyText>
+      ) : null}
+    </section>
+  );
 }
 
 function AIQAReviewSection({
@@ -4407,6 +4762,15 @@ function Score({ label, value }: { label: string; value: number | null }) {
       <p className="mt-2 text-2xl font-semibold text-neutral-100">
         {value ?? 0}
       </p>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-900 p-4">
+      <p className="text-sm text-neutral-500">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-neutral-100">{value}</p>
     </div>
   );
 }

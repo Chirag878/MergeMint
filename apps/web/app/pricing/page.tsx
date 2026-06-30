@@ -263,6 +263,9 @@ export default function PricingPage() {
             <Link href="/pricing" className="transition hover:text-[var(--text)]">
               Pricing
             </Link>
+            <Link href="/cli" className="transition hover:text-[var(--text)]">
+              CLI
+            </Link>
             <Link href="/terms" className="transition hover:text-[var(--text)]">
               Terms
             </Link>

@@ -9,11 +9,13 @@ export {
   hasGitHubAppConfig
 } from "./client";
 export {
+  createCommitStatus,
   fetchPullRequestCommits,
   fetchPullRequestDetails,
   fetchPullRequestFiles,
   fetchPullRequestSnapshot,
-  listPullRequestsForRepository
+  listPullRequestsForRepository,
+  upsertPullRequestComment
 } from "./github-pr.service";
 export type {
   GitHubChangedFile,

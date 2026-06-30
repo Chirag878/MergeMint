@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" updatedAt="June 29, 2026">
+    <LegalPage title="Terms & Conditions" updatedAt="June 30, 2026">
       <Section title="Service">
         MergeMint helps teams connect requirements, GitHub pull request
         evidence, AI QA review, human approval, and shareable release reports.
@@ -23,6 +23,21 @@ export default function TermsPage() {
         Phase 1 billing uses one-off Razorpay checkout orders for verified PR
         review credits. Credits are consumed only after successful AI QA Review
         creation.
+      </Section>
+      <Section title="Refunds">
+        Refund requests are handled under the Refund Policy. Used verified PR
+        review credits, manual pilot terms, and launch pack usage may affect
+        refund eligibility.
+      </Section>
+      <Section title="Acceptable use">
+        Do not use MergeMint to process repositories you do not control, expose
+        secrets, attack third-party systems, or generate misleading delivery
+        proof.
+      </Section>
+      <Section title="Limitation of liability">
+        MergeMint is an early-stage SaaS product. To the maximum extent allowed
+        by law, the service is provided as-is and final release decisions remain
+        your responsibility.
       </Section>
       <Section title="Contact">
         Questions about these terms can be sent to your MergeMint support

@@ -35,6 +35,10 @@ export default function PrivacyPage() {
             "Razorpay processes checkout details. MergeMint stores safe payment identifiers, plan keys, amounts, status, and credit history, not card details."
           ],
           [
+            "Data retention",
+            "Workspace, repository, PR, review, approval, report, billing, and audit records are retained while your workspace is active unless deletion is requested or a shorter retention period is required by law."
+          ],
+          [
             "Contact",
             "For privacy questions or deletion requests, contact the founder or support email provided during onboarding."
           ]
