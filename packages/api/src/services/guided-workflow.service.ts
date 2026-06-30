@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
+  aiRuns,
   approvals,
   clarificationQuestions,
   db,
@@ -567,12 +568,33 @@ export async function getFeatureWorkflow(
     throw new Error("Feature request not found.");
   }
 
-  const [questions, prdRows, pullRequestRows, qaReviewRows, approvalRows, reportRows] =
+  const [
+    questions,
+    clarificationRunRows,
+    prdRows,
+    pullRequestRows,
+    qaReviewRows,
+    approvalRows,
+    reportRows
+  ] =
     await Promise.all([
       db
         .select()
         .from(clarificationQuestions)
         .where(eq(clarificationQuestions.featureRequestId, feature.id)),
+      db
+        .select({ id: aiRuns.id, createdAt: aiRuns.createdAt })
+        .from(aiRuns)
+        .where(
+          and(
+            eq(aiRuns.featureRequestId, feature.id),
+            eq(aiRuns.organizationId, organizationId),
+            eq(aiRuns.agentType, "clarification"),
+            eq(aiRuns.status, "succeeded")
+          )
+        )
+        .orderBy(desc(aiRuns.createdAt))
+        .limit(1),
       db
         .select()
         .from(prds)
@@ -621,6 +643,7 @@ export async function getFeatureWorkflow(
     ]);
 
   const latestPrd = prdRows[0] ?? null;
+  const latestClarificationRun = clarificationRunRows[0] ?? null;
   const latestPullRequest = pullRequestRows[0] ?? null;
   const latestQaReview = qaReviewRows[0] ?? null;
   const latestApproval = approvalRows[0] ?? null;
@@ -651,6 +674,13 @@ export async function getFeatureWorkflow(
       (question.priority === "high" || question.priority === "urgent") &&
       !question.answer
   );
+  const requirementReviewStarted = Boolean(
+    latestClarificationRun || questions.length > 0 || latestPrd
+  );
+  const requirementReviewComplete = Boolean(
+    latestPrd ||
+      (requirementReviewStarted && unansweredRequired.length === 0)
+  );
   const hasPrd = Boolean(latestPrd && requirements.length > 0);
   const hasTasks = tasks.length > 0;
   const blockedTasks = tasks.filter((task) => task.status === "blocked");
@@ -670,7 +700,7 @@ export async function getFeatureWorkflow(
       { id: "prd_tasks", label: "PRD & Tasks", done: hasPrd && hasTasks },
       { id: "pull_request", label: "Pull Request", done: Boolean(latestPullRequest) },
       { id: "qa_review", label: "QA Review", done: hasQa },
-      { id: "approval", label: "Approval", done: Boolean(latestApproval) },
+      { id: "approval", label: "Approval", done: approved },
       { id: "report", label: "Report", done: Boolean(latestReport) }
     ],
     !hasPrd || !hasTasks
@@ -684,17 +714,29 @@ export async function getFeatureWorkflow(
             : !latestReport
               ? "report"
               : "report",
-    unansweredRequired.length > 0 ? "prd_tasks" : undefined
+    !requirementReviewComplete ? "prd_tasks" : undefined
   );
+
+  if (!requirementReviewStarted) {
+    return toState({
+      status: "requirement_review_not_started",
+      title: "Start Requirement Review",
+      description: "Start Requirement Review before generating the PRD.",
+      primaryActionLabel: "Start Requirement Review",
+      primaryActionKey: "answer_clarifications",
+      blockedReason: "Start Requirement Review before generating the PRD.",
+      steps
+    });
+  }
 
   if (unansweredRequired.length > 0) {
     return toState({
       status: "clarification_needed",
       title: "Requirement Review needed",
-      description: "Complete Requirement Review before generating PRD.",
-      primaryActionLabel: "Requirement Review",
+      description: "Answer required clarifications before generating the PRD.",
+      primaryActionLabel: "Answer Requirement Questions",
       primaryActionKey: "answer_clarifications",
-      blockedReason: "Complete Requirement Review before generating PRD.",
+      blockedReason: "Answer required clarifications before generating the PRD.",
       steps
     });
   }

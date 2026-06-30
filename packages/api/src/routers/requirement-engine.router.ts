@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   answerClarificationQuestion,
+  answerClarificationQuestions,
   generateClarificationsForFeatureRequest,
   generateEngineeringTasksForPrd,
   getFeatureAiRunUsage,
@@ -48,6 +49,23 @@ export const requirementEngineRouter = router({
       })
     )
     .mutation(({ ctx, input }) => answerClarificationQuestion(ctx, input)),
+
+  answerClarifications: protectedProcedure
+    .input(
+      z.object({
+        featureRequestId: z.string().uuid(),
+        answers: z
+          .array(
+            z.object({
+              questionId: z.string().uuid(),
+              answer: z.string().min(1).max(4_000)
+            })
+          )
+          .min(1)
+          .max(50)
+      })
+    )
+    .mutation(({ ctx, input }) => answerClarificationQuestions(ctx, input)),
 
   generatePrd: protectedProcedure
     .input(

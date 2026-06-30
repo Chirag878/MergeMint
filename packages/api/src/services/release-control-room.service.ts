@@ -187,11 +187,33 @@ function getNextBestAction(input: {
     };
   }
 
+  if (
+    input.approval?.decision === "changes_requested" ||
+    input.approval?.decision === "rejected"
+  ) {
+    return {
+      kind: "review_risks",
+      title: "Send Fix Pack or re-run QA",
+      why: "The latest human decision rejected this release. Address the requested changes before asking for approval again."
+    };
+  }
+
   if (!input.approval) {
     return {
       kind: "submit_approval",
       title: "Submit approval decision",
       why: "QA evidence is available. Record the human release decision."
+    };
+  }
+
+  if (
+    input.approval.decision !== "approved" &&
+    input.approval.decision !== "approved_with_risk"
+  ) {
+    return {
+      kind: "review_risks",
+      title: "Review approval decision",
+      why: "A release report is available only after approval or approval with accepted risk."
     };
   }
 
@@ -409,6 +431,10 @@ export async function getReleaseControlRoom(
   const latestRepository = pullRequestRows[0]?.repository ?? null;
   const latestQaReview = qaReviewRows[0] ?? null;
   const latestApproval = approvalRows[0] ?? null;
+  const latestApprovalAccepted = Boolean(
+    latestApproval?.decision === "approved" ||
+      latestApproval?.decision === "approved_with_risk"
+  );
   const latestReleaseReport =
     releaseReportRows.find(isClientDeliveryReport) ?? null;
   const latestClarificationRun = clarificationRunRows[0] ?? null;
@@ -604,15 +630,22 @@ export async function getReleaseControlRoom(
     buildStep({
       id: "approval",
       label: "Human decision recorded",
-      completedAt: latestApproval?.createdAt ?? null,
-      current: Boolean(latestQaReview && !latestApproval),
+      completedAt: latestApprovalAccepted ? latestApproval?.createdAt ?? null : null,
+      current: Boolean(
+        latestQaReview &&
+          (!latestApproval ||
+            latestApproval.decision === "changes_requested" ||
+            latestApproval.decision === "rejected")
+      ),
       actionKind: "submit_approval"
     }),
     buildStep({
       id: "report",
       label: "Release report generated",
       completedAt: latestReleaseReport?.generatedAt ?? latestReleaseReport?.createdAt ?? null,
-      current: Boolean(latestQaReview && latestApproval && !latestReleaseReport),
+      current: Boolean(
+        latestQaReview && latestApprovalAccepted && !latestReleaseReport
+      ),
       actionKind: "generate_report"
     })
   ];

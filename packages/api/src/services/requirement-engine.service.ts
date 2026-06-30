@@ -411,6 +411,112 @@ export async function answerClarificationQuestion(
   return updated ?? row.question;
 }
 
+export async function answerClarificationQuestions(
+  ctx: ProtectedContext,
+  input: {
+    featureRequestId: string;
+    answers: Array<{
+      questionId: string;
+      answer: string;
+    }>;
+  }
+) {
+  const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+  assertRoleCan(workspace.membership.role, "create_feature_request");
+
+  const featureRequest = await getScopedFeatureOrThrow(
+    input.featureRequestId,
+    workspace.activeOrganization.id
+  );
+  const normalizedAnswers = input.answers
+    .map((answer) => ({
+      questionId: answer.questionId,
+      answer: answer.answer.trim()
+    }))
+    .filter((answer) => answer.answer.length > 0);
+
+  if (normalizedAnswers.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "At least one answer is required."
+    });
+  }
+
+  const existingQuestions = await db
+    .select()
+    .from(clarificationQuestions)
+    .where(eq(clarificationQuestions.featureRequestId, featureRequest.id))
+    .orderBy(clarificationQuestions.createdAt);
+  const questionById = new Map(
+    existingQuestions.map((question) => [question.id, question])
+  );
+
+  for (const answer of normalizedAnswers) {
+    if (!questionById.has(answer.questionId)) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Clarification question not found."
+      });
+    }
+  }
+
+  const now = new Date();
+  const updated = await db.transaction(async (tx) => {
+    const rows = [];
+
+    for (const answer of normalizedAnswers) {
+      const [row] = await tx
+        .update(clarificationQuestions)
+        .set({
+          answer: answer.answer,
+          answeredAt: now
+        })
+        .where(eq(clarificationQuestions.id, answer.questionId))
+        .returning();
+
+      if (row) {
+        rows.push(row);
+      }
+    }
+
+    await tx
+      .update(featureRequests)
+      .set({ updatedAt: now })
+      .where(eq(featureRequests.id, featureRequest.id));
+
+    return rows;
+  });
+
+  const mergedQuestions = existingQuestions.map((question) => {
+    const replacement = updated.find((row) => row.id === question.id);
+    return replacement ?? question;
+  });
+  const unansweredRequiredClarificationQuestions = mergedQuestions.filter(
+    (question) => isRequiredClarification(question.priority) && !question.answer
+  );
+
+  await writeAuditLog({
+    organizationId: workspace.activeOrganization.id,
+    actorId: workspace.appUser.id,
+    action: "clarification_questions_answered",
+    entityType: "feature_request",
+    entityId: featureRequest.id,
+    metadata: {
+      answeredCount: updated.length
+    }
+  });
+
+  return {
+    updated,
+    requirementReview: {
+      started: true,
+      completed: unansweredRequiredClarificationQuestions.length === 0,
+      noFurtherClarificationsNeeded: mergedQuestions.length === 0,
+      unansweredRequiredCount: unansweredRequiredClarificationQuestions.length
+    }
+  };
+}
+
 export async function generatePrdForFeatureRequest(
   ctx: ProtectedContext,
   featureRequestId: string

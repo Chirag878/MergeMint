@@ -401,6 +401,7 @@ export function FeatureDetailClient({
   const generateTasks =
     trpc.requirementEngine.generateEngineeringTasks.useMutation({
       onSuccess: async () => {
+        setActiveTab("engineering_tasks");
         await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
         await utils.engineeringTasks.listByFeature.invalidate({ featureRequestId });
         await invalidateReleaseControlRoom();
@@ -433,6 +434,20 @@ export function FeatureDetailClient({
         );
         await utils.requirementEngine.getWorkflow.invalidate({ featureRequestId });
         await invalidateReleaseControlRoom();
+      }
+    });
+  const answerClarifications =
+    trpc.requirementEngine.answerClarifications.useMutation({
+      onSuccess: async () => {
+        await Promise.all([
+          utils.requirementEngine.getWorkflow.invalidate({ featureRequestId }),
+          utils.featureRequests.getReleaseControlRoom.invalidate({
+            featureRequestId
+          }),
+          utils.guidedWorkflow.getFeatureWorkflow.invalidate({
+            featureRequestId
+          })
+        ]);
       }
     });
   const linkPullRequest = trpc.github.linkPullRequest.useMutation({
@@ -639,16 +654,15 @@ export function FeatureDetailClient({
       return;
     }
 
-    setIsSavingRequirementReview(true);
     try {
-      await Promise.all(
-        pendingRequiredQuestions.map((question) =>
-          answerClarification.mutateAsync({
+      setIsSavingRequirementReview(true);
+      await answerClarifications.mutateAsync({
+        featureRequestId,
+        answers: pendingRequiredQuestions.map((question) => ({
             questionId: question.id,
             answer: answerDrafts[question.id].trim()
-          })
-        )
-      );
+        }))
+      });
       setAnswerDrafts((current) => {
         const next = { ...current };
         for (const question of pendingRequiredQuestions) {
@@ -657,10 +671,6 @@ export function FeatureDetailClient({
         return next;
       });
       setEditingQuestionId(null);
-      await Promise.all([
-        utils.requirementEngine.getWorkflow.invalidate({ featureRequestId }),
-        invalidateReleaseControlRoom()
-      ]);
       setRequirementReviewMessage(
         "Requirement Review complete. No further clarifications are needed."
       );
@@ -719,6 +729,10 @@ export function FeatureDetailClient({
     });
   }
 
+  function openGitHubProofPanel() {
+    openTab("qa", "github-proof-gate");
+  }
+
   function submitApprovalDecision() {
     if (prdMayBeOutdated) {
       setApprovalValidationError(
@@ -770,6 +784,13 @@ export function FeatureDetailClient({
 
     if (actionKey === "answer_clarifications") {
       openTab("requirements", "clarifications-section");
+      const firstQuestionId =
+        unansweredRequiredClarificationQuestions[0]?.id ?? clarificationQuestions[0]?.id;
+      if (firstQuestionId) {
+        window.setTimeout(() => {
+          document.getElementById(`answer-${firstQuestionId}`)?.focus();
+        }, 120);
+      }
       return;
     }
 
@@ -950,6 +971,14 @@ export function FeatureDetailClient({
             generateReleaseReport.isPending ||
             generateInternalReleaseReport.isPending
           }
+        />
+      ) : null}
+
+      {controlRoom.data?.qaReview ? (
+        <CompactProofGateSummary
+          verdict={controlRoom.data.qaReview.verdict}
+          readinessScore={controlRoom.data.qaReview.readinessScore}
+          onViewProof={openGitHubProofPanel}
         />
       ) : null}
 
@@ -1196,6 +1225,7 @@ export function FeatureDetailClient({
                                   </p>
                                 ) : null}
                                 <textarea
+                                  id={`answer-${question.id}`}
                                   value={draft}
                                   onChange={(event) =>
                                     setAnswerDraft(question.id, event.target.value)
@@ -1348,12 +1378,18 @@ export function FeatureDetailClient({
 
                   <button
                     type="button"
-                    onClick={() => (prd ? generateTasks.mutate({ prdId: prd.id }) : null)}
-                    disabled={!prd || prdMayBeOutdated || hasTasks || generateTasks.isPending}
+                    onClick={() =>
+                      hasTasks
+                        ? setActiveTab("engineering_tasks")
+                        : prd
+                          ? generateTasks.mutate({ prdId: prd.id })
+                          : null
+                    }
+                    disabled={!prd || prdMayBeOutdated || generateTasks.isPending}
                     className="rounded-md border border-neutral-700 px-4 py-2 text-sm font-medium text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {hasTasks
-                      ? "Engineering tasks generated"
+                      ? "View Engineering Tasks"
                       : generateTasks.isPending
                         ? "Generating tasks..."
                         : "Generate engineering tasks"}
@@ -3970,6 +4006,37 @@ function validateApprovalDecision(input: {
   return null;
 }
 
+function CompactProofGateSummary({
+  verdict,
+  readinessScore,
+  onViewProof
+}: {
+  verdict: string;
+  readinessScore: number | null;
+  onViewProof: () => void;
+}) {
+  return (
+    <section className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-blue-300">GitHub Proof</p>
+          <p className="mt-1 text-sm text-neutral-300">
+            Latest verdict: {verdict}
+            {readinessScore !== null ? ` - readiness ${readinessScore}` : ""}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onViewProof}
+          className="rounded-md border border-blue-700 px-3 py-2 text-sm font-medium text-blue-100 transition hover:bg-blue-900/40"
+        >
+          View GitHub Proof
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ProofGatePanel({
   data,
   isLoading,
@@ -4015,7 +4082,10 @@ function ProofGatePanel({
     data?.githubAccess.reason === "token_resolution_failed";
 
   return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+    <section
+      id="github-proof-gate"
+      className="scroll-mt-28 rounded-lg border border-neutral-800 bg-neutral-900 p-5"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-medium">GitHub Proof Gate</h2>
