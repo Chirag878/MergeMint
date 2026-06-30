@@ -20,5 +20,11 @@ export {
   generateEngineeringTasksForPrd,
   generatePrdForFeatureRequest
 } from "./services/requirement-engine.service";
+export {
+  getPaidCustomerProof,
+  removePaidCustomerProof,
+  savePaidCustomerProof,
+  type PaidCustomerProof
+} from "./services/paid-customer-proof.service";
 export { runQaReviewForFeatureRequest } from "./services/qa-review.service";
 export type { AppRouter } from "./root";

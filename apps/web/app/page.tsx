@@ -245,6 +245,7 @@ function Navbar() {
           <a href="#problem" className="transition hover:text-[#F8EEDF]">Problem</a>
           <a href="#product" className="transition hover:text-[#F8EEDF]">Product</a>
           <a href="#proof-chain" className="transition hover:text-[#F8EEDF]">Proof Chain</a>
+          <Link href="/paid-user-proof" className="transition hover:text-[#F8EEDF]">Paid Customers</Link>
           <a href="#pricing" className="transition hover:text-[#F8EEDF]">Pricing</a>
         </nav>
         <div className="flex items-center gap-3">

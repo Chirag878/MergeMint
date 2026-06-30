@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ThemeToggle } from "../components/theme-provider";
 
 const navItems = [
   ["Dashboard", "/app"],
@@ -60,7 +59,6 @@ export function AppNav() {
               );
             })}
           </div>
-          <ThemeToggle />
         </div>
       </nav>
     </header>

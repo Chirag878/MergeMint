@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { BILLING_PLANS, PAID_BILLING_PLAN_KEYS } from "@veriflow/shared";
-import { ThemeToggle } from "../components/theme-provider";
 
 const pricingPlans = PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]);
 
@@ -83,7 +82,6 @@ export default function PricingPage() {
             >
               Sign in
             </Link>
-            <ThemeToggle />
           </div>
         </div>
       </header>
