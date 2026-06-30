@@ -120,6 +120,15 @@ export const QAFindingOutputSchema = z.object({
   suggestedFix: z.string().min(1).nullable()
 });
 
+export const VerificationRuleEvaluationSchema = z.object({
+  ruleId: z.string().min(1).nullable(),
+  title: z.string().min(1),
+  status: z.enum(["passed", "warning", "failed", "not_applicable"]),
+  severity: z.enum(["blocking", "warning", "info"]),
+  evidence: z.string().min(1),
+  suggestedFix: z.string().min(1).nullable()
+});
+
 export const QAReviewOutputSchema = z.object({
   overallStatus: z.enum(["approved", "changes_requested", "risky", "blocked"]),
   readinessScore: z.number().int().min(0).max(100),
@@ -142,7 +151,8 @@ export const QAReviewOutputSchema = z.object({
       })
     )
     .default([]),
-  findings: z.array(QAFindingOutputSchema)
+  findings: z.array(QAFindingOutputSchema),
+  verificationRules: z.array(VerificationRuleEvaluationSchema).default([])
 });
 
 export const RepositoryIntelligenceOutputSchema = z.object({
@@ -188,6 +198,9 @@ export type RequirementCoverageOutput = z.infer<
   typeof RequirementCoverageOutputSchema
 >;
 export type QAFindingOutput = z.infer<typeof QAFindingOutputSchema>;
+export type VerificationRuleEvaluationOutput = z.infer<
+  typeof VerificationRuleEvaluationSchema
+>;
 export type QAReviewOutput = z.infer<typeof QAReviewOutputSchema>;
 export type RepositoryIntelligenceOutput = z.infer<
   typeof RepositoryIntelligenceOutputSchema

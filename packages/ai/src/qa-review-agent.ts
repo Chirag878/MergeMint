@@ -61,6 +61,13 @@ export type QAReviewInput = {
   diffText: string;
   diffTruncated: boolean;
   repositoryContext?: RepositoryContext | null;
+  verificationRules?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    severity: "blocking" | "warning" | "info";
+    appliesTo: string;
+  }>;
 };
 
 export async function generateQAReview(
@@ -220,7 +227,20 @@ function mockQAReview(input: QAReviewInput): QAReviewOutput {
           ? null
           : "Additional code or test evidence may be needed for this task."
     })),
-    findings
+    findings,
+    verificationRules:
+      input.verificationRules?.map((rule) => ({
+        ruleId: rule.id,
+        title: rule.title,
+        status: "warning" as const,
+        severity: rule.severity,
+        evidence:
+          "Mock QA review includes this project verification rule in the review context.",
+        suggestedFix:
+          rule.severity === "blocking"
+            ? `Confirm the PR satisfies: ${rule.description}`
+            : null
+      })) ?? []
   };
 }
 

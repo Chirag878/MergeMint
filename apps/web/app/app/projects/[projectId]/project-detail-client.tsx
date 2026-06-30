@@ -8,13 +8,39 @@ import { trpc } from "@/trpc/react";
 
 type ProjectControlRoom =
   inferRouterOutputs<AppRouter>["projects"]["getControlRoom"];
+type VerificationRule =
+  inferRouterOutputs<AppRouter>["verificationRules"]["listVerificationRules"][number];
+
+const ruleSeverityOptions = ["blocking", "warning", "info"] as const;
+const ruleScopeOptions = [
+  "all",
+  "frontend",
+  "backend",
+  "db",
+  "auth",
+  "billing",
+  "api",
+  "docs",
+  "github",
+  "ai"
+] as const;
 
 export function ProjectDetailClient({ projectId }: { projectId: string }) {
   const utils = trpc.useUtils();
   const [installationIdText, setInstallationIdText] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [ruleDraft, setRuleDraft] = useState({
+    title: "",
+    description: "",
+    severity: "warning" as (typeof ruleSeverityOptions)[number],
+    appliesTo: "all" as (typeof ruleScopeOptions)[number]
+  });
   const controlRoom = trpc.projects.getControlRoom.useQuery({ projectId });
+  const verificationRules = trpc.verificationRules.listVerificationRules.useQuery({
+    projectId
+  });
   const installations = trpc.githubApp.getInstallations.useQuery();
   const selectedInstallationId = installationIdText
     ? Number(installationIdText)
@@ -83,6 +109,33 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
       }
     }
   });
+  const createRule = trpc.verificationRules.createVerificationRule.useMutation({
+    onSuccess: async () => {
+      setMessage("Verification rule added.");
+      resetRuleDraft();
+      await verificationRules.refetch();
+    }
+  });
+  const updateRule = trpc.verificationRules.updateVerificationRule.useMutation({
+    onSuccess: async () => {
+      setMessage("Verification rule updated.");
+      resetRuleDraft();
+      await verificationRules.refetch();
+    }
+  });
+  const toggleRule = trpc.verificationRules.toggleVerificationRule.useMutation({
+    onSuccess: async () => {
+      setMessage("Verification rule status updated.");
+      await verificationRules.refetch();
+    }
+  });
+  const deleteRule = trpc.verificationRules.deleteVerificationRule.useMutation({
+    onSuccess: async () => {
+      setMessage("Verification rule deleted.");
+      resetRuleDraft();
+      await verificationRules.refetch();
+    }
+  });
 
   useEffect(() => {
     if (!installationIdText && installations.data?.[0]) {
@@ -105,6 +158,16 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
     connectRepository.error?.message ??
     disconnectRepository.error?.message ??
     analyzeRepository.error?.message;
+
+  function resetRuleDraft() {
+    setEditingRuleId(null);
+    setRuleDraft({
+      title: "",
+      description: "",
+      severity: "warning",
+      appliesTo: "all"
+    });
+  }
 
   if (controlRoom.isLoading) {
     return (
@@ -188,6 +251,60 @@ export function ProjectDetailClient({ projectId }: { projectId: string }) {
         analysis={analysis?.status === "completed"}
         feature={features.length > 0}
         pr={features.some((item) => item.pullRequest)}
+      />
+
+      <VerificationRulesSection
+        rules={verificationRules.data ?? []}
+        isLoading={verificationRules.isLoading}
+        error={
+          verificationRules.error?.message ??
+          createRule.error?.message ??
+          updateRule.error?.message ??
+          toggleRule.error?.message ??
+          deleteRule.error?.message
+        }
+        draft={ruleDraft}
+        setDraft={setRuleDraft}
+        editingRuleId={editingRuleId}
+        isSaving={createRule.isPending || updateRule.isPending}
+        isMutating={toggleRule.isPending || deleteRule.isPending}
+        onEdit={(rule) => {
+          setEditingRuleId(rule.id);
+          setRuleDraft({
+            title: rule.title,
+            description: rule.description,
+            severity: rule.severity,
+            appliesTo: rule.appliesTo
+          });
+        }}
+        onCancel={resetRuleDraft}
+        onSubmit={() => {
+          const payload = {
+            title: ruleDraft.title.trim(),
+            description: ruleDraft.description.trim(),
+            severity: ruleDraft.severity,
+            appliesTo: ruleDraft.appliesTo
+          };
+
+          if (editingRuleId) {
+            updateRule.mutate({
+              ruleId: editingRuleId,
+              rule: payload
+            });
+            return;
+          }
+
+          createRule.mutate({
+            projectId,
+            rule: payload
+          });
+        }}
+        onToggle={(ruleId) => toggleRule.mutate({ ruleId })}
+        onDelete={(ruleId) => {
+          if (window.confirm("Delete this verification rule?")) {
+            deleteRule.mutate({ ruleId });
+          }
+        }}
       />
 
       <section
@@ -570,6 +687,222 @@ function SetupChecklist({
             <p className="text-sm text-neutral-300">{label}</p>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function VerificationRulesSection({
+  rules,
+  isLoading,
+  error,
+  draft,
+  setDraft,
+  editingRuleId,
+  isSaving,
+  isMutating,
+  onEdit,
+  onCancel,
+  onSubmit,
+  onToggle,
+  onDelete
+}: {
+  rules: VerificationRule[];
+  isLoading: boolean;
+  error?: string;
+  draft: {
+    title: string;
+    description: string;
+    severity: (typeof ruleSeverityOptions)[number];
+    appliesTo: (typeof ruleScopeOptions)[number];
+  };
+  setDraft: (draft: {
+    title: string;
+    description: string;
+    severity: (typeof ruleSeverityOptions)[number];
+    appliesTo: (typeof ruleScopeOptions)[number];
+  }) => void;
+  editingRuleId: string | null;
+  isSaving: boolean;
+  isMutating: boolean;
+  onEdit: (rule: VerificationRule) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+  onToggle: (ruleId: string) => void;
+  onDelete: (ruleId: string) => void;
+}) {
+  const canSubmit =
+    draft.title.trim().length >= 3 &&
+    draft.description.trim().length >= 8 &&
+    !isSaving;
+
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-lg font-medium text-neutral-100">
+            Verification Rules
+          </h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            Project-level rules are included in AI QA Review without consuming
+            extra credits.
+          </p>
+        </div>
+        <StatusChip>{rules.filter((rule) => rule.enabled).length} enabled</StatusChip>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_1.3fr]">
+        <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+          <h3 className="font-medium text-neutral-100">
+            {editingRuleId ? "Edit rule" : "Add rule"}
+          </h3>
+          <label className="mt-4 block text-sm">
+            <span className="text-neutral-300">Title</span>
+            <input
+              value={draft.title}
+              onChange={(event) =>
+                setDraft({ ...draft, title: event.target.value })
+              }
+              className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+              placeholder="Billing changes must include regression tests"
+            />
+          </label>
+          <label className="mt-3 block text-sm">
+            <span className="text-neutral-300">Description</span>
+            <textarea
+              value={draft.description}
+              onChange={(event) =>
+                setDraft({ ...draft, description: event.target.value })
+              }
+              className="mt-2 min-h-24 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+              placeholder="Explain what QA should check before approval."
+            />
+          </label>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-neutral-300">Severity</span>
+              <select
+                value={draft.severity}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    severity: event.target.value as (typeof ruleSeverityOptions)[number]
+                  })
+                }
+                className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+              >
+                {ruleSeverityOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatStatus(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              <span className="text-neutral-300">Applies to</span>
+              <select
+                value={draft.appliesTo}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    appliesTo: event.target.value as (typeof ruleScopeOptions)[number]
+                  })
+                }
+                className="mt-2 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 outline-none transition focus:border-blue-500"
+              >
+                {ruleScopeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {formatStatus(option)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSaving
+                ? "Saving..."
+                : editingRuleId
+                  ? "Save rule"
+                  : "Add rule"}
+            </button>
+            {editingRuleId ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-100 transition hover:border-neutral-500"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {isLoading ? (
+            <p className="rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
+              Loading verification rules...
+            </p>
+          ) : null}
+          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {!isLoading && rules.length === 0 ? (
+            <p className="rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-400">
+              No rules yet. Add one to make QA stricter and more explainable.
+            </p>
+          ) : null}
+          {rules.map((rule) => (
+            <article
+              key={rule.id}
+              className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusChip>{formatStatus(rule.severity)}</StatusChip>
+                    <StatusChip>{formatStatus(rule.appliesTo)}</StatusChip>
+                    <StatusChip>{rule.enabled ? "Enabled" : "Disabled"}</StatusChip>
+                  </div>
+                  <h3 className="mt-3 font-medium text-neutral-100">
+                    {rule.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-neutral-400">
+                    {rule.description}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onEdit(rule)}
+                  className="rounded-md border border-neutral-700 px-3 py-2 text-xs text-neutral-100 transition hover:border-neutral-500"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggle(rule.id)}
+                  disabled={isMutating}
+                  className="rounded-md border border-neutral-700 px-3 py-2 text-xs text-neutral-100 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {rule.enabled ? "Disable" : "Enable"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(rule.id)}
+                  disabled={isMutating}
+                  className="rounded-md border border-red-900/70 px-3 py-2 text-xs text-red-200 transition hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );

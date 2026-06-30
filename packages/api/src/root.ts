@@ -17,6 +17,7 @@ import { releaseReportRouter } from "./routers/release-report.router";
 import { releaseBoardRouter } from "./routers/release-board.router";
 import { repositoryIntelligenceRouter } from "./routers/repository-intelligence.router";
 import { requirementEngineRouter } from "./routers/requirement-engine.router";
+import { verificationRulesRouter } from "./routers/verification-rules.router";
 import { workspaceRouter } from "./routers/workspace.router";
 
 export const appRouter = router({
@@ -38,7 +39,8 @@ export const appRouter = router({
   qaReview: qaReviewRouter,
   releaseBoard: releaseBoardRouter,
   releaseReport: releaseReportRouter,
-  requirementEngine: requirementEngineRouter
+  requirementEngine: requirementEngineRouter,
+  verificationRules: verificationRulesRouter
 });
 
 export type AppRouter = typeof appRouter;

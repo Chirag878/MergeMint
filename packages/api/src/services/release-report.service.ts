@@ -9,6 +9,7 @@ import {
   db,
   engineeringTasks,
   featureRequests,
+  githubProofPublications,
   prdRequirements,
   prds,
   prSnapshots,
@@ -65,6 +66,21 @@ type ReportTaskSummary = {
     suggestedFiles: string[];
     suggestedModules: string[];
   }>;
+};
+
+type ReportVerificationRuleResult = {
+  ruleId: string | null;
+  title: string;
+  status: "passed" | "warning" | "failed" | "not_applicable";
+  severity: "blocking" | "warning" | "info";
+  evidence: string;
+  suggestedFix: string | null;
+};
+
+type ReportProofStatus = {
+  status: string;
+  publishedAt: string | null;
+  statusContext: string | null;
 };
 
 export type ClientDeliveryReportData = {
@@ -157,6 +173,15 @@ export type ClientDeliveryReportData = {
   };
   timeline: ReportTimelineItem[];
   generatedAt: string;
+  promisedVsShipped: {
+    promised: string;
+    shipped: string;
+  };
+  knownRisks: string[];
+  finalSignOff: string;
+  shareLink: string;
+  githubProof: ReportProofStatus;
+  verificationRules: ReportVerificationRuleResult[];
 };
 
 export type DeveloperFixReportData = {
@@ -191,6 +216,9 @@ export type DeveloperFixReportData = {
     suggestedFix: string | null;
   }>;
   suggestedNextActions: string[];
+  fixPrompt: string;
+  reReviewChecklist: string[];
+  verificationRules: ReportVerificationRuleResult[];
   approval: {
     id: string;
     decision: string;
@@ -211,6 +239,12 @@ export type InternalReleaseReportData = {
   releaseReadinessVerdict: "Ready to Merge" | "Ready for Release" | "Approved with Risks";
   mergeRecommendation: string;
   technicalRisks: string[];
+  releaseChecklist: Array<{
+    label: string;
+    complete: boolean;
+  }>;
+  githubProof: ReportProofStatus;
+  verificationRules: ReportVerificationRuleResult[];
   feature: ClientDeliveryReportData["feature"];
   project: ClientDeliveryReportData["project"];
   prd: ClientDeliveryReportData["prd"];
@@ -646,6 +680,48 @@ function mapQaReview(
   };
 }
 
+function mapVerificationRuleResults(
+  review: typeof qaReviews.$inferSelect
+): ReportVerificationRuleResult[] {
+  return (review.verificationRuleResults ?? []).map((result) => ({
+    ruleId: result.ruleId,
+    title: result.title,
+    status: result.status,
+    severity: result.severity,
+    evidence: result.evidence,
+    suggestedFix: result.suggestedFix
+  }));
+}
+
+function getRuleFailureSummaries(results: ReportVerificationRuleResult[]) {
+  return results
+    .filter((result) => result.status === "failed" || result.status === "warning")
+    .map((result) => `${result.severity}: ${result.title}`);
+}
+
+async function getGithubProofStatus(input: {
+  featureRequestId: string;
+  pullRequestId: string;
+}): Promise<ReportProofStatus> {
+  const [proof] = await db
+    .select()
+    .from(githubProofPublications)
+    .where(
+      and(
+        eq(githubProofPublications.featureRequestId, input.featureRequestId),
+        eq(githubProofPublications.pullRequestId, input.pullRequestId)
+      )
+    )
+    .orderBy(desc(githubProofPublications.updatedAt))
+    .limit(1);
+
+  return {
+    status: proof?.lastPublishStatus ?? "not_published",
+    publishedAt: proof?.lastPublishedAt?.toISOString() ?? null,
+    statusContext: proof?.githubStatusContext ?? null
+  };
+}
+
 async function getReportTaskSummary(
   featureRequestId: string
 ): Promise<ReportTaskSummary> {
@@ -815,6 +891,10 @@ export async function generateReleaseReport(
     projectId: project.id
   });
   const taskSummary = await getReportTaskSummary(featureRequest.id);
+  const githubProof = await getGithubProofStatus({
+    featureRequestId: featureRequest.id,
+    pullRequestId: pullRequest.id
+  });
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -845,6 +925,15 @@ export async function generateReleaseReport(
   const mappedRequirements = mapRequirements(requirements);
   const mappedCoverage = mapCoverage(qaReviewBundle.coverage);
   const mappedFindings = mapFindings(qaReviewBundle.findings);
+  const verificationRuleResults = mapVerificationRuleResults(qaReviewBundle.review);
+  const shareToken = createShareToken();
+  const knownRisks = [
+    ...approval.remainingRisks,
+    ...mappedFindings
+      .filter((finding) => isOpenFindingStatus(finding.status))
+      .map((finding) => finding.title),
+    ...getRuleFailureSummaries(verificationRuleResults)
+  ];
   const reportData: ClientDeliveryReportData = {
     reportType: "client_delivery",
     audience: "client",
@@ -907,7 +996,21 @@ export async function generateReleaseReport(
       approvalCreatedAt: approval.createdAt,
       generatedAt
     }),
-    generatedAt: generatedAt.toISOString()
+    generatedAt: generatedAt.toISOString(),
+    promisedVsShipped: {
+      promised: featureRequest.expectedBehavior ?? featureRequest.description,
+      shipped:
+        qaReviewBundle.review.summary ??
+        `QA reviewed ${mappedCoverage.length} requirements against the linked PR.`
+    },
+    knownRisks,
+    finalSignOff:
+      approval.decision === "approved_with_risk"
+        ? "Approved with documented risks."
+        : "Approved for delivery.",
+    shareLink: `/reports/${shareToken}`,
+    githubProof,
+    verificationRules: verificationRuleResults
   };
 
   const [report] = await db
@@ -920,7 +1023,7 @@ export async function generateReleaseReport(
       approvalId: approval.id,
       title: `Client Delivery Report - ${featureRequest.title}`,
       status: "generated",
-      shareToken: createShareToken(),
+      shareToken,
       reportData: toJsonObject(reportData),
       readinessScore: qaReviewBundle.review.readinessScore,
       generatedBy: workspace.appUser.id,
@@ -1033,11 +1136,16 @@ export async function generateInternalReleaseReport(
   const mappedRequirements = mapRequirements(requirements);
   const mappedCoverage = mapCoverage(qaReviewBundle.coverage);
   const mappedFindings = mapFindings(qaReviewBundle.findings);
+  const verificationRuleResults = mapVerificationRuleResults(qaReviewBundle.review);
+  const githubProof = await getGithubProofStatus({
+    featureRequestId: featureRequest.id,
+    pullRequestId: pullRequest.id
+  });
   const verdict = getInternalReleaseVerdict(approval.decision);
   const technicalRisks = technicalRiskList({
     findings: mappedFindings,
     approvalRemainingRisks: approval.remainingRisks
-  });
+  }).concat(getRuleFailureSummaries(verificationRuleResults));
   const reportData: InternalReleaseReportData = {
     reportType: "internal_release",
     audience: "internal",
@@ -1050,6 +1158,20 @@ export async function generateInternalReleaseReport(
         ? "Approved with documented risks. Review the risk notes before merge or release."
         : "Ready to merge or release based on saved requirement coverage, PR evidence, QA review, and human approval.",
     technicalRisks,
+    releaseChecklist: [
+      { label: "PRD generated", complete: true },
+      { label: "Engineering tasks summarized", complete: taskSummary.total > 0 },
+      { label: "GitHub PR linked", complete: true },
+      { label: "AI QA reviewed", complete: true },
+      { label: "Human approval recorded", complete: true },
+      {
+        label: "GitHub Proof published",
+        complete:
+          githubProof.status === "posted" || githubProof.status === "updated"
+      }
+    ],
+    githubProof,
+    verificationRules: verificationRuleResults,
     feature: {
       id: featureRequest.id,
       title: featureRequest.title,
@@ -1187,6 +1309,10 @@ export async function generateDeveloperFixReport(
     projectId: project.id
   });
   const taskSummary = await getReportTaskSummary(featureRequest.id);
+  const githubProof = await getGithubProofStatus({
+    featureRequestId: featureRequest.id,
+    pullRequestId: pullRequest.id
+  });
   const qaReviewBundle = await getLatestQaReviewOrThrow(
     featureRequest.id,
     organizationId
@@ -1195,6 +1321,7 @@ export async function generateDeveloperFixReport(
   const mappedRequirements = mapRequirements(requirements);
   const mappedCoverage = mapCoverage(qaReviewBundle.coverage);
   const mappedFindings = mapFindings(qaReviewBundle.findings);
+  const verificationRuleResults = mapVerificationRuleResults(qaReviewBundle.review);
   const riskyCoverage = mappedCoverage.filter((coverage) =>
     isRiskyCoverageStatus(coverage.status)
   );
@@ -1274,6 +1401,21 @@ export async function generateDeveloperFixReport(
       "Push updates to the same PR branch.",
       "Refresh the PR snapshot and rerun AI QA review."
     ],
+    fixPrompt: [
+      `Fix ${featureRequest.title} in PR #${pullRequest.githubPrNumber}.`,
+      "Use the listed missing requirements, open findings, and verification rule failures.",
+      "Do not add unrelated scope. Add or update tests for every fixed risk.",
+      ...verificationRuleResults
+        .filter((result) => result.status === "failed" || result.status === "warning")
+        .map((result) => `Rule: ${result.title} - ${result.suggestedFix ?? result.evidence}`)
+    ].join("\n"),
+    reReviewChecklist: [
+      "Apply fixes to the same PR branch.",
+      "Refresh the PR snapshot in MergeMint.",
+      "Run AI QA Review again.",
+      "Publish GitHub Proof manually only after the updated review is acceptable."
+    ],
+    verificationRules: verificationRuleResults,
     approval: latestApproval
       ? {
           id: latestApproval.approval.id,

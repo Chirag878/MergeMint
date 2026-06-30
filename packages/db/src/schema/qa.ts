@@ -23,6 +23,7 @@ import { pullRequests } from "./github";
 import { organizations } from "./organizations";
 import { prds } from "./prds";
 import type { JsonObject, RequirementEvidence, TaskCoverage, TokenUsage } from "./types";
+import type { VerificationRuleEvaluation } from "./verification-rules";
 
 export const aiRuns = pgTable(
   "ai_runs",
@@ -85,6 +86,11 @@ export const qaReviews = pgTable(
     summary: text("summary"),
     taskCoverage:
       jsonb("task_coverage").$type<TaskCoverage[]>().default([]).notNull(),
+    verificationRuleResults:
+      jsonb("verification_rule_results")
+        .$type<VerificationRuleEvaluation[]>()
+        .default([])
+        .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull()

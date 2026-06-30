@@ -830,7 +830,8 @@ async function buildProofGateView(featureRequestId: string, organizationId: stri
           readinessScore: graph.latestReview.readinessScore,
           confidenceScore: graph.latestReview.confidenceScore,
           reviewVersion: graph.latestReview.reviewVersion,
-          createdAt: graph.latestReview.createdAt
+          createdAt: graph.latestReview.createdAt,
+          verificationRules: graph.latestReview.verificationRuleResults ?? []
         }
       : null,
     coverageMap,
@@ -888,6 +889,13 @@ function buildProofComment(input: Awaited<ReturnType<typeof buildProofGateView>>
     `**Feature:** ${input.feature.title}`,
     `**Project/Repo:** ${input.project.name}${input.pullRequest?.repository ? ` / ${input.pullRequest.repository}` : ""}`,
     `**Merge recommendation:** ${input.mergeRecommendation}`,
+    input.latestQaReview?.verificationRules?.length
+      ? `**Verification rules:** ${
+          input.latestQaReview.verificationRules.filter(
+            (rule) => rule.status === "failed" || rule.status === "warning"
+          ).length
+        } need attention / ${input.latestQaReview.verificationRules.length} evaluated`
+      : "**Verification rules:** Not evaluated for this review",
     input.stale
       ? "**Stale warning:** This PR changed after the latest MergeMint review. Re-run QA before publishing proof."
       : null,

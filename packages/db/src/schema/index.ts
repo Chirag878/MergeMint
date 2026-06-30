@@ -9,6 +9,7 @@ export * from "./prds";
 export * from "./tasks";
 export * from "./github";
 export * from "./qa";
+export * from "./verification-rules";
 export * from "./approvals";
 export * from "./release-reports";
 export * from "./billing";

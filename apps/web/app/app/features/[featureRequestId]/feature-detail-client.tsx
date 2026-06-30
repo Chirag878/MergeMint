@@ -3882,6 +3882,7 @@ type QAReviewBundle = {
     confidenceScore: number | null;
     summary: string | null;
     createdAt: Date | string;
+    verificationRuleResults?: VerificationRuleResult[];
   };
   coverage: Array<{
     id: string;
@@ -3937,6 +3938,10 @@ type ReleaseReportView = {
 };
 
 type ProofGateView = {
+  feature: {
+    id: string;
+    title: string;
+  };
   pullRequest: {
     number: number;
     title: string;
@@ -3951,6 +3956,7 @@ type ProofGateView = {
     confidenceScore: number | null;
     reviewVersion: number;
     createdAt: Date | string;
+    verificationRules?: VerificationRuleResult[];
   } | null;
   coverageMap: {
     summary: {
@@ -4042,6 +4048,15 @@ type ProofGateView = {
     lastPublishedCommitSha: string | null;
     lastPublishedAt: Date | string | null;
   } | null;
+};
+
+type VerificationRuleResult = {
+  ruleId: string | null;
+  title: string;
+  status: "passed" | "warning" | "failed" | "not_applicable";
+  severity: "blocking" | "warning" | "info";
+  evidence: string;
+  suggestedFix: string | null;
 };
 
 type ApprovalRiskSummary = {
@@ -4316,6 +4331,10 @@ function ProofGatePanel({
             />
           </div>
 
+          <VerificationRuleResultsPanel
+            results={data.latestQaReview?.verificationRules ?? []}
+          />
+
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
             <article className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -4406,6 +4425,11 @@ function ProofGatePanel({
                   emptyText="No suggested tests recorded."
                 />
               </article>
+
+              <TerminalModePanel
+                featureId={data.feature.id}
+                prNumber={data.pullRequest?.number ?? null}
+              />
 
               <article className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
                 <h3 className="font-medium text-neutral-100">
@@ -4625,6 +4649,10 @@ function AIQAReviewSection({
             </div>
           </div>
 
+          <VerificationRuleResultsPanel
+            results={reviewBundle.review.verificationRuleResults ?? []}
+          />
+
           <section>
             <h3 className="text-base font-medium text-neutral-100">
               Requirement Coverage Matrix
@@ -4706,6 +4734,145 @@ function AIQAReviewSection({
         <EmptyText>No QA review has been run yet.</EmptyText>
       ) : null}
     </section>
+  );
+}
+
+function VerificationRuleResultsPanel({
+  results
+}: {
+  results: VerificationRuleResult[];
+}) {
+  return (
+    <section className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-medium text-neutral-100">
+            Verification Rules
+          </h3>
+          <p className="mt-1 text-sm text-neutral-500">
+            Project rules evaluated as part of this QA review.
+          </p>
+        </div>
+        <Badge>{results.length} evaluated</Badge>
+      </div>
+      {results.length === 0 ? (
+        <p className="mt-4 text-sm text-neutral-500">
+          Verification rules were not evaluated for this review.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {results.map((result, index) => (
+            <article
+              key={result.ruleId ?? `${result.title}-${index}`}
+              className="rounded-md border border-neutral-800 bg-neutral-900 p-3"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="font-medium text-neutral-100">
+                    {result.title}
+                  </h4>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    {result.evidence}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge status={result.status} />
+                  <Badge>{result.severity}</Badge>
+                </div>
+              </div>
+              {result.suggestedFix ? (
+                <p className="mt-3 text-sm text-blue-200">
+                  Suggested fix: {result.suggestedFix}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TerminalModePanel({
+  featureId,
+  prNumber
+}: {
+  featureId: string;
+  prNumber: number | null;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const prPlaceholder = prNumber ? String(prNumber) : "<prNumber>";
+  const commands = [
+    {
+      label: "CLI preview command",
+      value: `npx mergemint verify --feature ${featureId} --pr ${prPlaceholder}`
+    },
+    {
+      label: "Report preview command",
+      value: `npx mergemint report --feature ${featureId}`
+    },
+    {
+      label: "Rules preview command",
+      value: `npx mergemint rules check --feature ${featureId}`
+    },
+    {
+      label: "GitHub Action YAML preview",
+      value: [
+        "name: MergeMint Verification",
+        "",
+        "on:",
+        "  pull_request:",
+        "    types: [opened, synchronize, reopened, ready_for_review]",
+        "",
+        "jobs:",
+        "  verify:",
+        "    runs-on: ubuntu-latest",
+        "    steps:",
+        "      - uses: mergemint/verify-pr@v1",
+        "        with:",
+        `          feature_id: ${featureId}`,
+        `          pr_number: ${prPlaceholder}`
+      ].join("\n")
+    }
+  ];
+
+  async function copy(label: string, value: string) {
+    await navigator.clipboard.writeText(value);
+    setCopied(label);
+    window.setTimeout(() => setCopied(null), 1800);
+  }
+
+  return (
+    <article className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+      <h3 className="font-medium text-neutral-100">Terminal Mode</h3>
+      <p className="mt-2 text-sm leading-6 text-neutral-400">
+        CLI preview. Today, GitHub App + web dashboard is the supported path.
+      </p>
+      <div className="mt-4 space-y-3">
+        {commands.map((command) => (
+          <div
+            key={command.label}
+            className="rounded-md border border-neutral-800 bg-neutral-900 p-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-medium text-neutral-200">
+                {command.label}
+              </p>
+              <button
+                type="button"
+                onClick={() => copy(command.label, command.value)}
+                className="rounded-md border border-neutral-700 px-2.5 py-1.5 text-xs text-neutral-100 transition hover:border-neutral-500"
+              >
+                {copied === command.label ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-md bg-neutral-950 p-3 text-xs text-neutral-300">
+              {command.value}
+            </pre>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 

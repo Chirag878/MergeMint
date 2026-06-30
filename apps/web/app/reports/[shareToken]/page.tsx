@@ -86,6 +86,31 @@ export default async function PublicReleaseReportPage({
         <DecisionBanner banner={decisionBanner} />
 
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+          <SectionHeading
+            eyebrow="Promised vs shipped"
+            title="Delivery summary"
+          />
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                What was promised
+              </p>
+              <p className="mt-2 text-sm leading-6 text-neutral-300">
+                {data.promisedVsShipped?.promised ?? data.feature.summary}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-800 bg-neutral-950 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                What was shipped
+              </p>
+              <p className="mt-2 text-sm leading-6 text-neutral-300">
+                {data.promisedVsShipped?.shipped ?? data.qaReview.summary}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading eyebrow="Executive summary" title={data.feature.title} />
           <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
             <div>
@@ -234,12 +259,6 @@ export default async function PublicReleaseReportPage({
                   <p className="mt-3 text-sm leading-6 text-neutral-300">
                     {finding.description}
                   </p>
-                  {finding.file ? (
-                    <p className="mt-3 font-mono text-xs text-neutral-500">
-                      {finding.file}
-                      {finding.line ? `:${finding.line}` : ""}
-                    </p>
-                  ) : null}
                   {finding.suggestedFix ? (
                     <p className="mt-3 rounded-md border border-blue-900 bg-blue-950/30 p-3 text-sm text-blue-100">
                       Suggested fix: {finding.suggestedFix}
@@ -254,6 +273,13 @@ export default async function PublicReleaseReportPage({
             </p>
           )}
         </section>
+
+        <VerificationRulesReportSection
+          results={data.verificationRules ?? []}
+          audience="client"
+        />
+
+        <ProofStatusSection proof={data.githubProof} />
 
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
@@ -283,6 +309,9 @@ export default async function PublicReleaseReportPage({
                   No remaining risks were documented by the reviewer.
                 </p>
               )}
+              <p className="mt-4 rounded-md border border-emerald-900/60 bg-emerald-950/25 p-3 text-sm text-emerald-100">
+                Final sign-off: {data.finalSignOff ?? formatDecision(data.approval.decision)}
+              </p>
             </div>
           </div>
         </section>
@@ -415,6 +444,30 @@ function InternalReleaseReportPage({
 
         {data.taskSummary ? (
           <TaskSummarySection summary={data.taskSummary} audience="internal" />
+        ) : null}
+
+        <VerificationRulesReportSection
+          results={data.verificationRules ?? []}
+          audience="internal"
+        />
+
+        <ProofStatusSection proof={data.githubProof} />
+
+        {data.releaseChecklist?.length ? (
+          <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+            <SectionHeading eyebrow="Release checklist" title="Operational state" />
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {data.releaseChecklist.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-center justify-between gap-3 rounded-md border border-neutral-800 bg-neutral-950 p-4"
+                >
+                  <span className="text-sm text-neutral-200">{item.label}</span>
+                  <StatusPill status={item.complete ? "passed" : "pending"} />
+                </div>
+              ))}
+            </div>
+          </section>
         ) : null}
 
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
@@ -605,6 +658,11 @@ function DeveloperFixReportPage({ data }: { data: DeveloperFixReportData }) {
           <TaskSummarySection summary={data.taskSummary} audience="developer" />
         ) : null}
 
+        <VerificationRulesReportSection
+          results={data.verificationRules ?? []}
+          audience="developer"
+        />
+
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading
             eyebrow="Fix these first"
@@ -672,6 +730,20 @@ function DeveloperFixReportPage({ data }: { data: DeveloperFixReportData }) {
         <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
           <SectionHeading eyebrow="Next actions" title="How to get this PR approved" />
           <StringList title="Steps" items={data.suggestedNextActions} />
+          {data.fixPrompt ? (
+            <div className="mt-5 rounded-md border border-neutral-800 bg-neutral-950 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                Copyable fix prompt
+              </p>
+              <pre className="mt-3 whitespace-pre-wrap text-sm leading-6 text-neutral-300">
+                {data.fixPrompt}
+              </pre>
+            </div>
+          ) : null}
+          <StringList
+            title="Re-review checklist"
+            items={data.reReviewChecklist ?? []}
+          />
           {data.approval?.note ? (
             <p className="mt-4 rounded-md border border-neutral-800 bg-neutral-950 p-4 text-sm leading-6 text-neutral-300">
               Reviewer note: {data.approval.note}
@@ -685,6 +757,92 @@ function DeveloperFixReportPage({ data }: { data: DeveloperFixReportData }) {
         </footer>
       </article>
     </main>
+  );
+}
+
+function VerificationRulesReportSection({
+  results,
+  audience
+}: {
+  results: Array<{
+    title: string;
+    status: string;
+    severity: string;
+    evidence: string;
+    suggestedFix: string | null;
+  }>;
+  audience: "client" | "developer" | "internal";
+}) {
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+      <SectionHeading
+        eyebrow="Verification rules"
+        title={
+          results.length > 0
+            ? `${results.length} project rule${results.length === 1 ? "" : "s"} evaluated`
+            : "Rules not evaluated"
+        }
+      />
+      {results.length === 0 ? (
+        <p className="mt-4 text-sm text-neutral-500">
+          Verification rules were not evaluated for this review.
+        </p>
+      ) : (
+        <div className="mt-5 space-y-3">
+          {results.map((result, index) => (
+            <article
+              key={`${result.title}-${index}`}
+              className="rounded-md border border-neutral-800 bg-neutral-950 p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-medium text-neutral-100">{result.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-neutral-300">
+                    {result.evidence}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusPill status={result.status} />
+                  <SeverityPill severity={result.severity} />
+                </div>
+              </div>
+              {audience !== "client" && result.suggestedFix ? (
+                <p className="mt-3 rounded-md border border-blue-900 bg-blue-950/30 p-3 text-sm text-blue-100">
+                  Suggested fix: {result.suggestedFix}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProofStatusSection({
+  proof
+}: {
+  proof?: {
+    status: string;
+    publishedAt: string | null;
+    statusContext: string | null;
+  };
+}) {
+  return (
+    <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-6">
+      <SectionHeading eyebrow="GitHub Proof" title="Publication status" />
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <Metric label="Status" value={formatLabel(proof?.status ?? "not_published")} />
+        <Metric
+          label="Published"
+          value={proof?.publishedAt ? formatDate(proof.publishedAt) : "Not published"}
+        />
+        <Metric
+          label="Context"
+          value={proof?.statusContext ?? "Not created"}
+        />
+      </div>
+    </section>
   );
 }
 

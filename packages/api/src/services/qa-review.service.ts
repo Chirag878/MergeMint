@@ -22,9 +22,11 @@ import {
   qaRequirementCoverage,
   qaReviews,
   usageCounters,
+  verificationRules,
   type JsonObject,
   type RequirementEvidence,
-  type TokenUsage
+  type TokenUsage,
+  type VerificationRuleEvaluation
 } from "@veriflow/db";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
@@ -235,6 +237,45 @@ function toRequirementEvidence(evidence: string[]): RequirementEvidence {
   };
 }
 
+function getRuleEvaluationFallback(
+  rules: Array<typeof verificationRules.$inferSelect>,
+  results: QAReviewOutput["verificationRules"]
+): VerificationRuleEvaluation[] {
+  if (rules.length === 0) {
+    return [];
+  }
+
+  const resultByRuleId = new Map(
+    results
+      .filter((result) => result.ruleId)
+      .map((result) => [result.ruleId as string, result])
+  );
+
+  return rules.map((rule) => {
+    const result = resultByRuleId.get(rule.id);
+
+    if (result) {
+      return {
+        ruleId: rule.id,
+        title: result.title || rule.title,
+        status: result.status,
+        severity: result.severity,
+        evidence: result.evidence,
+        suggestedFix: result.suggestedFix
+      };
+    }
+
+    return {
+      ruleId: rule.id,
+      title: rule.title,
+      status: "not_applicable",
+      severity: rule.severity,
+      evidence: "Rule evaluation not available in this review.",
+      suggestedFix: null
+    };
+  });
+}
+
 async function hasClarificationAnswerAfterPrd(input: {
   featureRequestId: string;
   prdCreatedAt: Date;
@@ -409,6 +450,17 @@ export async function runQaReviewForFeatureRequest(
     organizationId: workspace.activeOrganization.id,
     projectId: featureRequest.projectId
   });
+  const enabledRules = await db
+    .select()
+    .from(verificationRules)
+    .where(
+      and(
+        eq(verificationRules.organizationId, workspace.activeOrganization.id),
+        eq(verificationRules.projectId, featureRequest.projectId),
+        eq(verificationRules.enabled, true)
+      )
+    )
+    .orderBy(verificationRules.createdAt);
   const qaInput: QAReviewInput = {
     featureRequest: {
       title: featureRequest.title,
@@ -461,7 +513,14 @@ export async function runQaReviewForFeatureRequest(
     diffTruncated:
       diffText.length > 120_000 ||
       diffText.includes("[TRUNCATED: diff exceeded maximum snapshot size]"),
-    repositoryContext
+    repositoryContext,
+    verificationRules: enabledRules.map((rule) => ({
+      id: rule.id,
+      title: rule.title,
+      description: rule.description,
+      severity: rule.severity,
+      appliesTo: rule.appliesTo
+    }))
   };
 
   const aiRun = await createAIRun({
@@ -508,7 +567,11 @@ export async function runQaReviewForFeatureRequest(
             evidence: coverageItem.evidence,
             suggestedFiles: coverageItem.suggestedFiles,
             concern: coverageItem.concern
-          }))
+          })),
+          verificationRuleResults: getRuleEvaluationFallback(
+            enabledRules,
+            aiResult.data.verificationRules
+          )
         })
         .returning();
 

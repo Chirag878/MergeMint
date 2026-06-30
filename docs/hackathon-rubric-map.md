@@ -5,6 +5,7 @@
 Implemented:
 
 - Feature intake
+- Project-level Verification Rules
 - Requirement clarification
 - PRD generation
 - Engineering task generation
@@ -13,7 +14,7 @@ Implemented:
 - Requirement coverage map
 - Developer fix pack
 - Human approval decisions
-- Release reports
+- Client, Developer Fix, and Internal Release reports
 - GitHub proof comment/status
 
 ## AI Agent Quality - 20
@@ -25,13 +26,13 @@ Implemented:
 - Task agent
 - Repository analysis agent
 - QA agent
+- Verification Rules in QA context
 - Release readiness shaping
 - Requirement coverage mapping from stored QA evidence
-- Developer fix pack with suggested fixes, tests, and coding-agent prompt
+- Developer fix pack with suggested fixes, tests, verification rule failures, and coding-agent prompt
 
 Future improvement:
 
-- Project-level verification rule CRUD and direct QA prompt injection.
 - AI review chat grounded only in current feature/workspace context.
 
 ## GitHub Integration - 15
@@ -57,6 +58,8 @@ Implemented:
 - Approval and changes-requested decisions
 - Release reports
 - Release evidence graph in the proof gate panel
+- Verification rule results in QA, proof, and reports
+- Client-safe report sharing with developer/internal separation
 
 ## tRPC Monorepo & Engineering Quality - 15
 
@@ -70,6 +73,8 @@ Implemented:
 - Workspace-scoped resource access
 - Idempotent Razorpay activation
 - Sticky GitHub proof publication record
+- Verification Rules CRUD router/service with workspace-scoped access checks
+- QA review rule-result snapshot stored with each review
 
 ## SaaS Product Experience - 10
 
@@ -84,11 +89,15 @@ Implemented:
 - Report sharing
 - Guided workflow surfaces
 - CLI preview page
+- Terminal Mode preview panel
 - Terms, privacy, and refund pages
 - Public pricing checkout safety
+- Report visibility and safety language for client-safe sharing
 
 ## Known Gaps
 
 - Team invite acceptance and role-specific client viewer experiences are not fully implemented in this pass.
-- Verification Rules CRUD and prompt injection remain the next highest-value backend foundation.
-- CLI and GitHub Action are preview/future surfaces, not published packages.
+- CLI and GitHub Action remain preview/future surfaces, not published packages.
+- Share-token report access is client-safe today; future `client_viewer` role integration can add account-specific access controls.
+- Verification Rules are evaluated as part of normal QA review and do not consume separate credits.
+- Report sharing and Terminal Mode preview do not consume credits.
