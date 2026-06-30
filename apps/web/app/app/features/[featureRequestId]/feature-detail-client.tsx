@@ -3673,12 +3673,28 @@ type ProofGateView = {
   };
   mergeRecommendation: string;
   verdict: string;
+  githubAccess: {
+    ok: boolean;
+    reason:
+      | "github_app_not_installed"
+      | "repo_not_selected"
+      | "missing_permissions"
+      | "pr_not_found"
+      | "token_resolution_failed"
+      | "github_api_error"
+      | null;
+    message: string | null;
+    connectUrl: string | null;
+    updateUrl: string | null;
+    canUseDevFallback: boolean;
+  };
   stale: boolean;
   reportUrl: string | null;
   proof: {
     commentId: number | null;
     statusContext: string | null;
     lastPublishStatus: string;
+    lastPublishReason: string | null;
     lastPublishError: string | null;
     lastPublishedCommitSha: string | null;
     lastPublishedAt: Date | string | null;
@@ -3800,10 +3816,22 @@ function ProofGatePanel({
     window.setTimeout(() => setCopyMessage(null), 1800);
   }
 
-  const canPublish = Boolean(data?.pullRequest && data.latestQaReview && !isPublishing);
+  const canPublish = Boolean(
+    data?.pullRequest &&
+      data.latestQaReview &&
+      data.githubAccess.ok &&
+      !isPublishing
+  );
   const publishLabel = data?.proof?.commentId
     ? "Update GitHub Proof"
     : "Publish Proof to GitHub";
+  const showConnectCta =
+    data?.githubAccess.reason === "github_app_not_installed" ||
+    (!data?.githubAccess.updateUrl && Boolean(data?.githubAccess.connectUrl));
+  const showUpdateCta =
+    data?.githubAccess.reason === "repo_not_selected" ||
+    data?.githubAccess.reason === "missing_permissions" ||
+    data?.githubAccess.reason === "token_resolution_failed";
 
   return (
     <section className="rounded-lg border border-neutral-800 bg-neutral-900 p-5">
@@ -3833,6 +3861,46 @@ function ProofGatePanel({
 
       {data ? (
         <div className="mt-5 space-y-5">
+          {!data.githubAccess.ok ? (
+            <div className="rounded-md border border-amber-800 bg-amber-950/30 p-4 text-sm text-amber-100">
+              <p className="font-semibold">
+                {data.githubAccess.message ??
+                  "GitHub access needs attention before proof can be published."}
+              </p>
+              <p className="mt-2 text-xs text-amber-200/80">
+                Reason: {data.githubAccess.reason ?? "unknown"}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {showConnectCta && data.githubAccess.connectUrl ? (
+                  <a
+                    href={data.githubAccess.connectUrl}
+                    className="rounded-md bg-amber-200 px-3 py-2 text-xs font-semibold text-amber-950"
+                  >
+                    Connect GitHub App
+                  </a>
+                ) : null}
+                {showUpdateCta && data.githubAccess.updateUrl ? (
+                  <a
+                    href={data.githubAccess.updateUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-md bg-amber-200 px-3 py-2 text-xs font-semibold text-amber-950"
+                  >
+                    Update GitHub App Access
+                  </a>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  disabled={isPublishing}
+                  className="rounded-md border border-amber-700 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isPublishing ? "Retrying..." : "Retry Publish Proof"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {data.stale ? (
             <p className="rounded-md border border-amber-800 bg-amber-950/30 p-3 text-sm text-amber-200">
               This PR changed after the latest MergeMint review. Re-run QA
@@ -4003,7 +4071,12 @@ function ProofGatePanel({
               </p>
             </div>
             {data.proof?.lastPublishError ? (
-              <p className="mt-3 text-red-300">{data.proof.lastPublishError}</p>
+              <p className="mt-3 text-red-300">
+                {data.proof.lastPublishReason
+                  ? `${data.proof.lastPublishReason}: `
+                  : ""}
+                {data.proof.lastPublishError}
+              </p>
             ) : null}
           </div>
         </div>

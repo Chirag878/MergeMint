@@ -442,17 +442,19 @@ function toGitHubError(error: unknown) {
     }
 
     return new Error(
-      "This PR may be private or inaccessible. Add GITHUB_TOKEN or connect GitHub App later."
+      "GitHub access is not connected for this repository. Install or update the MergeMint GitHub App for this repo, then try again."
     );
   }
 
   if (status === 403 || status === 401) {
     if (message.toLowerCase().includes("rate limit")) {
-      return new Error("GitHub rate limit reached. Add GITHUB_TOKEN or try again later.");
+      return new Error(
+        "GitHub API rate limit reached. Try again later or verify the MergeMint GitHub App installation."
+      );
     }
 
     return new Error(
-      "This PR may be private or inaccessible. Add GITHUB_TOKEN or connect GitHub App later."
+      "MergeMint GitHub App is installed but missing required permissions for PR comments/status checks. Update app permissions and reinstall/approve access."
     );
   }
 

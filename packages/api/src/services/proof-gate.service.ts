@@ -5,6 +5,7 @@ import {
   db,
   engineeringTasks,
   featureRequests,
+  githubAppInstallations,
   githubProofPublications,
   prSnapshots,
   prdRequirements,
@@ -18,7 +19,13 @@ import {
   repositories,
   type JsonObject
 } from "@veriflow/db";
-import { createCommitStatus, upsertPullRequestComment } from "@veriflow/github";
+import {
+  createCommitStatus,
+  getGitHubAppInstallUrl,
+  hasFallbackGitHubToken,
+  hasGitHubAppConfig,
+  upsertPullRequestComment
+} from "@veriflow/github";
 import { assertRoleCan } from "../authz";
 import type { TRPCContext } from "../context";
 import { ensureUserWorkspace } from "./workspace-bootstrap.service";
@@ -39,6 +46,22 @@ type CoverageStatus =
   | "needs_human_approval";
 
 type CoverageSeverity = "blocking" | "warning" | "info";
+type GitHubAccessReason =
+  | "github_app_not_installed"
+  | "repo_not_selected"
+  | "missing_permissions"
+  | "pr_not_found"
+  | "token_resolution_failed"
+  | "github_api_error";
+
+type GitHubAccessState = {
+  ok: boolean;
+  reason: GitHubAccessReason | null;
+  message: string | null;
+  connectUrl: string | null;
+  updateUrl: string | null;
+  canUseDevFallback: boolean;
+};
 
 function toBootstrapInput(ctx: ProtectedContext) {
   return {
@@ -57,6 +80,152 @@ function toIso(value?: Date | null) {
 
 function getPublicAppUrl() {
   return process.env.NEXT_PUBLIC_APP_URL;
+}
+
+function getGitHubInstallationManageUrl(installationId?: number | null) {
+  return installationId
+    ? `https://github.com/settings/installations/${installationId}`
+    : null;
+}
+
+function readPermission(
+  installation: typeof githubAppInstallations.$inferSelect | null,
+  name: string
+) {
+  const permissions = installation?.permissions;
+
+  if (!permissions || typeof permissions !== "object") {
+    return null;
+  }
+
+  const value = (permissions as Record<string, unknown>)[name];
+  return typeof value === "string" ? value : null;
+}
+
+function hasWritePermission(
+  installation: typeof githubAppInstallations.$inferSelect | null,
+  name: string
+) {
+  const value = readPermission(installation, name);
+  return value === "write" || value === "admin";
+}
+
+function hasReadPermission(
+  installation: typeof githubAppInstallations.$inferSelect | null,
+  name: string
+) {
+  const value = readPermission(installation, name);
+  return value === "read" || value === "write" || value === "admin";
+}
+
+function getMissingPermissionNames(
+  installation: typeof githubAppInstallations.$inferSelect | null
+) {
+  if (!installation) {
+    return [];
+  }
+
+  const missing: string[] = [];
+
+  if (!hasReadPermission(installation, "pull_requests")) {
+    missing.push("Pull requests: read");
+  }
+
+  if (
+    !hasWritePermission(installation, "issues") &&
+    !hasWritePermission(installation, "pull_requests")
+  ) {
+    missing.push("Issues or pull requests: write");
+  }
+
+  if (!hasWritePermission(installation, "statuses")) {
+    missing.push("Commit statuses: write");
+  }
+
+  return missing;
+}
+
+function buildGitHubAccessState(input: {
+  repository: typeof repositories.$inferSelect | null;
+  installation: typeof githubAppInstallations.$inferSelect | null;
+}): GitHubAccessState {
+  const installUrl = getGitHubAppInstallUrl();
+  const appConfigured = hasGitHubAppConfig();
+  const devFallback = hasFallbackGitHubToken() && !appConfigured;
+
+  if (!input.repository) {
+    return {
+      ok: false,
+      reason: "pr_not_found",
+      message: "Linked GitHub repository was not found.",
+      connectUrl: installUrl,
+      updateUrl: null,
+      canUseDevFallback: devFallback
+    };
+  }
+
+  if (!input.repository.githubAppInstallationId) {
+    return {
+      ok: devFallback,
+      reason: devFallback ? null : "github_app_not_installed",
+      message: devFallback
+        ? null
+        : "GitHub access is not connected for this repository. Install or update the MergeMint GitHub App for this repo, then try again.",
+      connectUrl: installUrl,
+      updateUrl: null,
+      canUseDevFallback: devFallback
+    };
+  }
+
+  const updateUrl = getGitHubInstallationManageUrl(
+    input.repository.githubAppInstallationId
+  );
+
+  if (!input.installation) {
+    return {
+      ok: false,
+      reason: "token_resolution_failed",
+      message:
+        "GitHub App installation metadata was not found for this workspace. Reconnect the MergeMint GitHub App, then try again.",
+      connectUrl: installUrl,
+      updateUrl,
+      canUseDevFallback: devFallback
+    };
+  }
+
+  if (!input.repository.githubAppSelected) {
+    return {
+      ok: false,
+      reason: "repo_not_selected",
+      message:
+        "GitHub access is not connected for this repository. Install or update the MergeMint GitHub App for this repo, then try again.",
+      connectUrl: installUrl,
+      updateUrl,
+      canUseDevFallback: devFallback
+    };
+  }
+
+  const missingPermissions = getMissingPermissionNames(input.installation);
+  if (missingPermissions.length > 0) {
+    return {
+      ok: false,
+      reason: "missing_permissions",
+      message:
+        "MergeMint GitHub App is installed but missing required permissions for PR comments/status checks. Update app permissions and reinstall/approve access.",
+      connectUrl: installUrl,
+      updateUrl,
+      canUseDevFallback: devFallback
+    };
+  }
+
+  return {
+    ok: true,
+    reason: null,
+    message: null,
+    connectUrl: installUrl,
+    updateUrl,
+    canUseDevFallback: devFallback
+  };
 }
 
 function summarizeEvidence(value: unknown) {
@@ -315,6 +484,25 @@ async function getScopedFeatureGraph(featureRequestId: string, organizationId: s
           .then((rows) => rows[0] ?? null)
       : Promise.resolve(null)
   ]);
+  const installation = repository?.githubAppInstallationId
+    ? await db
+        .select()
+        .from(githubAppInstallations)
+        .where(
+          and(
+            eq(
+              githubAppInstallations.organizationId,
+              row.feature.organizationId
+            ),
+            eq(
+              githubAppInstallations.installationId,
+              repository.githubAppInstallationId
+            )
+          )
+        )
+        .limit(1)
+        .then((rows) => rows[0] ?? null)
+    : null;
 
   return {
     ...row,
@@ -329,7 +517,8 @@ async function getScopedFeatureGraph(featureRequestId: string, organizationId: s
     findings,
     snapshot,
     proof,
-    repository
+    repository,
+    installation
   };
 }
 
@@ -610,6 +799,10 @@ async function buildProofGateView(featureRequestId: string, organizationId: stri
       graph.snapshot?.createdAt &&
       graph.snapshot.createdAt > graph.latestReview.createdAt
   );
+  const githubAccess = buildGitHubAccessState({
+    repository: graph.repository,
+    installation: graph.installation
+  });
 
   return {
     feature: {
@@ -651,6 +844,7 @@ async function buildProofGateView(featureRequestId: string, organizationId: stri
     findingCounts,
     mergeRecommendation,
     verdict,
+    githubAccess,
     stale: prUpdatedAfterLastReview,
     reportUrl: graph.latestClientReport
       ? `/reports/${graph.latestClientReport.shareToken}`
@@ -661,6 +855,10 @@ async function buildProofGateView(featureRequestId: string, organizationId: stri
           commentId: graph.proof.githubCommentId,
           statusContext: graph.proof.githubStatusContext,
           lastPublishStatus: graph.proof.lastPublishStatus,
+          lastPublishReason:
+            graph.proof.lastPublishStatus === "failed"
+              ? "github_api_error"
+              : null,
           lastPublishError: graph.proof.lastPublishError,
           lastPublishedCommitSha: graph.proof.lastPublishedCommitSha,
           lastPublishedAt: graph.proof.lastPublishedAt
@@ -779,6 +977,20 @@ export async function publishGitHubProof(ctx: ProtectedContext, featureRequestId
     });
   }
 
+  const githubAccess = buildGitHubAccessState({
+    repository: graph.repository,
+    installation: graph.installation
+  });
+
+  if (!githubAccess.ok) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        githubAccess.message ??
+        "GitHub access is not connected for this repository. Install or update the MergeMint GitHub App for this repo, then try again."
+    });
+  }
+
   const now = new Date();
   const existingProof = graph.proof;
   const proofRecordValues = {
@@ -869,6 +1081,8 @@ export async function publishGitHubProof(ctx: ProtectedContext, featureRequestId
             commentId: updated.githubCommentId,
             statusContext: updated.githubStatusContext,
             lastPublishStatus: updated.lastPublishStatus,
+            lastPublishReason:
+              updated.lastPublishStatus === "failed" ? "github_api_error" : null,
             lastPublishError: updated.lastPublishError,
             lastPublishedCommitSha: updated.lastPublishedCommitSha,
             lastPublishedAt: updated.lastPublishedAt
