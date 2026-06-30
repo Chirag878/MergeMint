@@ -31,7 +31,9 @@ export const billingRouter = router({
       z.object({
         razorpayOrderId: z.string().min(1),
         razorpayPaymentId: z.string().min(1),
-        razorpaySignature: z.string().min(1)
+        razorpaySignature: z.string().min(1),
+        billingPaymentId: z.string().uuid().optional(),
+        planKey: z.string().min(1).optional()
       })
     )
     .mutation(({ ctx, input }) => verifyCheckoutPayment(ctx, input)),

@@ -78,7 +78,10 @@ export function ProtectedCheckoutButton({
       router.push("/app/welcome?payment=success");
       router.refresh();
     },
-    onError: (error) => setMessage(error.message)
+    onError: () =>
+      setMessage(
+        "Payment received. Activation pending manual verification. Please do not pay again. We will activate your plan within 24 hours."
+      )
   });
 
   async function startCheckout() {
@@ -104,7 +107,9 @@ export function ProtectedCheckoutButton({
           verifyPayment.mutate({
             razorpayOrderId: response.razorpay_order_id,
             razorpayPaymentId: response.razorpay_payment_id,
-            razorpaySignature: response.razorpay_signature
+            razorpaySignature: response.razorpay_signature,
+            billingPaymentId: order.billingPaymentId,
+            planKey: order.plan.key
           });
         },
         modal: {

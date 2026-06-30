@@ -90,8 +90,8 @@ export function BillingClient({ selectedPlanKey }: { selectedPlanKey?: string })
 
       {activationPending ? (
         <section className="rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 p-4 text-sm text-[var(--warning)]">
-          Payment received. Activation is being verified. If this does not
-          update in a minute, contact admin.
+          Payment received. Activation pending manual verification. Please do
+          not pay again. We will activate your plan within 24 hours.
         </section>
       ) : null}
 

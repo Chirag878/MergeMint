@@ -267,6 +267,14 @@ function verifyRazorpaySignature(input: {
   );
 }
 
+function razorpayKeyPrefix(keyId?: string | null) {
+  return keyId ? `${keyId.slice(0, 8)}...` : "missing";
+}
+
+function safePaymentIdPrefix(paymentId?: string | null) {
+  return paymentId ? `${paymentId.slice(0, 8)}...` : "missing";
+}
+
 async function verifyCapturedRazorpayPayment(input: {
   orderId: string;
   paymentId: string;
@@ -365,6 +373,13 @@ export async function createCheckoutOrder(
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: "Razorpay checkout is not configured yet."
+    });
+  }
+
+  if (publicKeyId !== keyId) {
+    console.warn("[billing] Razorpay key id mismatch between server and public env.", {
+      keyIdPrefix: razorpayKeyPrefix(keyId),
+      publicKeyIdPrefix: razorpayKeyPrefix(publicKeyId)
     });
   }
 
@@ -467,6 +482,8 @@ export async function verifyCheckoutPayment(
     razorpayOrderId: string;
     razorpayPaymentId: string;
     razorpaySignature: string;
+    billingPaymentId?: string;
+    planKey?: string;
   }
 ) {
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -477,29 +494,35 @@ export async function verifyCheckoutPayment(
     });
   }
 
-  if (
-    !verifyRazorpaySignature({
-      orderId: input.razorpayOrderId,
-      paymentId: input.razorpayPaymentId,
-      signature: input.razorpaySignature,
-      secret: keySecret
-    })
-  ) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Payment verification failed."
-    });
-  }
-
   const workspace = await ensureUserWorkspace(toBootstrapInput(ctx));
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const publicKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+
+  console.info("[billing] Razorpay checkout verification received.", {
+    receivedOrderId: input.razorpayOrderId,
+    billingPaymentId: input.billingPaymentId,
+    planKey: input.planKey,
+    paymentIdPresent: Boolean(input.razorpayPaymentId),
+    paymentIdPrefix: safePaymentIdPrefix(input.razorpayPaymentId),
+    signaturePresent: Boolean(input.razorpaySignature),
+    keyIdPrefix: razorpayKeyPrefix(keyId),
+    publicKeyIdPrefix: razorpayKeyPrefix(publicKeyId)
+  });
 
   return db.transaction(async (tx) => {
+    const paymentLookup = input.billingPaymentId
+      ? or(
+          eq(billingPayments.id, input.billingPaymentId),
+          eq(billingPayments.razorpayOrderId, input.razorpayOrderId)
+        )
+      : eq(billingPayments.razorpayOrderId, input.razorpayOrderId);
+
     const [payment] = await tx
       .select()
       .from(billingPayments)
       .where(
         and(
-          eq(billingPayments.razorpayOrderId, input.razorpayOrderId),
+          paymentLookup,
           eq(billingPayments.organizationId, workspace.activeOrganization.id)
         )
       )
@@ -512,8 +535,52 @@ export async function verifyCheckoutPayment(
       });
     }
 
+    if (input.planKey && input.planKey !== payment.planKey) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Payment verification failed."
+      });
+    }
+
+    console.info("[billing] Razorpay checkout verification using stored order.", {
+      receivedOrderId: input.razorpayOrderId,
+      storedOrderId: payment.razorpayOrderId,
+      billingPaymentId: payment.id,
+      paymentIdPresent: Boolean(input.razorpayPaymentId),
+      paymentIdPrefix: safePaymentIdPrefix(input.razorpayPaymentId),
+      signaturePresent: Boolean(input.razorpaySignature),
+      keyIdPrefix: razorpayKeyPrefix(keyId),
+      publicKeyIdPrefix: razorpayKeyPrefix(publicKeyId),
+      orderIdMatches: input.razorpayOrderId === payment.razorpayOrderId
+    });
+
+    if (
+      !verifyRazorpaySignature({
+        orderId: payment.razorpayOrderId,
+        paymentId: input.razorpayPaymentId,
+        signature: input.razorpaySignature,
+        secret: keySecret
+      })
+    ) {
+      console.warn("[billing] Razorpay checkout signature verification failed.", {
+        receivedOrderId: input.razorpayOrderId,
+        storedOrderId: payment.razorpayOrderId,
+        billingPaymentId: payment.id,
+        paymentIdPresent: Boolean(input.razorpayPaymentId),
+        paymentIdPrefix: safePaymentIdPrefix(input.razorpayPaymentId),
+        signaturePresent: Boolean(input.razorpaySignature),
+        keyIdPrefix: razorpayKeyPrefix(keyId),
+        publicKeyIdPrefix: razorpayKeyPrefix(publicKeyId),
+        orderIdMatches: input.razorpayOrderId === payment.razorpayOrderId
+      });
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Payment verification failed."
+      });
+    }
+
     await verifyCapturedRazorpayPayment({
-      orderId: input.razorpayOrderId,
+      orderId: payment.razorpayOrderId,
       paymentId: input.razorpayPaymentId,
       amount: payment.amount,
       currency: payment.currency
