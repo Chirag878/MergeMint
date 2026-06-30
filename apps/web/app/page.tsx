@@ -1,161 +1,232 @@
-import React from "react";
-import Link from "next/link";
-import { ThemeToggle } from "./components/theme-provider";
-import { CinematicBackground } from "./components/cinematic-background";
+"use client";
 
-function HeroProductMockup() {
+import React, { useRef, useEffect, useState } from "react";
+import Link from "next/link";
+import { CinematicBackground } from "./components/cinematic-background";
+import { BILLING_PLANS, PAID_BILLING_PLAN_KEYS } from "@veriflow/shared";
+
+const pricingPlans = PAID_BILLING_PLAN_KEYS.map((key) => BILLING_PLANS[key]);
+
+const bestFor: Record<string, string> = {
+  launch_pack: "Trying MergeMint on a real project",
+  pilot: "Freelancers and solo builders",
+  studio: "Agencies shipping client work",
+  scale: "Product teams and AI studios",
+  agency_max: "High-volume agencies"
+};
+
+const planBenefits: Record<string, string[]> = {
+  launch_pack: [
+    "3 verified PR reviews included",
+    "Full repository context indexing",
+    "Requirements coverage telemetry",
+    "Shareable release reports"
+  ],
+  pilot: [
+    "15 verified PR reviews / month",
+    "Interactive Evidence Cockpit",
+    "Automated PRD & Task breakdown",
+    "Basic client delivery reports"
+  ],
+  studio: [
+    "90 verified PR reviews / month",
+    "Gated QA review automation",
+    "Developer Fix Pack guidance",
+    "Boardroom-safe PDF/web reports",
+    "Priority support SLA"
+  ],
+  scale: [
+    "220 verified PR reviews / month",
+    "Advanced repository intelligence",
+    "Custom verification rules",
+    "Team workspace management",
+    "Dedicated Slack integration"
+  ],
+  agency_max: [
+    "500 verified PR reviews / month",
+    "Custom API access & webhooks",
+    "White-labeled release reports",
+    "Dedicated solutions engineer",
+    "Custom contract options"
+  ]
+};
+
+function useScrollProgress(ref: React.RefObject<HTMLDivElement | null>) {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+
+      const start = rect.top - windowHeight;
+      const end = rect.bottom - 100;
+      const total = end - start;
+      const current = window.scrollY - (ref.current.offsetTop - windowHeight);
+
+      const scrollPercent = Math.min(Math.max(current / total, 0), 1);
+      setProgress(scrollPercent);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [ref]);
+
+  return progress;
+}
+
+function ProofChainTimeline() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollProgress = useScrollProgress(containerRef);
+
+  const steps = [
+    { title: "Feature Request", desc: "Capture what the founder or client actually asked for.", badge: "Intake", code: "REQ-001 Intake" },
+    { title: "Requirement Review", desc: "Clarify missing requirements before planning starts.", badge: "Clarified", code: "12 Requirements Verified" },
+    { title: "PRD", desc: "Turn the request into acceptance criteria.", badge: "Spec generated", code: "PRD-2026.1" },
+    { title: "Engineering Tasks", desc: "Break the PRD into developer-ready tasks.", badge: "Ready for dev", code: "8 Tasks Created" },
+    { title: "GitHub PR", desc: "Link the actual implementation.", badge: "PR connected", code: "PR #142 Linked" },
+    { title: "AI QA Review", desc: "Check the PR against requirements, PRD, and tasks.", badge: "Reviewed", code: "0 Blockers Found" },
+    { title: "Developer Fix Pack", desc: "Generate actionable fixes for missing work.", badge: "Fix guidance", code: "2 Suggestions" },
+    { title: "Human Approval", desc: "Approve, reject, or request changes with context.", badge: "Decision logged", code: "Sign-off Received" },
+    { title: "Client Release Report", desc: "Create safe delivery evidence for clients.", badge: "Shareable", code: "REP-492 Generated" },
+    { title: "GitHub Proof", desc: "Publish MergeMint Verification inside the PR.", badge: "Proof posted", code: "Comment Immutable" }
+  ];
+
   return (
-    <div className="hero-mockup-card vf-fade-up relative mx-auto w-full max-w-5xl lg:max-w-6xl border border-white/15 bg-[#101614]/95 text-left shadow-[0_25px_60px_-15px_rgba(0,0,0,0.95)] transition-all duration-300">
-      {/* Top Application Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#151C19] px-4 py-3 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-red-500/80" />
-          <span className="h-3 w-3 rounded-full bg-amber-500/80" />
-          <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
-          <span className="ml-2 font-mono text-[11px] text-[#9CAAA4]">mergemint.app/app/features/feat_9821</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-[#65F2B0]/15 px-2.5 py-0.5 font-mono text-[10px] font-bold text-[#65F2B0]">
-            RELEASE CONSOLE ACTIVE
-          </span>
+    <div ref={containerRef} className="relative w-full border border-[#6B6278] rounded-2xl bg-[#141524] p-6 md:p-12 overflow-hidden shadow-2xl">
+      <div className="absolute inset-0 bg-[radial-gradient(rgba(107,98,120,0.1)_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none" />
+      <div className="hidden md:block absolute inset-0 pointer-events-none z-0">
+        <svg className="w-full h-full" viewBox="0 0 800 1200" fill="none" preserveAspectRatio="none">
+          <path d="M 400 50 L 400 100 Q 400 150 550 150 L 600 150 Q 720 150 720 250 L 720 300 Q 720 400 550 400 L 400 400 L 250 400 Q 80 400 80 500 L 80 550 Q 80 650 250 650 L 400 650 L 550 650 Q 720 650 720 750 L 720 800 Q 720 900 550 900 L 400 900 L 250 900 Q 80 900 80 1000 L 80 1050 Q 80 1150 250 1150 L 400 1150 L 400 1200" stroke="#6B6278" strokeWidth="2" />
+          <path d="M 400 50 L 400 100 Q 400 150 550 150 L 600 150 Q 720 150 720 250 L 720 300 Q 720 400 550 400 L 400 400 L 250 400 Q 80 400 80 500 L 80 550 Q 80 650 250 650 L 400 650 L 550 650 Q 720 650 720 750 L 720 800 Q 720 900 550 900 L 400 900 L 250 900 Q 80 900 80 1000 L 80 1050 Q 80 1150 250 1150 L 400 1150 L 400 1200" stroke="url(#aurora-timeline-glow)" strokeWidth="3" strokeDasharray="2000" strokeDashoffset={2000 - scrollProgress * 2000} strokeLinecap="round" />
+          <defs>
+            <linearGradient id="aurora-timeline-glow" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#C0C4FF" />
+              <stop offset="100%" stopColor="#69FFB7" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div className="relative z-10 flex flex-col md:grid md:grid-cols-2 gap-y-12 md:gap-y-16">
+        {steps.map((step, idx) => {
+          const isLeft = idx % 2 === 0;
+          const nodeThreshold = (idx + 1) / steps.length;
+          const isCompleted = scrollProgress >= nodeThreshold;
+          const isActive = scrollProgress > idx / steps.length && !isCompleted;
+          return (
+            <div key={step.title} className={`flex flex-col w-full ${isLeft ? "md:col-start-1 md:pr-12 items-start md:items-end" : "md:col-start-2 md:pl-12 items-start"}`}>
+              <div className="w-full max-w-sm border border-[#6B6278] bg-[#171829]/90 backdrop-blur-sm rounded-xl p-5 hover:border-[#C0C4FF] transition-all duration-300 shadow-lg relative group">
+                <div className={`absolute -inset-px rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none ${isActive ? "bg-gradient-to-r from-[#C0C4FF]/10 to-transparent blur-md" : "bg-gradient-to-r from-[#69FFB7]/10 to-transparent blur-md"}`} />
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-mono tracking-wider text-[#A0A0A0] uppercase">Step {idx + 1}</span>
+                    <span className={`px-2.5 py-0.5 rounded text-[9px] font-bold font-mono tracking-wide ${isCompleted ? "bg-[#69FFB7]/15 text-[#69FFB7] border border-[#69FFB7]/25" : isActive ? "bg-[#C0C4FF]/15 text-[#C0C4FF] border border-[#C0C4FF]/25" : "bg-white/5 text-[#A0A0A0] border border-white/5"}`}>{step.badge}</span>
+                  </div>
+                  <h3 className="text-sm font-semibold text-white">{step.title}</h3>
+                  <p className="mt-1.5 text-xs text-[#A0A0A0] leading-relaxed">{step.desc}</p>
+                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-[#A0A0A0]">
+                    <span>Evidence Hash</span>
+                    <span className="text-white">{step.code}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Navbar() {
+  const [scrollY, setScrollY] = useState(0);
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+  const isScrolled = scrollY > 20;
+  return (
+    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? "bg-[#1B1C2F]/90 backdrop-blur-lg border-b border-[#6B6278] py-3" : "bg-transparent py-6"}`}>
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 sm:px-6 lg:px-8">
+        <Link href="/" className="flex items-center gap-2.5">
+          <span className="grid h-7 w-7 place-items-center rounded border border-[#6B6278] bg-[#141524] text-[10px] font-bold text-white">MM</span>
+          <span className="text-sm font-semibold tracking-tight text-white">MergeMint</span>
+        </Link>
+        <nav className="hidden items-center gap-8 text-xs font-medium text-[#A0A0A0] md:flex">
+          <a href="#problem" className="transition hover:text-white">The Problem</a>
+          <a href="#proof-chain" className="transition hover:text-white">Proof Chain</a>
+          <a href="#capabilities" className="transition hover:text-white">Capabilities</a>
+          <a href="#pricing" className="transition hover:text-white">Pricing</a>
+        </nav>
+        <div className="flex items-center gap-4">
+          <Link href="/login" className="text-xs font-medium text-[#A0A0A0] hover:text-white transition">Sign in</Link>
+          <Link href="/login" className={`rounded bg-[#C0C4FF] text-[#1B1C2F] font-bold transition-all hover:bg-opacity-90 ${isScrolled ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm shadow-md'}`}>Start verifying</Link>
         </div>
       </div>
+    </header>
+  );
+}
 
-      {/* Main Dashboard Layout (Sidebar + Content) */}
-      <div className="grid grid-cols-1 md:grid-cols-12">
-        {/* Sidebar */}
-        <aside className="hidden border-r border-white/10 bg-[#070A09]/60 p-4 md:col-span-3 md:block">
-          <div className="flex items-center gap-2 font-bold text-xs text-[#F8FAF9]">
-            <span className="grid h-6 w-6 place-items-center rounded border border-[#65F2B0]/40 bg-[#65F2B0]/10 text-[10px] font-bold text-[#65F2B0]">
-              MM
-            </span>
-            <span>MergeMint</span>
+function CockpitPreview() {
+  return (
+    <div className="relative border border-[#6B6278] rounded-xl bg-[#141524] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] overflow-hidden text-left font-sans">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(192,196,255,0.03),transparent_60%)] pointer-events-none" />
+      <div className="flex items-center justify-between border-b border-[#6B6278] bg-[#171829] px-4 py-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full bg-white/10" />
+          <span className="font-mono text-[10px] text-[#A0A0A0]">veriflow-cockpit.mergemint.app</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-[#69FFB7] animate-pulse" />
+          <span className="text-[10px] font-mono text-[#69FFB7] uppercase font-semibold">Live System Connected</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 min-h-[380px]">
+        <div className="hidden md:block border-r border-[#6B6278] p-4 space-y-6 text-xs bg-[#141524]/50">
+          <div className="space-y-1">
+            <span className="text-[9px] uppercase font-mono tracking-wider text-[#A0A0A0] pl-2">Navigation</span>
+            <div className="rounded bg-[#171829] px-3 py-2 font-semibold text-white border border-white/5">Evidence Cockpit</div>
+            <div className="px-3 py-2 text-[#A0A0A0] hover:text-white transition">Release Reports</div>
+            <div className="px-3 py-2 text-[#A0A0A0] hover:text-white transition">Telemetry Logs</div>
           </div>
-
-          <div className="mt-6 space-y-1 text-xs">
-            <div className="rounded-md bg-[#151C19] px-3 py-1.5 font-semibold text-[#F8FAF9] border border-white/10">
-              Dashboard
+          <div className="space-y-2 pl-2">
+            <span className="text-[9px] uppercase font-mono tracking-wider text-[#A0A0A0]">Repository</span>
+            <p className="font-mono text-[10px] text-[#C0C4FF]">veriflow/core-api</p>
+          </div>
+        </div>
+        <div className="col-span-3 p-6 space-y-6 flex flex-col justify-between">
+          <div className="flex flex-wrap justify-between items-start gap-4">
+            <div>
+              <span className="text-[9px] uppercase font-mono tracking-wider text-[#A0A0A0]">Current Phase</span>
+              <h2 className="text-xl font-bold text-white mt-1">Implement Client Audit Integration</h2>
+              <p className="text-xs text-[#A0A0A0] mt-1">PR #142 • Linked from REQ-001</p>
             </div>
-            <div className="px-3 py-1.5 text-[#9CAAA4]">Projects</div>
-            <div className="px-3 py-1.5 text-[#9CAAA4]">Features</div>
-            <div className="px-3 py-1.5 text-[#9CAAA4]">Release Board</div>
+            <div className="rounded-md border border-[#69FFB7]/30 bg-[#69FFB7]/10 px-3 py-1.5 text-xs font-bold text-[#69FFB7] font-mono">VERIFIED: 100% COVERAGE</div>
           </div>
-
-          <div className="mt-8 border-t border-white/10 pt-4 text-[11px] text-[#9CAAA4]">
-            <p className="font-semibold text-[#F8FAF9]">Active Repository</p>
-            <p className="mt-0.5 font-mono text-[#65F2B0]">veriflow/core</p>
-          </div>
-        </aside>
-
-        {/* Main Console Area */}
-        <main className="p-5 md:col-span-9 lg:p-6">
-          {/* Top Proof Trail Navigation */}
-          <div className="mb-6 rounded-xl border border-white/10 bg-[#151C19] p-3.5">
-            <div className="flex items-center justify-between mb-2.5">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#9CAAA4]">
-                RELEASE PROOF TRAIL
-              </span>
-              <span className="text-[10px] font-mono text-[#65F2B0]">7/7 STEPS VERIFIED</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-xs">
-              {[
-                { label: "Requirement Review", done: true },
-                { label: "PRD", done: true },
-                { label: "Tasks", done: true },
-                { label: "PR Diff", done: true, highlight: true },
-                { label: "QA Review", done: true },
-                { label: "Approval", pending: true },
-                { label: "Report", ready: true }
-              ].map((step, idx, arr) => (
-                <React.Fragment key={step.label}>
-                  <span
-                    className={`rounded px-2.5 py-1 font-semibold transition-all ${
-                      step.highlight
-                        ? "bg-[#51BFFF] text-[#070A09] font-bold shadow-xs"
-                        : step.pending
-                        ? "bg-[#FF7AAE]/15 text-[#FF7AAE] border border-[#FF7AAE]/30"
-                        : "bg-[#65F2B0]/15 text-[#65F2B0] border border-[#65F2B0]/20"
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                  {idx < arr.length - 1 ? (
-                    <span className="text-[#9CAAA4] font-mono text-[10px]">→</span>
-                  ) : null}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-
-          {/* Grid Cards inside Mockup */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Release Readiness Card */}
-            <div className="rounded-xl border border-[#65F2B0]/40 bg-[#151C19] p-4 shadow-md relative overflow-hidden">
-              <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-[#65F2B0]/10 blur-xl pointer-events-none" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 border border-white/5 rounded-lg bg-[#141524]/60 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#9CAAA4]">Release Readiness</span>
-                <span className="rounded bg-[#65F2B0]/15 px-2 py-0.5 font-mono text-[9px] font-bold text-[#65F2B0]">HIGH TRUST</span>
+                <span className="text-[9px] uppercase font-mono text-[#A0A0A0]">AI QA Review</span>
+                <span className="text-[10px] text-[#69FFB7] font-semibold font-mono">PASSED</span>
               </div>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-[#F8FAF9]">87%</span>
-                <span className="text-xs text-[#65F2B0] font-semibold">Ready to ship</span>
-              </div>
-              <div className="mt-2.5 h-1.5 w-full rounded-full bg-[#070A09]">
-                <div className="h-1.5 rounded-full bg-gradient-to-r from-[#65F2B0] to-[#FF7AAE]" style={{ width: "87%" }} />
-              </div>
+              <p className="text-xs text-[#A0A0A0] leading-relaxed">Verified 12 acceptance criteria checkpoints successfully.</p>
             </div>
-
-            {/* PR Coverage Matrix Card */}
-            <div className="rounded-xl border border-white/10 bg-[#070A09]/70 p-4">
-              <span className="text-xs font-semibold text-[#9CAAA4]">Coverage Matrix</span>
-              <div className="mt-3 space-y-2 text-xs">
-                <div className="flex justify-between border-b border-white/5 pb-1">
-                  <span className="text-[#F8FAF9]">REQ-001 Audit Logs</span>
-                  <span className="font-mono font-bold text-[#65F2B0]">100% Pass</span>
-                </div>
-                <div className="flex justify-between border-b border-white/5 pb-1">
-                  <span className="text-[#F8FAF9]">REQ-002 Webhooks</span>
-                  <span className="font-mono font-bold text-[#65F2B0]">100% Pass</span>
-                </div>
+            <div className="p-4 border border-white/5 rounded-lg bg-[#141524]/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] uppercase font-mono text-[#A0A0A0]">GitHub Proof Gate</span>
+                <span className="text-[10px] text-[#C0C4FF] font-semibold font-mono">READY</span>
               </div>
-            </div>
-
-            {/* Verification Summary Card */}
-            <div className="rounded-xl border border-white/10 bg-[#070A09]/70 p-4 sm:col-span-2 lg:col-span-1">
-              <span className="text-xs font-semibold text-[#9CAAA4]">Verification Summary</span>
-              <div className="mt-3 space-y-1.5 text-xs">
-                <p className="text-[#F8FAF9] font-medium">Linked PR: #142 Audit Engine</p>
-                <p className="text-[11px] text-[#9CAAA4]">12 engineering tasks verified against repo snapshot.</p>
-              </div>
+              <p className="text-xs text-[#A0A0A0] leading-relaxed">Proof artifact compiled. Ready to post immutable verification to PR.</p>
             </div>
           </div>
-
-          {/* Recent PRs List inside Mockup */}
-          <div className="mt-4 rounded-xl border border-white/10 bg-[#070A09]/70 p-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5 text-xs font-semibold text-[#9CAAA4]">
-              <span>Recent Verified PRs</span>
-              <span>Status</span>
-            </div>
-            <div className="mt-2 divide-y divide-white/5 text-xs">
-              {[
-                { id: "#142", title: "Add client webhook retry engine", status: "Verified", badge: "bg-[#65F2B0]/15 text-[#65F2B0]" },
-                { id: "#139", title: "Update OAuth token scopes", status: "Approved", badge: "bg-[#65F2B0]/15 text-[#65F2B0]" },
-                { id: "#138", title: "Refactor PRD clarification gating", status: "In review", badge: "bg-[#51BFFF]/15 text-[#51BFFF]" },
-                { id: "#135", title: "Fix billing snapshot calculations", status: "Issues", badge: "bg-[#FF7AAE]/15 text-[#FF7AAE]" }
-              ].map((pr) => (
-                <div key={pr.id} className="flex items-center justify-between py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-mono text-[#9CAAA4]">{pr.id}</span>
-                    <span className="font-medium text-[#F8FAF9]">{pr.title}</span>
-                  </div>
-                  <span className={`rounded px-2.5 py-0.5 text-[10px] font-semibold ${pr.badge}`}>
-                    {pr.status}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <div className="pt-4 border-t border-white/5 flex items-center justify-between text-xs text-[#A0A0A0]">
+            <span className="font-mono">Last Telemetry Sweep: 2m ago</span>
+            <Link href="/login" className="text-[#C0C4FF] hover:underline font-semibold">Launch Interactive Cockpit &rarr;</Link>
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );
@@ -163,461 +234,148 @@ function HeroProductMockup() {
 
 export default function LandingPage() {
   return (
-    <div className="relative min-h-screen bg-[var(--bg)] font-sans text-[var(--text)] transition-colors duration-200">
-      {/* Pure CSS/SVG Ambient Cinematic Background Layer */}
+    <div className="relative min-h-screen bg-[#1B1C2F] font-sans text-white overflow-x-hidden selection:bg-[#C0C4FF] selection:text-[#1B1C2F]">
       <CinematicBackground />
-
-      {/* 1. Navbar */}
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/85 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-3.5 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-lg border border-[var(--mint)]/30 bg-[var(--mint)]/10 text-xs font-bold text-[var(--mint)]">
-              MM
-            </span>
-            <span className="text-base font-semibold tracking-tight text-[var(--text)]">
-              MergeMint
-            </span>
-          </Link>
-
-          <nav className="hidden items-center gap-8 text-xs font-medium text-[var(--text-muted)] lg:flex">
-            <a href="#product" className="transition hover:text-[var(--text)]">
-              Product
-            </a>
-            <a href="#how-it-works" className="transition hover:text-[var(--text)]">
-              How it works
-            </a>
-            <Link href="/pricing" className="transition hover:text-[var(--text)]">
-              Pricing
-            </Link>
-            <a href="#proof-map" className="transition hover:text-[var(--text)]">
-              Resources
-            </a>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="rounded-md px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition hover:text-[var(--text)]"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/login"
-              className="gradient-btn-mint-pink rounded-md px-3.5 py-1.5 text-xs font-bold shadow-xs"
-            >
-              Start verifying
-            </Link>
-            <ThemeToggle />
+      <Navbar />
+      <main className="relative z-10 pt-28">
+        <section className="mx-auto max-w-5xl px-5 sm:px-6 lg:px-8 text-center pt-16 pb-20 space-y-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#C0C4FF]/20 bg-[#C0C4FF]/5 px-4 py-1 text-xs font-medium text-[#C0C4FF] font-mono">Evidence Control Room &bull; AI Product Delivery Pipeline</div>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-[1.1] max-w-[1000px] mx-auto">
+            MergeMint proves whether a GitHub PR actually delivered the <br className="hidden lg:inline" />
+            <span className="bg-gradient-to-r from-[#C0C4FF] to-[#69FFB7] bg-clip-text text-transparent">original feature request.</span>
+          </h1>
+          <p className="mt-4 mx-auto max-w-2xl text-sm sm:text-base text-[#A0A0A0] leading-relaxed">Turn feature requests into PRDs, engineering tasks, AI QA reviews, approval evidence, client reports, and GitHub-native proof. Build high-trust delivery chains.</p>
+          <div className="flex justify-center items-center gap-4">
+            <Link href="/login" className="rounded bg-[#C0C4FF] text-[#1B1C2F] px-6 py-3 text-sm font-bold shadow-lg hover:bg-opacity-95 transition">Start verifying PRs</Link>
+            <a href="#proof-chain" className="rounded border border-[#6B6278] bg-[#141524] px-6 py-3 text-sm font-medium hover:bg-white/5 transition">View sample proof</a>
           </div>
-        </div>
-      </header>
-
-      {/* 2. Hero Section */}
-      <section className="relative z-10 pt-14 pb-16 lg:pt-20 lg:pb-24">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-4xl text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--mint)]/30 bg-[var(--mint)]/10 px-3.5 py-1 text-xs font-medium text-[var(--mint)]">
-              AI Product Delivery Pipeline
-            </div>
-            <h1 className="mt-6 text-5xl font-extrabold tracking-tight text-[var(--text)] sm:text-6xl lg:text-7xl leading-[1.08]">
-              Prove every PR{" "}
-              <span className="gradient-text-mint-pink">is ready to ship.</span>
-            </h1>
-            <p className="mt-6 text-base leading-7 text-[var(--text-muted)] sm:text-lg max-w-2xl mx-auto">
-              MergeMint helps teams verify whether a GitHub pull request actually satisfies the original feature request before release.
-            </p>
-            <p className="mt-3 text-xs font-semibold text-[var(--text-muted)] sm:text-sm">
-              GitHub shows what changed. MergeMint shows whether it is actually done.
-            </p>
-
-            <div className="mt-8 flex justify-center gap-4">
-              <Link
-                href="/login"
-                className="gradient-btn-mint-pink rounded-xl px-7 py-3.5 text-sm font-bold shadow-lg"
-              >
-                Start verifying
-              </Link>
-              <a
-                href="#how-it-works"
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-md px-7 py-3.5 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-elevated)]"
-              >
-                See how it works
-              </a>
-            </div>
-          </div>
-
-          {/* Hero Product Mockup (visually dominating after headline & elevated higher) */}
-          <div className="mt-10 lg:mt-12">
-            <HeroProductMockup />
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Trusted by / Trust Row */}
-      <section className="relative z-10 py-10 border-t border-b border-[var(--border)] bg-[var(--surface-elevated)]/40 backdrop-blur-md text-center">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <p className="text-xs font-mono font-semibold uppercase tracking-widest text-[var(--text-muted)]">
-            Trusted by AI Studios, Engineering Agencies, and Product Teams
-          </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-8 opacity-75 text-xs font-semibold text-[var(--text-muted)] sm:gap-12">
-            <span>Vanguard AI Studio</span>
-            <span>•</span>
-            <span>StackCraft Labs</span>
-            <span>•</span>
-            <span>Hyperion Systems</span>
-            <span>•</span>
-            <span>Apex Delivery Co</span>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. How It Works Section */}
-      <section id="how-it-works" className="relative z-10 py-20 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--blue)]/30 bg-[var(--blue)]/10 px-3 py-1 text-xs font-medium text-[var(--blue)]">
-              5-Step Verification Process
-            </div>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
-              How MergeMint proves your releases
-            </h2>
-          </div>
-
-          <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {[
-              { step: "1", title: "Connect GitHub", desc: "Link repository through GitHub App." },
-              { step: "2", title: "Analyze Repository", desc: "Index codebase architecture and context." },
-              { step: "3", title: "Generate PRD & REQ-IDs", desc: "Extract structured criteria and tasks." },
-              { step: "4", title: "Verify PR Diff", desc: "Compare code changes to requirements." },
-              { step: "5", title: "Approve & Share Report", desc: "Publish audit-ready proof link." }
-            ].map((s) => (
-              <div key={s.step} className="mint-card p-5 text-left">
-                <span className="grid h-7 w-7 place-items-center rounded-md border border-[var(--mint)]/30 bg-[var(--mint)]/10 text-xs font-mono font-bold text-[var(--mint)]">
-                  {s.step}
-                </span>
-                <h3 className="mt-3 text-sm font-bold text-[var(--text)]">{s.title}</h3>
-                <p className="mt-1 text-xs text-[var(--text-muted)] leading-5">{s.desc}</p>
+          <div className="pt-12"><CockpitPreview /></div>
+        </section>
+        <section id="problem" className="py-24 border-t border-[#6B6278] bg-[#141524]/30">
+          <div className="mx-auto max-w-5xl px-5 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+              <div className="space-y-6">
+                <span className="text-xs font-mono uppercase tracking-wider text-[#C0C4FF]">The Delivery Gap</span>
+                <h2 className="text-3xl font-bold text-white tracking-tight leading-tight">GitHub shows what changed. <br />MergeMint shows whether it is <span className="text-[#69FFB7]">actually done.</span></h2>
+                <p className="text-sm text-[#A0A0A0] leading-relaxed">Code changes aren't feature completions. AI coding tools like Cursor, GitHub Copilot, and CodeRabbit generate code and review syntax, but they don't prove whether the acceptance criteria requested by founders or clients have been fully implemented.</p>
+                <p className="text-sm text-[#A0A0A0] leading-relaxed">MergeMint spans the entire workflow to connect business intent directly with repository state.</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 5. Proof Trail / Proof Map Section */}
-      <section id="proof-map" className="relative z-10 py-20 border-b border-[var(--border)] bg-[var(--surface-elevated)]/30">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8 text-center">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
-              A proof map for every release.
-            </h2>
-            <p className="mt-4 text-sm text-[var(--text-muted)]">
-              MergeMint connects requirements, tasks, PR files, QA findings, risks, approval, and reports into one visible release trail.
-            </p>
-          </div>
-
-          <div className="mt-14 flex flex-wrap items-center justify-center gap-2.5 lg:gap-4">
-            {[
-              "Requirement Review",
-              "PRD",
-              "Engineering Tasks",
-              "PR Diff",
-              "QA Coverage",
-              "Human Approval",
-              "Release Report"
-            ].map((node, idx, arr) => (
-              <React.Fragment key={node}>
-                <div className="rounded-xl border border-[var(--mint)]/40 bg-[var(--surface)] px-4 py-2.5 text-xs font-bold text-[var(--text)] shadow-xs">
-                  {node}
-                </div>
-                {idx < arr.length - 1 ? (
-                  <span className="text-sm text-[var(--pink)] font-mono font-bold">→</span>
-                ) : null}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 6. Release Checklist / Coverage Matrix */}
-      <section className="relative z-10 py-20 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
-              Coverage Matrix Telemetry
-            </h2>
-            <p className="mt-4 text-sm text-[var(--text-muted)]">
-              Inspect requirement verification status in real-time before human approval.
-            </p>
-          </div>
-
-          <div className="mt-12 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-md lg:p-8">
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-4 text-xs font-semibold text-[var(--text-muted)]">
-              <span>Requirement Item (REQ-ID)</span>
-              <span>PR Coverage Status</span>
-            </div>
-            <div className="mt-3 divide-y divide-[var(--border)]/50 text-xs">
-              {[
-                { req: "REQ-001: Client Audit Log Schema", status: "100% Covered", file: "src/audit/logger.ts" },
-                { req: "REQ-002: Webhook Retry Policy", status: "100% Covered", file: "src/webhooks/retry.ts" },
-                { req: "REQ-003: OAuth Token Scope Verification", status: "Verified", file: "src/auth/oauth.ts" }
-              ].map((row) => (
-                <div key={row.req} className="flex flex-wrap items-center justify-between gap-2 py-3.5">
-                  <div>
-                    <p className="font-bold text-[var(--text)]">{row.req}</p>
-                    <p className="mt-0.5 text-[11px] font-mono text-[var(--text-muted)]">{row.file}</p>
+              <div className="border border-[#6B6278] rounded-xl bg-[#141524] p-6 space-y-4 font-mono text-xs shadow-inner">
+                <div className="pb-3 border-b border-white/5 text-[#A0A0A0]">// Common Release Problems</div>
+                <div className="space-y-3">
+                  <div className="p-3 bg-[#171829] rounded border border-white/5">
+                    <p className="font-semibold text-white">Issue 1: Code vs. Specs</p>
+                    <p className="mt-1 text-[#A0A0A0] text-[11px]">Git shows diffs. It doesn't tell you if feature specs are missing.</p>
                   </div>
-                  <span className="rounded bg-[var(--mint-light)] px-2.5 py-1 font-mono text-[11px] font-bold text-[var(--mint)]">
-                    {row.status}
-                  </span>
+                  <div className="p-3 bg-[#171829] rounded border border-white/5">
+                    <p className="font-semibold text-white">Issue 2: Verification Gaps</p>
+                    <p className="mt-1 text-[#A0A0A0] text-[11px]">Agencies struggle to prove delivery to clients, causing manual verification cycles.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="proof-chain" className="py-24">
+          <div className="mx-auto max-w-5xl px-5 sm:px-6 lg:px-8">
+            <div className="text-center mb-16 space-y-3">
+              <span className="text-xs font-mono uppercase tracking-wider text-[#C0C4FF]">The Signature Motif</span>
+              <h2 className="text-3xl font-bold text-white">The Proof Chain Timeline</h2>
+              <p className="text-sm text-[#A0A0A0] max-w-md mx-auto">Scroll to watch the chain of evidence align from feature request to final GitHub Proof.</p>
+            </div>
+            <ProofChainTimeline />
+          </div>
+        </section>
+        <section id="capabilities" className="py-24 border-t border-[#6B6278] bg-[#141524]/30">
+          <div className="mx-auto max-w-5xl px-5 sm:px-6 lg:px-8">
+            <div className="text-center mb-16 space-y-3">
+              <span className="text-xs font-mono uppercase tracking-wider text-[#C0C4FF]">Product Capabilities</span>
+              <h2 className="text-3xl font-bold text-white">Operational Telemetry Features</h2>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                { title: "Requirement Review", desc: "Gated AI sweeps clarify scope discrepancies, preventing coding before plans align." },
+                { title: "PRD Generation", desc: "Draft feature constraints immediately into structured, telemetry-ready acceptance matrices." },
+                { title: "Engineering Tasks", desc: "Auto-generate discrete developer-focused task lists to align implementation path." },
+                { title: "AI QA Review", desc: "Code-level logic sweeps verifying that every REQ-ID was actually satisfied in the diff." },
+                { title: "Requirement Coverage Map", desc: "See which requirements are covered, partial, missing, or awaiting approval before a PR is shipped." },
+                { title: "Developer Fix Pack", desc: "Turn QA findings into copyable implementation guidance for Cursor, Codex, Claude Code, or your developer." },
+                { title: "Human Approval Gate", desc: "One-click approval control room designed to capture the final human sign-off evidence." },
+                { title: "Client Delivery Report", desc: "Boardroom-safe, print-friendly reports demonstrating exact specs mapped to release proofs." },
+                { title: "GitHub Proof Gate", desc: "Immutable proof stamps automatically commented into the GitHub PR upon verification." },
+                { title: "Verification Rules", desc: "Custom gating criteria defining release-readiness thresholds for automated checks." }
+              ].map((c) => (
+                <div key={c.title} className="p-6 border border-[#6B6278] rounded-xl bg-[#141524] hover:border-[#C0C4FF] transition duration-300">
+                  <h3 className="font-bold text-sm text-white">{c.title}</h3>
+                  <p className="mt-2 text-xs text-[#A0A0A0] leading-relaxed">{c.desc}</p>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* 7. Product Highlights Section */}
-      <section id="product" className="relative z-10 py-20 border-b border-[var(--border)] bg-[var(--surface-elevated)]/30">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
-              Engineered for requirement-to-release proof
-            </h2>
-            <p className="mt-4 text-sm text-[var(--text-muted)]">
-              Everything your team needs to verify code changes against original product intent.
-            </p>
+        </section>
+        <section className="py-24 border-t border-[#6B6278]">
+          <div className="mx-auto max-w-5xl px-5 sm:px-6 lg:px-8 text-center space-y-12">
+            <div className="space-y-3">
+              <span className="text-xs font-mono uppercase tracking-wider text-[#C0C4FF]">Audience</span>
+              <h2 className="text-3xl font-bold text-white">Who Ships with MergeMint</h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              {["Startup Founders", "CTOs", "Product Managers", "Engineering Managers", "Agencies", "Freelancers", "AI Coding Teams", "Client Delivery Teams"].map((aud) => (
+                <div key={aud} className="p-4 border border-[#6B6278] rounded-lg bg-[#141524] text-xs font-semibold">{aud}</div>
+              ))}
+            </div>
           </div>
-
-          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                title: "Repository Intelligence",
-                copy: "Deep repo analysis mapping code architecture to feature requests before PR review."
-              },
-              {
-                title: "AI Requirement Review",
-                copy: "Gated requirement checks ensuring feature briefs are crystal clear before PRD generation."
-              },
-              {
-                title: "REQ-ID Mapped Tasks",
-                copy: "Structured engineering tasks directly linked to specific acceptance criteria items."
-              },
-              {
-                title: "Audit-Ready Reports",
-                copy: "Shareable delivery links giving clients and stakeholders undeniable proof of completion."
-              }
-            ].map((card) => (
-              <div key={card.title} className="mint-card p-6 text-left">
-                <h3 className="text-base font-bold text-[var(--text)]">{card.title}</h3>
-                <p className="mt-2 text-xs text-[var(--text-muted)] leading-5">{card.copy}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 8. Reports Section */}
-      <section className="relative z-10 py-20 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8">
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--mint)]/30 bg-[var(--mint)]/10 px-3 py-1 text-xs font-medium text-[var(--mint)]">
-                Shareable Release Proof
-              </div>
-              <h2 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
-                Turn reviews into shareable release proof.
-              </h2>
-              <p className="mt-4 text-sm leading-7 text-[var(--text-muted)]">
-                Generate client-ready or internal release reports that show what was requested, what changed, what passed, what is risky, and who approved.
-              </p>
-              <div className="mt-8 space-y-3 text-xs text-[var(--text)]">
-                {[
-                  "Immutable release share links for client sign-off",
-                  "Traceable mapping between REQ-IDs and PR files",
-                  "Automated risk & test failure summary",
-                  "Human approval audit history"
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-3">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--mint-light)] text-[10px] font-bold text-[var(--mint)]">✓</span>
-                    <span className="font-medium">{item}</span>
+        </section>
+        <section id="pricing" className="py-24 border-t border-[#6B6278] bg-[#141524]/30">
+          <div className="mx-auto max-w-5xl px-5 sm:px-6 lg:px-8 text-center space-y-16">
+            <div className="space-y-3">
+              <span className="text-xs font-mono uppercase tracking-wider text-[#C0C4FF]">Pricing</span>
+              <h2 className="text-3xl font-bold text-white">Calibrated Plan Structure</h2>
+              <p className="text-sm text-[#A0A0A0]">Pay for release verification volume, not team headcount.</p>
+            </div>
+            <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-5 items-stretch">
+              {pricingPlans.map((plan) => {
+                const isHighlight = plan.key === "studio";
+                return (
+                  <div key={plan.key} className={`border rounded-xl p-5 flex flex-col justify-between text-left relative ${isHighlight ? "border-[#C0C4FF] bg-[#171829] shadow-lg" : "border-[#6B6278] bg-[#141524]"}`}>
+                    {isHighlight && <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded bg-[#C0C4FF] text-[#1B1C2F] px-2.5 py-0.5 text-[9px] font-bold font-mono uppercase tracking-wider">Recommended</span>}
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="font-bold text-xs text-white uppercase tracking-wider">{plan.displayName}</h3>
+                        <p className="mt-2 text-2xl font-extrabold text-white">{plan.displayPrice}</p>
+                      </div>
+                      <div className="p-3 rounded border border-white/5 bg-[#1B1C2F] space-y-1.5 text-[11px] font-mono">
+                        <p className="font-bold text-[#69FFB7]">{plan.credits} verified PRs</p>
+                        <p className="text-[#A0A0A0]">{plan.validityDays} Days Validity</p>
+                      </div>
+                      <p className="text-[11px] text-[#A0A0A0] leading-relaxed">{bestFor[plan.key] || "Continuous verification"}</p>
+                      <ul className="space-y-1.5 pt-2 text-[10px] text-[#A0A0A0]">
+                        {(planBenefits[plan.key] || []).map((ben, idx) => (
+                          <li key={idx} className="flex items-center gap-1.5"><span className="text-[#69FFB7]">&bull;</span>{ben}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="mt-8">
+                      <Link href={`/app/billing?checkoutPlan=${plan.key}`} className={`block w-full text-center py-2 rounded text-xs font-bold transition ${isHighlight ? "bg-[#C0C4FF] text-[#1B1C2F] hover:bg-opacity-90" : "border border-white/10 bg-[#171829] hover:bg-white/5 text-white"}`}>Select {plan.displayName}</Link>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mint-card p-6 text-left border-2 border-[var(--pink)]/30">
-              <div className="border-b border-[var(--border)] pb-4">
-                <span className="text-[10px] font-mono font-bold text-[var(--pink)]">CLIENT RELEASE REPORT</span>
-                <h3 className="mt-1 text-lg font-bold text-[var(--text)]">Feature: Client Audit Integration</h3>
-              </div>
-              <div className="mt-5 space-y-3 text-xs">
-                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/40">
-                  <span className="text-[var(--text-muted)]">Verification Status</span>
-                  <span className="font-bold text-[var(--mint)]">PASSED (100% Covered)</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/40">
-                  <span className="text-[var(--text-muted)]">Pull Request</span>
-                  <span className="font-mono text-[var(--text)]">#142 (Merged)</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-[var(--border)]/40">
-                  <span className="text-[var(--text-muted)]">Approved By</span>
-                  <span className="text-[var(--text)] font-semibold">Lead Product Manager</span>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* 9. Pricing Preview Section */}
-      <section className="relative z-10 py-20 border-b border-[var(--border)] bg-[var(--surface-elevated)]/40">
-        <div className="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8 text-center">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
-              Transparent pricing for verified releases
-            </h2>
-            <p className="mt-3 text-xs text-[var(--text-muted)]">
-              Pay for release volume, not team seats.
-            </p>
-          </div>
-
-          <div className="mt-14 grid gap-6 sm:grid-cols-3">
-            {[
-              { key: "launch_pack", name: "Launch Pack", price: "₹199", detail: "3 verified PRs", note: "Valid until 30 June" },
-              { key: "studio", name: "Studio", price: "$51/mo", detail: "90 verified PRs/month", note: "Recommended for agencies", highlight: true },
-              { key: "scale", name: "Scale", price: "$99/mo", detail: "220 verified PRs/month", note: "Product teams & studios" }
-            ].map((p) => (
-              <div
-                key={p.name}
-                className={`mint-card p-6 text-left flex flex-col justify-between ${
-                  p.highlight ? "border-2 border-[var(--mint)] bg-[var(--surface)] shadow-md" : ""
-                }`}
-              >
-                <div>
-                  <h3 className="text-lg font-bold text-[var(--text)]">{p.name}</h3>
-                  <p className="mt-3 text-3xl font-extrabold text-[var(--text)]">{p.price}</p>
-                  <p className="mt-2 text-xs font-bold text-[var(--mint)]">{p.detail}</p>
-                  <p className="mt-1 text-[11px] text-[var(--text-muted)]">{p.note}</p>
-                </div>
-                <Link
-                  href={`/app/billing?checkoutPlan=${p.key}`}
-                  className="mt-6 block w-full rounded-md border border-[var(--border)] bg-[var(--surface-elevated)] py-2 text-center text-xs font-semibold text-[var(--text)] transition hover:border-[var(--mint)]/40"
-                >
-                  View details
-                </Link>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-10">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--mint)] hover:underline"
-            >
-              <span>View full pricing & plan comparison</span>
-              <span>→</span>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* 10. FAQ Section */}
-      <section className="relative z-10 py-20 border-b border-[var(--border)]">
-        <div className="mx-auto max-w-3xl px-5 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
-              Frequently asked questions
-            </h2>
-          </div>
-
-          <div className="mt-12 space-y-4">
-            {[
-              {
-                q: "Is MergeMint a code review tool?",
-                a: "MergeMint reviews PRs, but its main job is to verify whether the PR satisfies the original requirement before release."
-              },
-              {
-                q: "Do I need to paste PR links manually?",
-                a: "No. MergeMint connects to GitHub and lets you select PRs directly from your connected repository. Manual paste is only an advanced fallback."
-              },
-              {
-                q: "Who is this for?",
-                a: "Agencies, AI studios, freelancers, founders, product teams, and engineering teams that need verifiable proof before shipping."
-              },
-              {
-                q: "What is a verified PR?",
-                a: "A PR reviewed against the PRD, REQ-IDs, acceptance criteria, engineering tasks, and repository context to produce release evidence."
-              }
-            ].map((faq) => (
-              <div key={faq.q} className="mint-card p-6 text-left">
-                <h3 className="text-base font-bold text-[var(--text)]">{faq.q}</h3>
-                <p className="mt-2 text-xs leading-6 text-[var(--text-muted)]">{faq.a}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 11. Final CTA */}
-      <section className="relative z-10 py-20 text-center">
-        <div className="mx-auto max-w-4xl px-5 sm:px-6 lg:px-8">
-          <div className="mint-card p-10 sm:p-16 border-2 border-[var(--mint)]/30">
-            <h2 className="text-3xl font-extrabold tracking-tight text-[var(--text)] sm:text-4xl">
-              Stop guessing if a PR is done.
-            </h2>
-            <p className="mt-4 text-xs text-[var(--text-muted)] max-w-xl mx-auto leading-5">
-              Get full requirement coverage, QA evidence, and shareable client proof in minutes.
-            </p>
-            <div className="mt-8 flex justify-center">
-              <Link
-                href="/login"
-                className="gradient-btn-mint-pink rounded-xl px-8 py-3.5 text-sm font-bold shadow-lg"
-              >
-                Start verifying
-              </Link>
+        </section>
+        <section className="py-24 text-center border-t border-[#6B6278]">
+          <div className="mx-auto max-w-3xl px-5 sm:px-6 lg:px-8 space-y-6">
+            <h2 className="text-3xl font-bold text-white">Every shipped feature needs proof.</h2>
+            <p className="text-sm text-[#A0A0A0] max-w-md mx-auto">Stop guessing if a pull request is actually complete. Build release telemetry reports that your clients and team can trust.</p>
+            <div className="pt-4 flex justify-center gap-4">
+              <Link href="/login" className="rounded bg-[#C0C4FF] text-[#1B1C2F] px-8 py-3 text-sm font-bold shadow-lg hover:bg-opacity-95 transition">Start verifying PRs</Link>
+              <a href="#proof-chain" className="rounded border border-[#6B6278] bg-[#141524] px-8 py-3 text-sm font-medium hover:bg-white/5 transition">View sample proof</a>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="relative z-10 border-t border-[var(--border)] bg-[var(--surface)] py-8 text-xs text-[var(--text-muted)]">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 sm:flex-row sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-6 w-6 place-items-center rounded border border-[var(--mint)]/30 bg-[var(--mint)]/10 text-[10px] font-bold text-[var(--mint)]">
-              MM
-            </span>
-            <span className="font-semibold text-[var(--text)]">MergeMint</span>
-            <span>- Requirement-to-release proof platform.</span>
-          </div>
-          <div className="flex flex-wrap justify-center gap-6">
-            <Link href="/" className="transition hover:text-[var(--text)]">
-              Home
-            </Link>
-            <Link href="/pricing" className="transition hover:text-[var(--text)]">
-              Pricing
-            </Link>
-            <Link href="/cli" className="transition hover:text-[var(--text)]">
-              CLI
-            </Link>
-            <Link href="/terms" className="transition hover:text-[var(--text)]">
-              Terms
-            </Link>
-            <Link href="/privacy" className="transition hover:text-[var(--text)]">
-              Privacy
-            </Link>
-            <Link
-              href="/refund-policy"
-              className="transition hover:text-[var(--text)]"
-            >
-              Refund Policy
-            </Link>
-            <Link href="/login" className="transition hover:text-[var(--text)]">
-              Sign in
-            </Link>
-          </div>
-        </div>
-      </footer>
+        </section>
+      </main>
+      <footer className="py-8 border-t border-[#6B6278] text-center text-xs text-[#A0A0A0] bg-[#1B1C2F]">MergeMint &copy; {new Date().getFullYear()} - The Evidence Control Room.</footer>
     </div>
   );
 }
